@@ -1,0 +1,6 @@
+{
+  "name": "Inventory & COGS Manager",
+  "description": "Phần mềm quản lý hàng hóa, nhập xuất kho từ Excel/CSV và tính giá vốn bình quân gia quyền.",
+  "requestFramePermissions": [],
+  "majorCapabilities": []
+}
