@@ -6,7 +6,7 @@ import { motion } from 'motion/react';
 import { Transaction } from '../types';
 
 export default function ImportExport() {
-  const { importTransactions } = useInventory();
+  const { importTransactions, transactions, isMonthClosed } = useInventory();
   const [importType, setImportType] = useState<'IN' | 'OUT'>('IN');
   const [logs, setLogs] = useState<{ msg: string; type: 'success' | 'error' | 'info' }[]>([]);
 
@@ -28,12 +28,16 @@ export default function ImportExport() {
           return;
         }
 
-        // Extract metadata: Header usually has seller/buyer info
-        // Example: HOÁ ĐƠN BÁN HÀNG - Số: 384 - Ngày 11/02/2025
+        // Header usually has seller/buyer info
         const titleRow = data[0][0] || '';
+        const invoiceNum = titleRow.match(/Số: (\d+)/)?.[1] || 'UNK-' + Date.now();
         const dateMatch = titleRow.match(/Ngày (\d{2}\/\d{2}\/\d{4})/);
-        const invoiceDateToken = dateMatch ? dateMatch[1] : new Date().toLocaleDateString('vi-VN');
+        const invoiceDateStr = dateMatch ? dateMatch[1] : new Date().toLocaleDateString('vi-VN');
         
+        // Convert to ISO for comparison
+        const [d, m, y] = invoiceDateStr.split('/');
+        const isoInvoiceDate = `${y}-${m}-${d}`;
+
         // Header info (Sender/Receiver)
         const sellerRow = data[1][0] || '';
         const buyerRow = data[2][0] || '';
@@ -41,8 +45,26 @@ export default function ImportExport() {
         let customerName = importType === 'IN' ? sellerRow : buyerRow;
         customerName = customerName.replace(/Người (bán|mua): /, '').split('|')[0].trim();
 
+        // 1. DUPLICATE CHECK
+        const isDuplicate = transactions.some(t => 
+          t.invoiceNumber === invoiceNum && 
+          t.date === isoInvoiceDate && 
+          t.customer === customerName &&
+          t.type === importType
+        );
+
+        if (isDuplicate) {
+          setLogs(prev => [...prev, { msg: `CẢNH BÁO: Hóa đơn số ${invoiceNum} ngày ${invoiceDateStr} từ ${customerName} đã tồn tại trong hệ thống. Hệ thống từ chối nhập trùng.`, type: 'error' }]);
+          return;
+        }
+
+        // 2. CLOSED MONTH CHECK
+        if (isMonthClosed(isoInvoiceDate)) {
+          setLogs(prev => [...prev, { msg: `CẢNH BÁO: Hóa đơn thuộc vào tháng đã chốt sổ (${invoiceDateStr}). Không thể nhập dữ liệu vào tháng đã khóa.`, type: 'error' }]);
+          return;
+        }
+
         // Data starts from index 5 (Row 6)
-        // Header columns check
         const header = data[4];
         if (!header || !header.includes('Mã hàng')) {
           setLogs(prev => [...prev, { msg: 'Không tìm thấy cột "Mã hàng" ở hàng số 5.', type: 'error' }]);
@@ -54,11 +76,10 @@ export default function ImportExport() {
 
         for (let i = 5; i < data.length; i++) {
           const row = data[i];
-          if (!row[3]) continue; // Skip if Mã hàng is empty
+          if (!row[3]) continue; 
 
-          // Skip total row if exists (usually starts with "TỔNG CỘNG")
           if (row[0] && row[0].toString().includes('TỔNG CỘNG')) break;
-          if (row.every(cell => !cell)) continue; // Empty row
+          if (row.every(cell => !cell)) continue; 
 
           const qtyStr = row[5]?.toString().replace(/,/g, '') || '0';
           const priceStr = row[6]?.toString().replace(/[",]/g, '') || '0';
@@ -68,19 +89,9 @@ export default function ImportExport() {
           const price = parseFloat(priceStr);
           const total = parseFloat(totalStr);
 
-          // Parse date from row if available, else use invoice date
-          let rowDate = invoiceDateToken;
-          if (row[1] && row[1].match(/\d{2}\/\d{2}\/\d{4}/)) {
-            rowDate = row[1];
-          }
-
-          // Convert DD/MM/YYYY to ISO for sorting
-          const [d, m, y] = rowDate.split('/');
-          const isoDate = `${y}-${m}-${d}`;
-
           items.push({
             type: importType,
-            date: isoDate,
+            date: isoInvoiceDate,
             itemCode: row[3],
             itemName: row[2],
             unit: row[4],
@@ -89,14 +100,14 @@ export default function ImportExport() {
             discount: parseFloat(row[7]?.toString() || '0'),
             total,
             customer: customerName,
-            invoiceNumber: titleRow.match(/Số: (\d+)/)?.[1] || 'NK-' + Date.now()
+            invoiceNumber: invoiceNum
           });
           successCount++;
         }
 
         if (items.length > 0) {
           importTransactions(items);
-          setLogs(prev => [...prev, { msg: `Đã nhập thành công ${successCount} dòng hàng hóa.`, type: 'success' }]);
+          setLogs(prev => [...prev, { msg: `Đã nhập thành công ${successCount} dòng từ hóa đơn ${invoiceNum}.`, type: 'success' }]);
         } else {
           setLogs(prev => [...prev, { msg: 'Không tìm thấy dữ liệu hợp lệ để nhập.', type: 'error' }]);
         }
@@ -106,7 +117,6 @@ export default function ImportExport() {
       }
     });
 
-    // Clear input
     e.target.value = '';
   };
 

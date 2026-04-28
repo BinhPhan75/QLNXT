@@ -10,6 +10,7 @@ interface InventoryContextType {
   login: (username: string, pass: string) => boolean;
   logout: () => void;
   importTransactions: (newTransactions: Omit<Transaction, 'id'>[]) => void;
+  deleteInvoice: (invoiceNumber: string) => void;
   calculateMonthlyCOGS: (month: number, year: number) => { success: boolean; message: string };
   setManualOpeningBalance: (balance: OpeningBalance) => void;
   lockMonth: (month: number, year: number) => void;
@@ -72,28 +73,51 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     return closedMonths.includes(key);
   };
 
-  const importTransactions = (newItems: Omit<Transaction, 'id'>[]) => {
-    const filteredItems = newItems.filter(item => !isMonthClosed(item.date));
-    if (filteredItems.length < newItems.length) {
-      alert("Một số dòng đã bị bỏ qua vì thuộc tháng đã chốt sổ.");
+  const deleteInvoice = (invNum: string) => {
+    const txToDelete = transactions.filter(t => t.invoiceNumber === invNum);
+    if (txToDelete.length === 0) return;
+
+    if (isMonthClosed(txToDelete[0].date)) {
+      alert("Không thể xóa hóa đơn thuộc tháng đã chốt sổ.");
+      return;
     }
 
-    const keyedItems = filteredItems.map(item => ({ ...item, id: Math.random().toString(36).substr(2, 9) }));
+    const remainingTxs = transactions.filter(t => t.invoiceNumber !== invNum);
+    setTransactions(remainingTxs);
+
+    // Recalculate stock
+    const productMap = new Map<string, Product>();
+    remainingTxs.forEach(item => {
+      const existing = productMap.get(item.itemCode);
+      if (existing) {
+        if (item.type === 'IN') existing.currentStock += item.quantity;
+        else existing.currentStock -= item.quantity;
+      } else {
+        productMap.set(item.itemCode, {
+          code: item.itemCode,
+          name: item.itemName,
+          unit: item.unit,
+          currentStock: item.type === 'IN' ? item.quantity : -item.quantity,
+          averageCost: 0
+        });
+      }
+    });
+    setProducts(Array.from(productMap.values()));
+    alert(`Đã xóa hóa đơn ${invNum} thành công.`);
+  };
+
+  const importTransactions = (newItems: Omit<Transaction, 'id'>[]) => {
+    const keyedItems = newItems.map(item => ({ ...item, id: Math.random().toString(36).substr(2, 9) }));
     const updatedTransactions = [...transactions, ...keyedItems];
     setTransactions(updatedTransactions);
 
     // Update products list
     const productMap = new Map<string, Product>();
-    products.forEach(p => productMap.set(p.code, p));
-
-    keyedItems.forEach(item => {
+    updatedTransactions.forEach(item => {
       const existing = productMap.get(item.itemCode);
       if (existing) {
-        if (item.type === 'IN') {
-          existing.currentStock += item.quantity;
-        } else {
-          existing.currentStock -= item.quantity;
-        }
+        if (item.type === 'IN') existing.currentStock += item.quantity;
+        else existing.currentStock -= item.quantity;
       } else {
         productMap.set(item.itemCode, {
           code: item.itemCode,
