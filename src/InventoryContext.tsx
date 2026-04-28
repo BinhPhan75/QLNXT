@@ -198,10 +198,10 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       return { success: false, message: `Tháng ${targetMonth + 1}/${targetYear} không có dữ liệu giao dịch.` };
     }
 
-    const itemCodesInMonth = Array.from(new Set(targetMonthTxs.map(t => t.itemCode)));
+    const itemCodesInMonth = Array.from(new Set(targetMonthTxs.map(t => t.itemCode))) as string[];
     const calculationMap: Record<string, { openingQty: number; openingValue: number; inQty: number; inValue: number; avgCost: number }> = {};
 
-    itemCodesInMonth.forEach(code => {
+    itemCodesInMonth.forEach((code: string) => {
       const os = getFinalStateAt(code, targetMonth, targetYear);
       const itemsInMonth = targetMonthTxs.filter(t => t.itemCode === code && t.type === 'IN');
       

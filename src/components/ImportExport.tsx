@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import Papa from 'papaparse';
 import { useInventory } from '../InventoryContext';
 import { Upload, FileDown, AlertCircle, CheckCircle2 } from 'lucide-react';
@@ -9,10 +9,6 @@ export default function ImportExport() {
   const { importTransactions, transactions, isMonthClosed } = useInventory();
   const [importType, setImportType] = useState<'IN' | 'OUT'>('IN');
   const [logs, setLogs] = useState<{ msg: string; type: 'success' | 'error' | 'info' }[]>([]);
-
-  function useState(arg0: string): [any, any] {
-    return React.useState(arg0);
-  }
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];

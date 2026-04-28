@@ -10,6 +10,8 @@ export default function Reports() {
   const [searchTerm, setSearchTerm] = useState('');
   const [customerFilter, setCustomerFilter] = useState('');
   
+  const [expandedInvoice, setExpandedInvoice] = useState<string | null>(null);
+
   const filteredData = useMemo(() => {
     return transactions.filter(tx => {
       const isType = reportType === 'BUY' ? tx.type === 'IN' : tx.type === 'OUT';
@@ -25,7 +27,7 @@ export default function Reports() {
   }, [transactions, reportType, searchTerm, customerFilter]);
 
   const invoices = useMemo(() => {
-    const invMap = new Map<string, { id: string, date: string, customer: string, total: number, items: number, number: string }>();
+    const invMap = new Map<string, { id: string, date: string, customer: string, total: number, items: number, number: string, details: any[] }>();
     
     filteredData.forEach(tx => {
       const key = tx.invoiceNumber || 'NO-NUM';
@@ -33,6 +35,7 @@ export default function Reports() {
       if (existing) {
         existing.total += tx.total;
         existing.items += 1;
+        existing.details.push(tx);
       } else {
         invMap.set(key, {
           id: tx.id,
@@ -40,7 +43,8 @@ export default function Reports() {
           date: tx.date,
           customer: tx.customer,
           total: tx.total,
-          items: 1
+          items: 1,
+          details: [tx]
         });
       }
     });
@@ -230,29 +234,73 @@ export default function Reports() {
                     </tr>
                   ) : (
                     invoices.map((inv) => (
-                      <tr key={inv.number} className="hover:bg-slate-50/50 transition-colors">
-                        <td className="px-6 py-4 text-sm text-slate-600">{formatDate(inv.date)}</td>
-                        <td className="px-6 py-4">
-                          <div className="flex items-center gap-2">
-                            <FileText size={16} className="text-blue-500" />
-                            <span className="font-bold text-slate-900">{inv.number}</span>
-                          </div>
-                        </td>
-                        <td className="px-6 py-4 text-sm text-slate-600">{inv.customer}</td>
-                        <td className="px-6 py-4 text-sm text-slate-600">{inv.items} mặt hàng</td>
-                        <td className="px-6 py-4 text-sm font-bold text-blue-600">{formatCurrency(inv.total)}</td>
-                        <td className="px-6 py-4 text-right">
-                          <button 
-                            onClick={() => handleDeleteInvoice(inv.number)}
-                            className="p-2 text-slate-400 hover:text-red-500 transition-colors rounded-lg hover:bg-red-50"
-                            title="Xóa hóa đơn"
-                          >
-                            <Trash2 size={18} />
-                          </button>
-                        </td>
-                      </tr>
-                    ))
-                  )}
+                      <React.Fragment key={inv.number}>
+                        <tr 
+                          onClick={() => setExpandedInvoice(expandedInvoice === inv.number ? null : inv.number)}
+                          className={`hover:bg-slate-50 transition-colors cursor-pointer ${expandedInvoice === inv.number ? 'bg-blue-50/30' : ''}`}
+                        >
+                          <td className="px-6 py-4 text-sm text-slate-600">{formatDate(inv.date)}</td>
+                          <td className="px-6 py-4">
+                            <div className="flex items-center gap-2">
+                              <FileText size={16} className="text-blue-500" />
+                              <span className="font-bold text-slate-900">{inv.number}</span>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 text-sm text-slate-600">{inv.customer}</td>
+                          <td className="px-6 py-4 text-sm text-slate-600">{inv.items} mặt hàng</td>
+                          <td className="px-6 py-4 text-sm font-bold text-blue-600">{formatCurrency(inv.total)}</td>
+                          <td className="px-6 py-4 text-right">
+                            <button 
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDeleteInvoice(inv.number);
+                              }}
+                              className="p-2 text-slate-400 hover:text-red-500 transition-colors rounded-lg hover:bg-red-50"
+                              title="Xóa hóa đơn"
+                            >
+                              <Trash2 size={18} />
+                            </button>
+                          </td>
+                        </tr>
+                        {expandedInvoice === inv.number && (
+                          <tr className="bg-slate-50/80">
+                            <td colSpan={6} className="px-6 py-4">
+                              <div className="bg-white rounded-lg border border-slate-200 overflow-hidden shadow-inner">
+                                <table className="w-full text-xs">
+                                  <thead>
+                                    <tr className="bg-slate-100/50 text-slate-500 border-b border-slate-100">
+                                      <th className="px-4 py-2 text-left">Mã hàng</th>
+                                      <th className="px-4 py-2 text-left">Tên hàng</th>
+                                      <th className="px-4 py-2 text-center">SL</th>
+                                      <th className="px-4 py-2 text-right">Đơn giá</th>
+                                      <th className="px-4 py-2 text-right">Thành tiền</th>
+                                      {reportType === 'SELL' && <th className="px-4 py-2 text-right">Giá vốn</th>}
+                                    </tr>
+                                  </thead>
+                                  <tbody className="divide-y divide-slate-50">
+                                    {inv.details.map((item, idx) => (
+                                      <tr key={idx}>
+                                        <td className="px-4 py-2 font-mono font-medium">{item.itemCode}</td>
+                                        <td className="px-4 py-2 text-slate-700">{item.itemName}</td>
+                                        <td className="px-4 py-2 text-center">{item.quantity} {item.unit}</td>
+                                        <td className="px-4 py-2 text-right">{formatCurrency(item.price)}</td>
+                                        <td className="px-4 py-2 text-right font-bold">{formatCurrency(item.total)}</td>
+                                        {reportType === 'SELL' && (
+                                          <td className="px-4 py-2 text-right text-red-500">
+                                            {item.cogs ? formatCurrency(item.cogs) : '--'}
+                                          </td>
+                                        )}
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                      </React.Fragment>
+                    )
+                  ))}
                 </tbody>
               </>
             )}
