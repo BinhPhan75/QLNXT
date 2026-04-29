@@ -12,7 +12,7 @@ import { formatCurrency } from '../lib/utils';
 export default function Layout() {
   const { user, logout, products } = useInventory();
   const [activeTab, setActiveTab] = useState<'dashboard' | 'import' | 'reports' | 'system'>('dashboard');
-  const [isSidebarOpen, setSidebarOpen] = useState(true);
+  const [isSidebarOpen, setSidebarOpen] = useState(false);
 
   const navItems = [
     { id: 'dashboard', label: 'Tổng quan', icon: LayoutDashboard },
@@ -36,17 +36,50 @@ export default function Layout() {
     }
   };
 
+  const handleTabChange = (tab: typeof activeTab) => {
+    setActiveTab(tab);
+    if (window.innerWidth < 1024) {
+      setSidebarOpen(false);
+    }
+  };
+
   return (
-    <div className="flex min-h-screen bg-slate-50 font-sans">
+    <div className="flex min-h-screen bg-slate-50 font-sans relative">
+      {/* Mobile Backdrop */}
+      <AnimatePresence>
+        {isSidebarOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => setSidebarOpen(false)}
+            className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-30 lg:hidden"
+          />
+        )}
+      </AnimatePresence>
+
       {/* Sidebar */}
       <motion.aside 
-        animate={{ width: isSidebarOpen ? 280 : 0, opacity: isSidebarOpen ? 1 : 0 }}
-        className="bg-white border-r border-slate-200 fixed lg:relative z-20 h-full lg:h-auto overflow-hidden shadow-sm"
+        initial={false}
+        animate={{ 
+          width: isSidebarOpen ? 280 : (window.innerWidth >= 1024 ? 280 : 0),
+          x: isSidebarOpen ? 0 : (window.innerWidth >= 1024 ? 0 : -280),
+          opacity: isSidebarOpen ? 1 : (window.innerWidth >= 1024 ? 1 : 0)
+        }}
+        className="bg-white border-r border-slate-200 fixed lg:sticky top-0 z-40 h-screen overflow-hidden shadow-xl lg:shadow-none"
       >
         <div className="p-6 h-full flex flex-col min-w-[280px]">
-          <div className="flex items-center gap-3 mb-10">
-            <div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center text-white font-bold text-xl">P</div>
-            <h1 className="font-bold text-xl text-slate-900 tracking-tight">PNJ Inventory</h1>
+          <div className="flex items-center justify-between mb-10">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center text-white font-bold text-xl">P</div>
+              <h1 className="font-bold text-xl text-slate-900 tracking-tight">PNJ Inventory</h1>
+            </div>
+            <button 
+              onClick={() => setSidebarOpen(false)}
+              className="lg:hidden p-2 hover:bg-slate-100 rounded-lg text-slate-500"
+            >
+              <X size={20} />
+            </button>
           </div>
 
           <nav className="flex-1 space-y-1">
@@ -55,7 +88,7 @@ export default function Layout() {
               return (
                 <button
                   key={item.id}
-                  onClick={() => setActiveTab(item.id)}
+                  onClick={() => handleTabChange(item.id)}
                   className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${
                     activeTab === item.id 
                     ? 'bg-blue-50 text-blue-600 font-semibold' 
