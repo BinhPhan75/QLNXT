@@ -80,30 +80,25 @@ export default function ImportExport() {
 
         for (let i = dataStartIndex; i < data.length; i++) {
           const row = data[i];
-          if (!row[1]) continue; // Skip if Name is empty
+          if (!row[1] || !row[2]) continue; // Skip if Code or Name is empty
 
           // Stop if we hit the footer "CỘNG TIỀN HÀNG HÓA"
           if (row[0] && row[0].toString().includes('CỘNG TIỀN')) break;
           if (row.slice(1).every(cell => !cell)) continue; 
 
-          const fullText = row[1].toString();
-          
-          // Pattern logic: Extract code from text like "Bông CZ trắng. GBXM0001.000, TL đá..."
-          // We look for a pattern of Uppercase letters + Numbers + Optional Dots
-          const codeMatch = fullText.match(/[A-Z0-9]{5,}\.?\d{0,3}/);
-          const itemCode = codeMatch ? codeMatch[0] : 'NO-CODE';
-          const itemName = fullText.split('.')[0].split(',')[0].trim(); // Get the part before code
-
-          const quantity = parseFloat(row[3]?.toString().replace(/,/g, '') || '0');
-          const price = parseFloat(row[4]?.toString().replace(/[",]/g, '') || '0');
-          const total = parseFloat(row[5]?.toString().replace(/[",]/g, '') || '0');
+          const itemCode = row[1].toString().trim();
+          const itemName = row[2].toString().trim();
+          const unit = row[3] || 'Món';
+          const quantity = parseFloat(row[4]?.toString().replace(/,/g, '') || '0');
+          const price = parseFloat(row[5]?.toString().replace(/[",]/g, '') || '0');
+          const total = parseFloat(row[6]?.toString().replace(/[",]/g, '') || '0');
 
           items.push({
             type: importType,
             date: isoInvoiceDate,
             itemCode: itemCode,
-            itemName: itemName || fullText,
-            unit: row[2] || 'Món',
+            itemName: itemName,
+            unit: unit,
             quantity,
             price,
             discount: 0,
