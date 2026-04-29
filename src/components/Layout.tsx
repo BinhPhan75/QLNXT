@@ -132,7 +132,7 @@ export default function Layout() {
                         <span className="text-[9px] text-slate-500 leading-tight">
                           {dbStatus === 'missing' ? 'Vui lòng nhấn ⚙️ Settings -> Env Vars' : 'Sai thông tin Database'}
                         </span>
-                        <span className="text-[8px] text-rose-400 italic truncate max-w-[150px]" title={dbError}>
+                        <span className="text-[8px] text-rose-400 italic font-medium">
                           {dbError}
                         </span>
                       </div>
