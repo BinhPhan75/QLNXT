@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useInventory } from '../InventoryContext';
 import { LayoutDashboard, FileUp, BarChart3, Settings, LogOut, Menu, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
@@ -13,6 +13,23 @@ export default function Layout() {
   const { user, logout, products } = useInventory();
   const [activeTab, setActiveTab] = useState<'dashboard' | 'import' | 'reports' | 'system'>('dashboard');
   const [isSidebarOpen, setSidebarOpen] = useState(false);
+
+  const [dbStatus, setDbStatus] = useState<'checking' | 'connected' | 'error'>('checking');
+
+  useEffect(() => {
+    const checkDb = async () => {
+      try {
+        const res = await fetch('/api/db-status');
+        const data = await res.json();
+        setDbStatus(data.status === 'connected' ? 'connected' : 'error');
+      } catch {
+        setDbStatus('error');
+      }
+    };
+    checkDb();
+    const interval = setInterval(checkDb, 30000); // Check every 30s
+    return () => clearInterval(interval);
+  }, []);
 
   const navItems = [
     { id: 'dashboard', label: 'Tổng quan', icon: LayoutDashboard },
@@ -72,7 +89,19 @@ export default function Layout() {
           <div className="flex items-center justify-between mb-10">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center text-white font-bold text-xl">P</div>
-              <h1 className="font-bold text-xl text-slate-900 tracking-tight">PNJ Inventory</h1>
+              <div>
+                <h1 className="font-bold text-lg text-slate-900 tracking-tight leading-tight">PNJ Inv</h1>
+                <div className="flex items-center gap-1.5 mt-0.5">
+                  <div className={`w-2 h-2 rounded-full ${
+                    dbStatus === 'connected' ? 'bg-emerald-500 animate-pulse' : 
+                    dbStatus === 'checking' ? 'bg-amber-400' : 'bg-rose-500'
+                  }`} />
+                  <span className="text-[10px] font-medium text-slate-500 uppercase tracking-wider">
+                    {dbStatus === 'connected' ? 'Database Online' : 
+                     dbStatus === 'checking' ? 'Connecting...' : 'DB Offline'}
+                  </span>
+                </div>
+              </div>
             </div>
             <button 
               onClick={() => setSidebarOpen(false)}

@@ -39,6 +39,16 @@ async function startServer() {
 
   // API Routes
   
+  // 0. Connection Status Check
+  app.get("/api/db-status", async (req, res) => {
+    try {
+      const result = await pool.query('SELECT NOW()');
+      res.json({ status: "connected", time: result.rows[0].now });
+    } catch (err) {
+      res.status(500).json({ status: "error", message: err instanceof Error ? err.message : String(err) });
+    }
+  });
+
   // 1. Get all transactions
   app.get("/api/transactions", async (req, res) => {
     try {
