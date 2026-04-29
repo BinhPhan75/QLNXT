@@ -273,6 +273,7 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       setManualOpeningBalance,
       lockMonth,
       isMonthClosed,
+      deleteInvoice,
       resetData 
     }}>
       {children}
