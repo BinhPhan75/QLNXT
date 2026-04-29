@@ -255,7 +255,13 @@ export default function Reports() {
                                   </thead>
                                   <tbody className="divide-y divide-slate-50">
                                     {transactions
-                                      .filter(t => t.itemCode.trim().toUpperCase() === p.code.trim().toUpperCase())
+                                      .filter(t => {
+                                        // Robust normalization match
+                                        const c = t.itemCode.trim().toUpperCase();
+                                        const n = t.itemName.trim().toUpperCase();
+                                        const target = p.code.trim().toUpperCase();
+                                        return c === target || n === target;
+                                      })
                                       .sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime())
                                       .map((tx, idx) => (
                                       <tr key={idx} className="hover:bg-slate-50 border-b border-slate-50 last:border-0">

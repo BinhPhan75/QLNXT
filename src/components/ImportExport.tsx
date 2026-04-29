@@ -95,33 +95,49 @@ export default function ImportExport() {
         let successCount = 0;
 
         const extractCodeFromName = (text: string) => {
-          const codeMatch = text.match(/[A-Z]{2,}[A-Z0-9.]+/);
+          // Look for typical jewelry code patterns: e.g., GD0000Y000219.460 or GNXMXMY...
+          // Pattern: Starts with 2+ uppercase letters, followed by alphanumeric/dots, length at least 5
+          const codeMatch = text.match(/[A-Z]{2,}[A-Z0-9.]{3,}/);
           if (codeMatch) {
             const code = codeMatch[0];
             const name = text.replace(code, '').replace(/[().,]/g, ' ').replace(/\s+/g, ' ').trim();
-            return { code: code.toUpperCase(), name };
+            return { code: code.toUpperCase(), name: name || text };
           }
           return { code: '', name: text };
         };
 
         for (let i = dataStartIndex; i < data.length; i++) {
           const row = data[i];
-          const nameContent = row[colIdx.name]?.toString().trim() || '';
-          if (!nameContent || nameContent.includes('CỘNG TIỀN')) break;
+          const rawName = row[colIdx.name]?.toString().trim() || '';
+          if (!rawName || rawName.includes('CỘNG TIỀN')) break;
           if (row.every(cell => !cell)) continue;
 
           let itemCode = '';
           let itemName = '';
 
-          // Logic detection
-          const codeFromCol = colIdx.code !== -1 ? row[colIdx.code]?.toString().trim() : '';
+          const rawCode = colIdx.code !== -1 ? row[colIdx.code]?.toString().trim() : '';
           
-          if (codeFromCol && codeFromCol.length > 3) {
-            itemCode = codeFromCol.toUpperCase();
-            itemName = nameContent;
+          // Heuristic: Check which column actually looks like a "Code"
+          // Codes are usually alphanumeric and shorter/structured, Names are usually more descriptive
+          const codeRegex = /^[A-Z0-9.]{5,}$/;
+          const codeLooksLikeCode = codeRegex.test(rawCode);
+          const nameLooksLikeCode = codeRegex.test(rawName);
+
+          if (codeLooksLikeCode && !nameLooksLikeCode) {
+            itemCode = rawCode.toUpperCase();
+            itemName = rawName;
+          } else if (nameLooksLikeCode && !codeLooksLikeCode) {
+            // Swapped! Use the name column content as code
+            itemCode = rawName.toUpperCase();
+            itemName = rawCode || 'Hàng hóa';
+          } else if (rawCode) {
+            // Trust headers if both or neither match
+            itemCode = rawCode.toUpperCase();
+            itemName = rawName;
           } else {
-            const extracted = extractCodeFromName(nameContent);
-            itemCode = extracted.code || 'NO-CODE';
+            // Try to extract from name if no code column found
+            const extracted = extractCodeFromName(rawName);
+            itemCode = extracted.code || 'KHONG-MA';
             itemName = extracted.name;
           }
 
