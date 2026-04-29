@@ -27,33 +27,83 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const [closedMonths, setClosedMonths] = useState<string[]>([]);
   const [user, setUser] = useState<User | null>(null);
 
-  // Load data from LocalStorage
+  // Load data from Backend
   useEffect(() => {
-    const savedProducts = localStorage.getItem('inv_products');
-    const savedTransactions = localStorage.getItem('inv_transactions');
-    const savedManualOB = localStorage.getItem('inv_manual_ob');
+    const fetchData = async () => {
+      try {
+        const [txRes, obRes] = await Promise.all([
+          fetch('/api/transactions').then(r => r.json()),
+          fetch('/api/opening-balances').then(r => r.json())
+        ]);
+        
+        if (!Array.isArray(txRes) || !Array.isArray(obRes)) {
+          const errorMsg = txRes.error || obRes.error || "Phản hồi từ server không hợp lệ";
+          console.error("API Error:", errorMsg);
+          return;
+        }
+
+        const mappedTxs = txRes.map((t: any) => ({
+          ...t,
+          itemCode: t.item_code,
+          itemName: t.item_name,
+          invoiceNumber: t.invoice_number,
+          cogs: parseFloat(t.cogs || 0)
+        }));
+
+        const mappedOBs = obRes.map((ob: any) => ({
+          itemCode: ob.item_code,
+          month: ob.month,
+          year: ob.year,
+          quantity: parseFloat(ob.quantity),
+          totalValue: parseFloat(ob.value)
+        }));
+
+        setTransactions(mappedTxs);
+        setManualOpeningBalances(mappedOBs);
+        
+        // Calculate products list from transactions
+        const productMap = new Map<string, Product>();
+        mappedTxs.forEach((item: Transaction) => {
+          const code = item.itemCode.trim().toUpperCase();
+          const existing = productMap.get(code);
+          if (existing) {
+            if (item.type === 'IN') existing.currentStock += item.quantity;
+            else existing.currentStock -= item.quantity;
+          } else {
+            productMap.set(code, {
+              code: code,
+              name: item.itemName,
+              unit: item.unit,
+              currentStock: item.type === 'IN' ? item.quantity : -item.quantity,
+              averageCost: 0
+            });
+          }
+        });
+        setProducts(Array.from(productMap.values()));
+      } catch (err) {
+        console.error("Failed to fetch data:", err);
+      }
+    };
+
+    fetchData();
+
+    // Persistent User and Closed Months can stay in localStorage for now
     const savedClosed = localStorage.getItem('inv_closed_months');
     const savedUser = localStorage.getItem('inv_user');
 
-    if (savedProducts) setProducts(JSON.parse(savedProducts));
-    if (savedTransactions) setTransactions(JSON.parse(savedTransactions));
-    if (savedManualOB) setManualOpeningBalances(JSON.parse(savedManualOB));
     if (savedClosed) setClosedMonths(JSON.parse(savedClosed));
     if (savedUser) setUser(JSON.parse(savedUser));
   }, []);
 
-  // Save to LocalStorage
+  // Save meta to LocalStorage
   useEffect(() => {
-    localStorage.setItem('inv_products', JSON.stringify(products));
-    localStorage.setItem('inv_transactions', JSON.stringify(transactions));
-    localStorage.setItem('inv_manual_ob', JSON.stringify(manualOpeningBalances));
     localStorage.setItem('inv_closed_months', JSON.stringify(closedMonths));
     if (user) {
       localStorage.setItem('inv_user', JSON.stringify(user));
     } else {
       localStorage.removeItem('inv_user');
     }
-  }, [products, transactions, user, manualOpeningBalances, closedMonths]);
+  }, [user, closedMonths]);
 
   const login = (username: string, pass: string) => {
     if (username === 'admin' && pass === '220785') {
@@ -73,7 +123,7 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     return closedMonths.includes(key);
   };
 
-  const deleteInvoice = (invNum: string) => {
+  const deleteInvoice = async (invNum: string) => {
     const txToDelete = transactions.filter(t => t.invoiceNumber === invNum);
     if (txToDelete.length === 0) return;
 
@@ -82,67 +132,101 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       return;
     }
 
-    const remainingTxs = transactions.filter(t => t.invoiceNumber !== invNum);
-    setTransactions(remainingTxs);
+    try {
+      await fetch(`/api/invoices/${invNum}`, { method: 'DELETE' });
+      const remainingTxs = transactions.filter(t => t.invoiceNumber !== invNum);
+      setTransactions(remainingTxs);
 
-    // Recalculate stock
-    const productMap = new Map<string, Product>();
-    remainingTxs.forEach(item => {
-      const code = item.itemCode.trim().toUpperCase();
-      const existing = productMap.get(code);
-      if (existing) {
-        if (item.type === 'IN') existing.currentStock += item.quantity;
-        else existing.currentStock -= item.quantity;
-      } else {
-        productMap.set(code, {
-          code: code,
-          name: item.itemName,
-          unit: item.unit,
-          currentStock: item.type === 'IN' ? item.quantity : -item.quantity,
-          averageCost: 0
-        });
-      }
-    });
-    setProducts(Array.from(productMap.values()));
-    alert(`Đã xóa hóa đơn ${invNum} thành công.`);
+      // Recalculate stock
+      const productMap = new Map<string, Product>();
+      remainingTxs.forEach(item => {
+        const code = item.itemCode.trim().toUpperCase();
+        const existing = productMap.get(code);
+        if (existing) {
+          if (item.type === 'IN') existing.currentStock += item.quantity;
+          else existing.currentStock -= item.quantity;
+        } else {
+          productMap.set(code, {
+            code: code,
+            name: item.itemName,
+            unit: item.unit,
+            currentStock: item.type === 'IN' ? item.quantity : -item.quantity,
+            averageCost: 0
+          });
+        }
+      });
+      setProducts(Array.from(productMap.values()));
+      alert(`Đã xóa hóa đơn ${invNum} thành công.`);
+    } catch (err) {
+      console.error(err);
+      alert("Lỗi khi xóa hóa đơn.");
+    }
   };
 
-  const importTransactions = (newItems: Omit<Transaction, 'id'>[]) => {
+  const importTransactions = async (newItems: Omit<Transaction, 'id'>[]) => {
     const keyedItems = newItems.map(item => ({ 
       ...item, 
       itemCode: item.itemCode.trim().toUpperCase(),
       id: Math.random().toString(36).substr(2, 9) 
     }));
-    const updatedTransactions = [...transactions, ...keyedItems];
-    setTransactions(updatedTransactions);
+    
+    try {
+      await fetch('/api/transactions/bulk', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ items: keyedItems })
+      });
 
-    // Update products list
-    const productMap = new Map<string, Product>();
-    updatedTransactions.forEach(item => {
-      const code = item.itemCode; // Already normalized in keyedItems/previous state
-      const existing = productMap.get(code);
-      if (existing) {
-        if (item.type === 'IN') existing.currentStock += item.quantity;
-        else existing.currentStock -= item.quantity;
-      } else {
-        productMap.set(code, {
-          code: code,
-          name: item.itemName,
-          unit: item.unit,
-          currentStock: item.type === 'IN' ? item.quantity : -item.quantity,
-          averageCost: 0
-        });
-      }
-    });
+      const updatedTransactions = [...transactions, ...keyedItems];
+      setTransactions(updatedTransactions);
 
-    setProducts(Array.from(productMap.values()));
+      // Update products list
+      const productMap = new Map<string, Product>();
+      updatedTransactions.forEach(item => {
+        const code = item.itemCode; 
+        const existing = productMap.get(code);
+        if (existing) {
+          if (item.type === 'IN') existing.currentStock += item.quantity;
+          else existing.currentStock -= item.quantity;
+        } else {
+          productMap.set(code, {
+            code: code,
+            name: item.itemName,
+            unit: item.unit,
+            currentStock: item.type === 'IN' ? item.quantity : -item.quantity,
+            averageCost: 0
+          });
+        }
+      });
+      setProducts(Array.from(productMap.values()));
+    } catch (err) {
+      console.error(err);
+      alert("Lỗi khi lưu dữ liệu lên server.");
+    }
   };
 
-  const setManualOpeningBalance = (balance: OpeningBalance) => {
-    setManualOpeningBalances(prev => {
-      const filtered = prev.filter(b => !(b.itemCode === balance.itemCode && b.month === balance.month && b.year === balance.year));
-      return [...filtered, balance];
-    });
+  const setManualOpeningBalance = async (balance: OpeningBalance) => {
+    try {
+      await fetch('/api/opening-balances', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          item_code: balance.itemCode,
+          month: balance.month,
+          year: balance.year,
+          quantity: balance.quantity,
+          value: balance.totalValue
+        })
+      });
+
+      setManualOpeningBalances(prev => {
+        const filtered = prev.filter(b => !(b.itemCode === balance.itemCode && b.month === balance.month && b.year === balance.year));
+        return [...filtered, balance];
+      });
+    } catch (err) {
+      console.error(err);
+      alert("Lỗi khi lưu số dư đầu kỳ.");
+    }
   };
 
   const lockMonth = (month: number, year: number) => {
@@ -152,15 +236,12 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     }
   };
 
-  const calculateMonthlyCOGS = (targetMonth: number, targetYear: number) => {
+  const calculateMonthlyCOGS = async (targetMonth: number, targetYear: number) => {
     let warnNoPurchases = false;
 
-    // 1. Calculate Opening Balance for the target month
-    // We look for manual OB if month-1 is not calculated, or we just calculate from month 0 to month-1
     const prevMonth = targetMonth === 0 ? 11 : targetMonth - 1;
     const prevYear = targetMonth === 0 ? targetYear - 1 : targetYear;
 
-    // Helper: Get cumulative status of an item up to a point
     const getFinalStateAt = (code: string, month: number, year: number) => {
       const cutoffDate = new Date(year, month, 1);
       const priorTxs = transactions.filter(t => t.itemCode === code && new Date(t.date) < cutoffDate);
@@ -169,8 +250,6 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       let totalValue = 0;
       let avgCost = 0;
 
-      // Check if there is a manual opening balance for the "cutoffDate's month"
-      // Actually, we check if there's a manual OB for the target month (the one we are calculating)
       const manualOB = manualOpeningBalances.find(b => b.itemCode === code && b.month === month && b.year === year);
       
       if (manualOB) {
@@ -178,7 +257,6 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         totalValue = manualOB.totalValue;
         avgCost = qty > 0 ? totalValue / qty : 0;
       } else {
-        // If no manual OB, calculate from very beginning up to cutoff
         priorTxs.sort((a,b) => new Date(a.date).getTime() - new Date(b.date).getTime()).forEach(t => {
           if (t.type === 'IN') {
             totalValue += (t.quantity * t.price);
@@ -194,7 +272,6 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       return { qty, totalValue, avgCost };
     };
 
-    // Monthly Logic
     const targetMonthTxs = transactions.filter(tx => {
       const d = new Date(tx.date);
       return d.getMonth() === targetMonth && d.getFullYear() === targetYear;
@@ -221,7 +298,7 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       if (totalQty > 0) {
         avgCost = totalValue / totalQty;
       } else if (os.qty > 0) {
-        avgCost = os.avgCost; // Fallback to opening if no new qty
+        avgCost = os.avgCost;
       }
 
       if (itemsInMonth.length === 0 && inQty === 0 && os.qty > 0) {
@@ -237,32 +314,53 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       };
     });
 
-    // Update cogs field for SALES in target month
+    const itemsToUpdate: Transaction[] = [];
     const newTransactions = transactions.map(tx => {
       const d = new Date(tx.date);
       if (tx.type === 'OUT' && d.getMonth() === targetMonth && d.getFullYear() === targetYear) {
         const cost = calculationMap[tx.itemCode]?.avgCost || 0;
-        return { ...tx, cogs: cost * tx.quantity };
+        const updatedTx = { ...tx, cogs: cost * tx.quantity };
+        itemsToUpdate.push(updatedTx);
+        return updatedTx;
       }
       return tx;
     });
 
-    setTransactions(newTransactions);
-
-    let message = `Đã tính toán xong giá vốn tháng ${targetMonth + 1}/${targetYear}.`;
-    if (warnNoPurchases) {
-      message += " Lưu ý: Một số mặt hàng không có giao dịch Nhập trong tháng, hệ thống đã áp dụng đơn giá tồn đầu kỳ.";
+    try {
+      // Save updated COGS to server
+      if (itemsToUpdate.length > 0) {
+        await fetch('/api/transactions/bulk', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ items: itemsToUpdate })
+        });
+      }
+      
+      setTransactions(newTransactions);
+      let message = `Đã tính toán xong giá vốn tháng ${targetMonth + 1}/${targetYear}.`;
+      if (warnNoPurchases) {
+        message += " Lưu ý: Một số mặt hàng không có giao dịch Nhập trong tháng, hệ thống đã áp dụng đơn giá tồn đầu kỳ.";
+      }
+      return { success: true, message };
+    } catch (err) {
+      console.error(err);
+      return { success: false, message: "Lỗi khi lưu giá vốn lên server." };
     }
-
-    return { success: true, message };
   };
 
-  const resetData = () => {
-    setProducts([]);
-    setTransactions([]);
-    setManualOpeningBalances([]);
-    setClosedMonths([]);
-    localStorage.clear();
+  const resetData = async () => {
+    if (!confirm("Bạn có chắc chắn muốn xóa TOÀN BỘ dữ liệu trên server?")) return;
+    try {
+      await fetch('/api/reset', { method: 'POST' });
+      setProducts([]);
+      setTransactions([]);
+      setManualOpeningBalances([]);
+      setClosedMonths([]);
+      localStorage.removeItem('inv_closed_months');
+    } catch (err) {
+      console.error(err);
+      alert("Lỗi khi reset dữ liệu.");
+    }
   };
 
   return (
