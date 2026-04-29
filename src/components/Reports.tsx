@@ -247,13 +247,15 @@ export default function Reports() {
                                       <th className="px-4 py-2 text-left">Hóa đơn</th>
                                       <th className="px-4 py-2 text-left">Đối tác</th>
                                       <th className="px-4 py-2 text-center">SL</th>
+                                      <th className="px-4 py-2 text-left">Mã hàng</th>
+                                      <th className="px-4 py-2 text-left">Tên hàng</th>
                                       <th className="px-4 py-2 text-right">Đơn giá</th>
                                       <th className="px-4 py-2 text-right">Thành tiền</th>
                                     </tr>
                                   </thead>
                                   <tbody className="divide-y divide-slate-50">
                                     {transactions
-                                      .filter(t => t.itemCode.trim().toLowerCase() === p.code.trim().toLowerCase())
+                                      .filter(t => t.itemCode.trim().toUpperCase() === p.code.trim().toUpperCase())
                                       .sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime())
                                       .map((tx, idx) => (
                                       <tr key={idx} className="hover:bg-slate-50 border-b border-slate-50 last:border-0">
@@ -266,6 +268,8 @@ export default function Reports() {
                                         <td className="px-4 py-2 text-slate-500 font-medium">{tx.invoiceNumber}</td>
                                         <td className="px-4 py-2 text-slate-600 truncate max-w-[150px]" title={tx.customer}>{tx.customer}</td>
                                         <td className="px-4 py-2 text-center font-bold text-slate-900">{tx.quantity}</td>
+                                        <td className="px-4 py-2 text-left text-slate-500 font-mono text-[10px]">{tx.itemCode}</td>
+                                        <td className="px-4 py-2 text-left text-slate-600 text-[10px] italic">{tx.itemName}</td>
                                         <td className="px-4 py-2 text-right text-slate-500">{formatCurrency(tx.price)}</td>
                                         <td className="px-4 py-2 text-right font-bold text-slate-700">{formatCurrency(tx.total)}</td>
                                       </tr>

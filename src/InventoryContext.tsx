@@ -88,13 +88,14 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     // Recalculate stock
     const productMap = new Map<string, Product>();
     remainingTxs.forEach(item => {
-      const existing = productMap.get(item.itemCode);
+      const code = item.itemCode.trim().toUpperCase();
+      const existing = productMap.get(code);
       if (existing) {
         if (item.type === 'IN') existing.currentStock += item.quantity;
         else existing.currentStock -= item.quantity;
       } else {
-        productMap.set(item.itemCode, {
-          code: item.itemCode,
+        productMap.set(code, {
+          code: code,
           name: item.itemName,
           unit: item.unit,
           currentStock: item.type === 'IN' ? item.quantity : -item.quantity,
@@ -107,20 +108,25 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   };
 
   const importTransactions = (newItems: Omit<Transaction, 'id'>[]) => {
-    const keyedItems = newItems.map(item => ({ ...item, id: Math.random().toString(36).substr(2, 9) }));
+    const keyedItems = newItems.map(item => ({ 
+      ...item, 
+      itemCode: item.itemCode.trim().toUpperCase(),
+      id: Math.random().toString(36).substr(2, 9) 
+    }));
     const updatedTransactions = [...transactions, ...keyedItems];
     setTransactions(updatedTransactions);
 
     // Update products list
     const productMap = new Map<string, Product>();
     updatedTransactions.forEach(item => {
-      const existing = productMap.get(item.itemCode);
+      const code = item.itemCode; // Already normalized in keyedItems/previous state
+      const existing = productMap.get(code);
       if (existing) {
         if (item.type === 'IN') existing.currentStock += item.quantity;
         else existing.currentStock -= item.quantity;
       } else {
-        productMap.set(item.itemCode, {
-          code: item.itemCode,
+        productMap.set(code, {
+          code: code,
           name: item.itemName,
           unit: item.unit,
           currentStock: item.type === 'IN' ? item.quantity : -item.quantity,

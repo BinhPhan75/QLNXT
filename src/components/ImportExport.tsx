@@ -86,7 +86,7 @@ export default function ImportExport() {
           if (row[0] && row[0].toString().includes('CỘNG TIỀN')) break;
           if (row.slice(1).every(cell => !cell)) continue; 
 
-          const itemCode = row[1].toString().trim();
+          const itemCode = row[1].toString().trim().toUpperCase();
           const itemName = row[2].toString().trim();
           const unit = row[3] || 'Món';
           const quantity = parseFloat(row[4]?.toString().replace(/,/g, '') || '0');
