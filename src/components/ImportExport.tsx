@@ -26,20 +26,25 @@ export default function ImportExport() {
 
         // Header usually has seller/buyer info
         const titleRow = data[0][0] || '';
-        const invoiceNum = titleRow.match(/Số: (\d+)/)?.[1] || 'UNK-' + Date.now();
-        const dateMatch = titleRow.match(/Ngày (\d{2}\/\d{2}\/\d{4})/);
+        const secondColHeader = data[0][1] || '';
+        
+        // Extract Invoice Number from titleRow "HÓA ĐƠN BÁN HÀNG - Số: 74"
+        const invoiceNumMatch = titleRow.match(/Số:\s*(\d+)/);
+        const invoiceNum = invoiceNumMatch ? invoiceNumMatch[1] : 'UNK-' + Date.now();
+        
+        // Extract Date from secondColHeader "Ký hiệu: 2C26MNT | Ngày: 12/01/2026"
+        const dateMatch = secondColHeader.match(/Ngày:\s*(\d{2}\/\d{2}\/\d{4})/);
         const invoiceDateStr = dateMatch ? dateMatch[1] : new Date().toLocaleDateString('vi-VN');
         
         // Convert to ISO for comparison
         const [d, m, y] = invoiceDateStr.split('/');
         const isoInvoiceDate = `${y}-${m}-${d}`;
 
-        // Header info (Sender/Receiver)
-        const sellerRow = data[1][0] || '';
-        const buyerRow = data[2][0] || '';
+        // Header info (Sender/Receiver) - Rows 2 and 5
+        const sellerName = (data[1][1] || '').trim();
+        const buyerName = (data[4][1] || '').trim();
         
-        let customerName = importType === 'IN' ? sellerRow : buyerRow;
-        customerName = customerName.replace(/Người (bán|mua): /, '').split('|')[0].trim();
+        const customerName = importType === 'IN' ? sellerName : buyerName;
 
         // 1. DUPLICATE CHECK
         const isDuplicate = transactions.some(t => 
@@ -50,50 +55,58 @@ export default function ImportExport() {
         );
 
         if (isDuplicate) {
-          setLogs(prev => [...prev, { msg: `CẢNH BÁO: Hóa đơn số ${invoiceNum} ngày ${invoiceDateStr} từ ${customerName} đã tồn tại trong hệ thống. Hệ thống từ chối nhập trùng.`, type: 'error' }]);
+          setLogs(prev => [...prev, { msg: `CẢNH BÁO: Hóa đơn số ${invoiceNum} ngày ${invoiceDateStr} từ ${customerName} đã tồn tại. Hệ thống từ chối nhập trùng.`, type: 'error' }]);
           return;
         }
 
         // 2. CLOSED MONTH CHECK
         if (isMonthClosed(isoInvoiceDate)) {
-          setLogs(prev => [...prev, { msg: `CẢNH BÁO: Hóa đơn thuộc vào tháng đã chốt sổ (${invoiceDateStr}). Không thể nhập dữ liệu vào tháng đã khóa.`, type: 'error' }]);
+          setLogs(prev => [...prev, { msg: `CẢNH BÁO: Hóa đơn thuộc vào tháng đã chốt sổ (${invoiceDateStr}).`, type: 'error' }]);
           return;
         }
 
-        // Data starts from index 5 (Row 6)
-        const header = data[4];
-        if (!header || !header.includes('Mã hàng')) {
-          setLogs(prev => [...prev, { msg: 'Không tìm thấy cột "Mã hàng" ở hàng số 5.', type: 'error' }]);
-          return;
+        // Data starts from index 10 (Row 11) based on the new format
+        // Finding the header "STT" row dynamically if possible, else use fixed index 9
+        let dataStartIndex = 10;
+        for(let i=0; i<data.length; i++) {
+          if (data[i][0] === 'STT') {
+            dataStartIndex = i + 1;
+            break;
+          }
         }
 
         const items: Omit<Transaction, 'id'>[] = [];
         let successCount = 0;
 
-        for (let i = 5; i < data.length; i++) {
+        for (let i = dataStartIndex; i < data.length; i++) {
           const row = data[i];
-          if (!row[3]) continue; 
+          if (!row[1]) continue; // Skip if Name is empty
 
-          if (row[0] && row[0].toString().includes('TỔNG CỘNG')) break;
-          if (row.every(cell => !cell)) continue; 
+          // Stop if we hit the footer "CỘNG TIỀN HÀNG HÓA"
+          if (row[0] && row[0].toString().includes('CỘNG TIỀN')) break;
+          if (row.slice(1).every(cell => !cell)) continue; 
 
-          const qtyStr = row[5]?.toString().replace(/,/g, '') || '0';
-          const priceStr = row[6]?.toString().replace(/[",]/g, '') || '0';
-          const totalStr = row[8]?.toString().replace(/[",]/g, '') || '0';
+          const fullText = row[1].toString();
+          
+          // Pattern logic: Extract code from text like "Bông CZ trắng. GBXM0001.000, TL đá..."
+          // We look for a pattern of Uppercase letters + Numbers + Optional Dots
+          const codeMatch = fullText.match(/[A-Z0-9]{5,}\.?\d{0,3}/);
+          const itemCode = codeMatch ? codeMatch[0] : 'NO-CODE';
+          const itemName = fullText.split('.')[0].split(',')[0].trim(); // Get the part before code
 
-          const quantity = parseFloat(qtyStr);
-          const price = parseFloat(priceStr);
-          const total = parseFloat(totalStr);
+          const quantity = parseFloat(row[3]?.toString().replace(/,/g, '') || '0');
+          const price = parseFloat(row[4]?.toString().replace(/[",]/g, '') || '0');
+          const total = parseFloat(row[5]?.toString().replace(/[",]/g, '') || '0');
 
           items.push({
             type: importType,
             date: isoInvoiceDate,
-            itemCode: row[3],
-            itemName: row[2],
-            unit: row[4],
+            itemCode: itemCode,
+            itemName: itemName || fullText,
+            unit: row[2] || 'Món',
             quantity,
             price,
-            discount: parseFloat(row[7]?.toString() || '0'),
+            discount: 0,
             total,
             customer: customerName,
             invoiceNumber: invoiceNum
