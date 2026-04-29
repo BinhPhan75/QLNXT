@@ -257,9 +257,9 @@ export default function Reports() {
                                     {transactions
                                       .filter(t => {
                                         // Robust normalization match
-                                        const c = t.itemCode.trim().toUpperCase();
-                                        const n = t.itemName.trim().toUpperCase();
-                                        const target = p.code.trim().toUpperCase();
+                                        const c = (t.itemCode || '').toString().trim().toUpperCase();
+                                        const n = (t.itemName || '').toString().trim().toUpperCase();
+                                        const target = (p.code || '').toString().trim().toUpperCase();
                                         return c === target || n === target;
                                       })
                                       .sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime())

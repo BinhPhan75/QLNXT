@@ -96,13 +96,26 @@ router.get("/db-status", async (req, res) => {
       message: "Chưa cấu hình DATABASE_URL. Hãy thêm vào Settings -> Environment Variables trong AI Studio." 
     });
   }
+  const client = await pool.connect();
   try {
-    const client = await pool.connect();
-    const result = await client.query('SELECT NOW()');
+    const timeResult = await client.query('SELECT NOW()');
+    
+    // Debug: Check columns
+    const columnsResult = await client.query(`
+      SELECT column_name, data_type 
+      FROM information_schema.columns 
+      WHERE table_name = 'transactions'
+    `);
+
     client.release();
-    res.json({ status: "connected", time: result.rows[0].now });
+    res.json({ 
+      status: "connected", 
+      time: timeResult.rows[0].now,
+      columns: columnsResult.rows.map(r => r.column_name)
+    });
   } catch (err: any) {
     console.error("[API] DB Status Check Error:", err.message);
+    if (client) client.release();
     res.status(200).json({ 
       status: "error", 
       message: err.message || "Không thể kết nối đến Database" 

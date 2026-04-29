@@ -44,18 +44,22 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
         const mappedTxs = txRes.map((t: any) => ({
           ...t,
-          itemCode: t.item_code,
-          itemName: t.item_name,
-          invoiceNumber: t.invoice_number,
+          itemCode: (t.item_code || t.itemCode || '').toString(),
+          itemName: (t.item_name || t.itemName || '').toString(),
+          invoiceNumber: (t.invoice_number || t.invoiceNumber || '').toString(),
+          quantity: parseFloat(t.quantity || 0),
+          price: parseFloat(t.price || 0),
+          discount: parseFloat(t.discount || 0),
+          total: parseFloat(t.total || 0),
           cogs: parseFloat(t.cogs || 0)
         }));
 
         const mappedOBs = obRes.map((ob: any) => ({
-          itemCode: ob.item_code,
-          month: ob.month,
-          year: ob.year,
-          quantity: parseFloat(ob.quantity),
-          totalValue: parseFloat(ob.value)
+          itemCode: (ob.item_code || ob.itemCode || '').toString(),
+          month: parseInt(ob.month || 0),
+          year: parseInt(ob.year || 0),
+          quantity: parseFloat(ob.quantity || 0),
+          totalValue: parseFloat(ob.value || ob.totalValue || 0)
         }));
 
         setTransactions(mappedTxs);
