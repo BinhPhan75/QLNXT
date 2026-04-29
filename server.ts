@@ -1,39 +1,45 @@
+import pg from 'pg';
+const { Pool } = pg;
+import dotenv from 'dotenv';
 import express from "express";
 import { createServer as createViteServer } from "vite";
 import path from "path";
-import pg from 'pg';
-import dotenv from 'dotenv';
 
 dotenv.config();
-
-const { Pool } = pg;
 
 async function startServer() {
   const app = express();
   const PORT = 3000;
 
-  if (!process.env.DATABASE_URL) {
-    console.error("CRITICAL ERROR: DATABASE_URL is not defined in environment variables.");
-    console.log("Please add DATABASE_URL in Settings -> Environment Variables.");
+  const dbUrl = process.env.DATABASE_URL;
+
+  if (!dbUrl) {
+    console.warn("⚠️ DATABASE_URL is missing! Server will start but DB features will fail.");
+    console.warn("Please add DATABASE_URL in Settings -> Environment Variables and restart.");
+  } else {
+    // Basic censored logging to verify it starts correctly
+    const censored = dbUrl.replace(/:.+@/, ':****@');
+    console.log(`Connecting to database: ${censored}`);
   }
 
   // Database Pool
   const pool = new Pool({
-    connectionString: process.env.DATABASE_URL,
-    ssl: {
+    connectionString: dbUrl,
+    ssl: dbUrl?.includes('localhost') ? false : {
       rejectUnauthorized: false
     }
   });
 
-  // Test connection
-  pool.connect((err, client, release) => {
-    if (err) {
-      console.error('Error acquiring client', err.stack);
-    } else {
-      console.log('Successfully connected to Neon Database');
-      release();
+  // Test connection immediately
+  if (dbUrl) {
+    try {
+      const client = await pool.connect();
+      console.log('✅ Successfully connected to Database');
+      client.release();
+    } catch (err) {
+      console.error('❌ Database connection failed:', err instanceof Error ? err.message : String(err));
     }
-  });
+  }
 
   app.use(express.json({ limit: '50mb' }));
 

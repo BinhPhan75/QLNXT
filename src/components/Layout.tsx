@@ -91,16 +91,19 @@ export default function Layout() {
               <div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center text-white font-bold text-xl">P</div>
               <div>
                 <h1 className="font-bold text-lg text-slate-900 tracking-tight leading-tight">PNJ Inv</h1>
-                <div className="flex items-center gap-1.5 mt-0.5">
-                  <div className={`w-2 h-2 rounded-full ${
-                    dbStatus === 'connected' ? 'bg-emerald-500 animate-pulse' : 
-                    dbStatus === 'checking' ? 'bg-amber-400' : 'bg-rose-500'
-                  }`} />
-                  <span className="text-[10px] font-medium text-slate-500 uppercase tracking-wider">
-                    {dbStatus === 'connected' ? 'Database Online' : 
-                     dbStatus === 'checking' ? 'Connecting...' : 'DB Offline'}
-                  </span>
-                </div>
+                  <div 
+                    title={dbStatus === 'error' ? 'Vui lòng kiểm tra DATABASE_URL trong phần Settings' : undefined}
+                    className={`flex items-center gap-1.5 mt-0.5 cursor-help`}
+                  >
+                    <div className={`w-2 h-2 rounded-full ${
+                      dbStatus === 'connected' ? 'bg-emerald-500 animate-pulse' : 
+                      dbStatus === 'checking' ? 'bg-amber-400' : 'bg-rose-500'
+                    }`} />
+                    <span className="text-[10px] font-medium text-slate-500 uppercase tracking-wider">
+                      {dbStatus === 'connected' ? 'Database Online' : 
+                       dbStatus === 'checking' ? 'Connecting...' : 'DB Offline (Click ?)'}
+                    </span>
+                  </div>
               </div>
             </div>
             <button 
