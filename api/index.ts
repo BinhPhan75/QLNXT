@@ -20,26 +20,20 @@ const pool = new Pool({
 
 // Initialize database tables
 async function initDb() {
-  if (!dbUrl) return;
+  if (!dbUrl) {
+    console.warn("[Database] No DATABASE_URL found. Skipping initialization.");
+    return;
+  }
   const client = await pool.connect();
   try {
-    console.log("[Database] Initializing tables...");
+    console.log("[Database] Initializing tables and checking columns...");
+    
+    // Create tables if they don't exist
     await client.query(`
       CREATE TABLE IF NOT EXISTS transactions (
         id TEXT PRIMARY KEY,
         type TEXT,
-        date TEXT,
-        item_code TEXT,
-        item_name TEXT,
-        unit TEXT,
-        quantity FLOAT,
-        price FLOAT,
-        discount FLOAT,
-        total FLOAT,
-        invoice_number TEXT,
-        customer TEXT,
-        note TEXT,
-        cogs FLOAT
+        date TEXT
       );
       CREATE TABLE IF NOT EXISTS opening_balances (
         item_code TEXT,
@@ -50,7 +44,31 @@ async function initDb() {
         PRIMARY KEY (item_code, month, year)
       );
     `);
-    console.log("[Database] Tables initialized successfully.");
+
+    // Ensure all columns exist (in case table was created with different schema)
+    const columns = [
+      ['item_code', 'TEXT'],
+      ['item_name', 'TEXT'],
+      ['unit', 'TEXT'],
+      ['quantity', 'FLOAT'],
+      ['price', 'FLOAT'],
+      ['discount', 'FLOAT'],
+      ['total', 'FLOAT'],
+      ['invoice_number', 'TEXT'],
+      ['customer', 'TEXT'],
+      ['note', 'TEXT'],
+      ['cogs', 'FLOAT']
+    ];
+
+    for (const [col, type] of columns) {
+      try {
+        await client.query(`ALTER TABLE transactions ADD COLUMN IF NOT EXISTS ${col} ${type}`);
+      } catch (err) {
+        // Ignore errors if column already exists or other issues
+      }
+    }
+
+    console.log("[Database] Table schema verified.");
   } catch (err: any) {
     console.error("[Database] Initialization error:", err.message);
   } finally {
@@ -58,15 +76,24 @@ async function initDb() {
   }
 }
 
+
 // Run init in background
 initDb();
 
+const router = express.Router();
+
+// Logging middleware
+router.use((req, res, next) => {
+  console.log(`[API] ${req.method} ${req.path}`);
+  next();
+});
+
 // 0. Connection Status Check
-app.get("/api/db-status", async (req, res) => {
+router.get("/db-status", async (req, res) => {
   if (!process.env.DATABASE_URL) {
     return res.status(200).json({ 
       status: "missing_env", 
-      message: "Chưa cấu hình DATABASE_URL trong AI Studio Settings." 
+      message: "Chưa cấu hình DATABASE_URL. Hãy thêm vào Settings -> Environment Variables trong AI Studio." 
     });
   }
   try {
@@ -75,7 +102,7 @@ app.get("/api/db-status", async (req, res) => {
     client.release();
     res.json({ status: "connected", time: result.rows[0].now });
   } catch (err: any) {
-    console.error("DB Status Check Error:", err.message);
+    console.error("[API] DB Status Check Error:", err.message);
     res.status(200).json({ 
       status: "error", 
       message: err.message || "Không thể kết nối đến Database" 
@@ -84,19 +111,26 @@ app.get("/api/db-status", async (req, res) => {
 });
 
 // 1. Get all transactions
-app.get("/api/transactions", async (req, res) => {
+router.get("/transactions", async (req, res) => {
   try {
     const result = await pool.query('SELECT * FROM transactions ORDER BY date DESC');
     res.json(result.rows);
-  } catch (err) {
+  } catch (err: any) {
+    console.error("[API] Get Transactions Error:", err.message);
     res.status(500).json({ error: "Failed to fetch transactions" });
   }
 });
 
 // 2. Bulk Transactions
-app.post("/api/transactions/bulk", async (req, res) => {
+router.post("/transactions/bulk", async (req, res) => {
   const { items } = req.body;
-  if (!Array.isArray(items)) return res.status(400).json({ error: "Invalid data" });
+  if (!Array.isArray(items)) {
+    console.warn("[API] Bulk update failed: items is not an array");
+    return res.status(400).json({ error: "Invalid data: items must be an array" });
+  }
+  
+  console.log(`[API] Bulk inserting/updating ${items.length} transactions...`);
+  
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -108,51 +142,71 @@ app.post("/api/transactions/bulk", async (req, res) => {
            type = EXCLUDED.type, date = EXCLUDED.date, item_code = EXCLUDED.item_code, item_name = EXCLUDED.item_name,
            unit = EXCLUDED.unit, quantity = EXCLUDED.quantity, price = EXCLUDED.price, discount = EXCLUDED.discount,
            total = EXCLUDED.total, invoice_number = EXCLUDED.invoice_number, customer = EXCLUDED.customer, note = EXCLUDED.note, cogs = EXCLUDED.cogs`,
-        [item.id, item.type, item.date, item.itemCode, item.itemName, item.unit, item.quantity, item.price, item.discount, item.total, item.invoiceNumber, item.customer, item.note, item.cogs || 0]
+        [
+          item.id, 
+          item.type, 
+          item.date, 
+          item.itemCode || item.item_code, 
+          item.itemName || item.item_name, 
+          item.unit, 
+          item.quantity, 
+          item.price, 
+          item.discount, 
+          item.total, 
+          item.invoiceNumber || item.invoice_number, 
+          item.customer, 
+          item.note, 
+          item.cogs || 0
+        ]
       );
     }
     await client.query('COMMIT');
-    res.json({ success: true });
-  } catch (err) {
+    console.log("[API] Bulk write successful.");
+    res.json({ success: true, count: items.length });
+  } catch (err: any) {
     await client.query('ROLLBACK');
-    res.status(500).json({ error: "Failed to save transactions" });
+    console.error("[API] Bulk write error:", err.message);
+    res.status(500).json({ error: "Failed to save transactions", details: err.message });
   } finally {
     client.release();
   }
 });
 
 // 3. Delete Single
-app.delete("/api/transactions/:id", async (req, res) => {
+router.delete("/transactions/:id", async (req, res) => {
   try {
     await pool.query('DELETE FROM transactions WHERE id = $1', [req.params.id]);
     res.json({ success: true });
-  } catch (err) {
+  } catch (err: any) {
+    console.error("[API] Delete Transaction Error:", err.message);
     res.status(500).json({ error: "Failed to delete" });
   }
 });
 
 // 4. Delete Invoice
-app.delete("/api/invoices/:number", async (req, res) => {
+router.delete("/invoices/:number", async (req, res) => {
   try {
     await pool.query('DELETE FROM transactions WHERE invoice_number = $1', [req.params.number]);
     res.json({ success: true });
-  } catch (err) {
+  } catch (err: any) {
+    console.error("[API] Delete Invoice Error:", err.message);
     res.status(500).json({ error: "Failed to delete invoice" });
   }
 });
 
 // 5. Get OB
-app.get("/api/opening-balances", async (req, res) => {
+router.get("/opening-balances", async (req, res) => {
   try {
     const result = await pool.query('SELECT * FROM opening_balances');
     res.json(result.rows);
-  } catch (err) {
+  } catch (err: any) {
+    console.error("[API] Get OB Error:", err.message);
     res.status(500).json({ error: "Failed to fetch OB" });
   }
 });
 
 // 6. Save OB
-app.post("/api/opening-balances", async (req, res) => {
+router.post("/opening-balances", async (req, res) => {
   const { item_code, month, year, quantity, value } = req.body;
   try {
     await pool.query(
@@ -162,20 +216,27 @@ app.post("/api/opening-balances", async (req, res) => {
       [item_code, month, year, quantity, value]
     );
     res.json({ success: true });
-  } catch (err) {
+  } catch (err: any) {
+    console.error("[API] Save OB Error:", err.message);
     res.status(500).json({ error: "Failed to save OB" });
   }
 });
 
 // 7. Reset
-app.post("/api/reset", async (req, res) => {
+router.post("/reset", async (req, res) => {
   try {
     await pool.query('TRUNCATE transactions, opening_balances');
     res.json({ success: true });
-  } catch (err) {
+  } catch (err: any) {
+    console.error("[API] Reset Error:", err.message);
     res.status(500).json({ error: "Failed to reset" });
   }
 });
 
+// Mounting the router at BOTH /api and / to handle different environment routing
+app.use("/api", router);
+app.use("/", router);
+
 export default app;
+
 

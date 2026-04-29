@@ -133,7 +133,9 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     }
 
     try {
-      await fetch(`/api/invoices/${invNum}`, { method: 'DELETE' });
+      const res = await fetch(`/api/invoices/${invNum}`, { method: 'DELETE' });
+      if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+      
       const remainingTxs = transactions.filter(t => t.invoiceNumber !== invNum);
       setTransactions(remainingTxs);
 
@@ -171,11 +173,13 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     }));
     
     try {
-      await fetch('/api/transactions/bulk', {
+      const res = await fetch('/api/transactions/bulk', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ items: keyedItems })
       });
+      
+      if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
 
       const updatedTransactions = [...transactions, ...keyedItems];
       setTransactions(updatedTransactions);
@@ -201,13 +205,13 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       setProducts(Array.from(productMap.values()));
     } catch (err) {
       console.error(err);
-      alert("Lỗi khi lưu dữ liệu lên server.");
+      alert("Lỗi khi lưu dữ liệu lên server. Vui lòng kiểm tra kết nối Database.");
     }
   };
 
   const setManualOpeningBalance = async (balance: OpeningBalance) => {
     try {
-      await fetch('/api/opening-balances', {
+      const res = await fetch('/api/opening-balances', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -219,6 +223,8 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         })
       });
 
+      if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+
       setManualOpeningBalances(prev => {
         const filtered = prev.filter(b => !(b.itemCode === balance.itemCode && b.month === balance.month && b.year === balance.year));
         return [...filtered, balance];
@@ -228,6 +234,7 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       alert("Lỗi khi lưu số dư đầu kỳ.");
     }
   };
+
 
   const lockMonth = (month: number, year: number) => {
     const key = `${month + 1}-${year}`;
