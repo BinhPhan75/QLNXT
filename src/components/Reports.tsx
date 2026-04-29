@@ -4,18 +4,19 @@ import { formatCurrency, formatDate } from '../lib/utils';
 import { Search, Filter, Download, Calendar, Trash2, FileText } from 'lucide-react';
 
 export default function Reports() {
-  const { transactions, deleteInvoice, user } = useInventory();
-  const [reportType, setReportType] = useState<'BUY' | 'SELL'>('BUY');
+  const { transactions, deleteInvoice, user, products } = useInventory();
+  const [reportType, setReportType] = useState<'BUY' | 'SELL' | 'STOCK'>('BUY');
   const [viewMode, setViewMode] = useState<'TRANSACTION' | 'INVOICE'>('TRANSACTION');
   const [searchTerm, setSearchTerm] = useState('');
   const [customerFilter, setCustomerFilter] = useState('');
   
   const [expandedInvoice, setExpandedInvoice] = useState<string | null>(null);
+  const [expandedProduct, setExpandedProduct] = useState<string | null>(null);
 
   const filteredData = useMemo(() => {
     return transactions.filter(tx => {
       const isType = reportType === 'BUY' ? tx.type === 'IN' : tx.type === 'OUT';
-      if (!isType) return false;
+      if (reportType !== 'STOCK' && !isType) return false;
 
       const matchesSearch = tx.itemName.toLowerCase().includes(searchTerm.toLowerCase()) || 
                            tx.itemCode.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -25,6 +26,13 @@ export default function Reports() {
       return matchesSearch && matchesCustomer;
     });
   }, [transactions, reportType, searchTerm, customerFilter]);
+
+  const filteredProducts = useMemo(() => {
+    return products.filter(p => 
+      p.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+      p.code.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+  }, [products, searchTerm]);
 
   const invoices = useMemo(() => {
     const invMap = new Map<string, { id: string, date: string, customer: string, total: number, items: number, number: string, details: any[] }>();
