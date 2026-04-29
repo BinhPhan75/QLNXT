@@ -14,16 +14,27 @@ export default function Layout() {
   const [activeTab, setActiveTab] = useState<'dashboard' | 'import' | 'reports' | 'system'>('dashboard');
   const [isSidebarOpen, setSidebarOpen] = useState(false);
 
-  const [dbStatus, setDbStatus] = useState<'checking' | 'connected' | 'error'>('checking');
+  const [dbStatus, setDbStatus] = useState<'checking' | 'connected' | 'error' | 'missing'>('checking');
+  const [dbError, setDbError] = useState<string>('');
 
   useEffect(() => {
     const checkDb = async () => {
       try {
         const res = await fetch('/api/db-status');
         const data = await res.json();
-        setDbStatus(data.status === 'connected' ? 'connected' : 'error');
-      } catch {
+        if (data.status === 'connected') {
+          setDbStatus('connected');
+          setDbError('');
+        } else if (data.status === 'missing_env') {
+          setDbStatus('missing');
+          setDbError(data.message);
+        } else {
+          setDbStatus('error');
+          setDbError(data.message);
+        }
+      } catch (err) {
         setDbStatus('error');
+        setDbError('Không thể gọi API kiểm tra Database');
       }
     };
     checkDb();
@@ -92,17 +103,26 @@ export default function Layout() {
               <div>
                 <h1 className="font-bold text-lg text-slate-900 tracking-tight leading-tight">PNJ Inv</h1>
                   <div 
-                    title={dbStatus === 'error' ? 'Vui lòng kiểm tra DATABASE_URL trong phần Settings' : undefined}
-                    className={`flex items-center gap-1.5 mt-0.5 cursor-help`}
+                    title={dbError || (dbStatus === 'error' ? 'Vui lòng kiểm tra DATABASE_URL trong phần Settings' : undefined)}
+                    className={`flex flex-col mt-0.5 cursor-help`}
                   >
-                    <div className={`w-2 h-2 rounded-full ${
-                      dbStatus === 'connected' ? 'bg-emerald-500 animate-pulse' : 
-                      dbStatus === 'checking' ? 'bg-amber-400' : 'bg-rose-500'
-                    }`} />
-                    <span className="text-[10px] font-medium text-slate-500 uppercase tracking-wider">
-                      {dbStatus === 'connected' ? 'Database Online' : 
-                       dbStatus === 'checking' ? 'Connecting...' : 'DB Offline (Click ?)'}
-                    </span>
+                    <div className="flex items-center gap-1.5">
+                      <div className={`w-2 h-2 rounded-full ${
+                        dbStatus === 'connected' ? 'bg-emerald-500 animate-pulse' : 
+                        dbStatus === 'checking' ? 'bg-amber-400' : 
+                        dbStatus === 'missing' ? 'bg-amber-500' : 'bg-rose-500'
+                      }`} />
+                      <span className="text-[10px] font-medium text-slate-500 uppercase tracking-wider">
+                        {dbStatus === 'connected' ? 'Database Online' : 
+                         dbStatus === 'checking' ? 'Connecting...' : 
+                         dbStatus === 'missing' ? 'Thiếu Config' : 'DB Offline'}
+                      </span>
+                    </div>
+                    {dbStatus !== 'connected' && dbStatus !== 'checking' && (
+                      <span className="text-[9px] text-rose-400 font-medium truncate max-w-[120px]">
+                        {dbError || 'Lỗi kết nối'}
+                      </span>
+                    )}
                   </div>
               </div>
             </div>
