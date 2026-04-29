@@ -14,6 +14,7 @@ interface InventoryContextType {
   calculateMonthlyCOGS: (month: number, year: number) => { success: boolean; message: string };
   setManualOpeningBalance: (balance: OpeningBalance) => void;
   lockMonth: (month: number, year: number) => void;
+  unlockMonth: (month: number, year: number) => void;
   isMonthClosed: (date: string | Date) => boolean;
   resetData: () => void;
 }
@@ -247,6 +248,11 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     }
   };
 
+  const unlockMonth = (month: number, year: number) => {
+    const key = `${month + 1}-${year}`;
+    setClosedMonths(closedMonths.filter(m => m !== key));
+  };
+
   const calculateMonthlyCOGS = async (targetMonth: number, targetYear: number) => {
     let warnNoPurchases = false;
 
@@ -387,6 +393,7 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       calculateMonthlyCOGS, 
       setManualOpeningBalance,
       lockMonth,
+      unlockMonth,
       isMonthClosed,
       deleteInvoice,
       resetData 

@@ -1,11 +1,11 @@
 import React, { useState } from 'react';
 import { useInventory } from '../InventoryContext';
-import { Calculator, RotateCcw, ShieldCheck, CheckSquare, Lock as LockIcon, Plus, Trash2 } from 'lucide-react';
+import { Calculator, RotateCcw, ShieldCheck, CheckSquare, Lock as LockIcon, Unlock, Plus, Trash2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { formatCurrency } from '../lib/utils';
 
 export default function SystemSettings() {
-  const { calculateMonthlyCOGS, resetData, products, transactions, setManualOpeningBalance, manualOpeningBalances, lockMonth, closedMonths } = useInventory();
+  const { calculateMonthlyCOGS, resetData, products, transactions, setManualOpeningBalance, manualOpeningBalances, lockMonth, unlockMonth, closedMonths } = useInventory();
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth());
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
   const [showOBModal, setShowOBModal] = useState(false);
@@ -105,17 +105,30 @@ export default function SystemSettings() {
                 {isCurrentMonthClosed ? <CheckSquare size={24} /> : <LockIcon size={24} />}
                 <div className="flex-1">
                   <p className="font-bold text-sm">{isCurrentMonthClosed ? 'Tháng này đã chốt số liệu' : 'Trạng thái: Đang mở'}</p>
-                  <p className="text-xs opacity-80">{isCurrentMonthClosed ? 'Mọi thay đổi hóa đơn trong tháng này đã bị hóa' : 'Vui lòng kiểm tra kỹ số liệu nhập xuất trước khi chốt.'}</p>
+                  <p className="text-xs opacity-80">{isCurrentMonthClosed ? 'Mọi thay đổi hóa đơn trong tháng này đã bị khóa' : 'Vui lòng kiểm tra kỹ số liệu nhập xuất trước khi chốt.'}</p>
                 </div>
-                {!isCurrentMonthClosed && (
+                {isCurrentMonthClosed ? (
+                  <button 
+                    onClick={() => {
+                      if (confirm(`Bạn có chắc chắn muốn MỞ LẠI sổ tháng ${selectedMonth+1}/${selectedYear}?`)) {
+                        unlockMonth(selectedMonth, selectedYear);
+                      }
+                    }}
+                    className="px-4 py-2 bg-amber-600 text-white rounded-lg text-xs font-bold hover:bg-amber-700 transition-colors flex items-center gap-2"
+                  >
+                    <Unlock size={14} />
+                    Mở lại sổ
+                  </button>
+                ) : (
                   <button 
                     onClick={() => {
                       if (confirm(`Bạn có chắc chắn muốn CHỐT sổ tháng ${selectedMonth+1}/${selectedYear}? Sau khi chốt sẽ không thể chỉnh sửa hóa đơn.`)) {
                         lockMonth(selectedMonth, selectedYear);
                       }
                     }}
-                    className="px-4 py-2 bg-slate-900 text-white rounded-lg text-xs font-bold hover:bg-slate-800 transition-colors"
+                    className="px-4 py-2 bg-slate-900 text-white rounded-lg text-xs font-bold hover:bg-slate-800 transition-colors flex items-center gap-2"
                   >
+                    <LockIcon size={14} />
                     Chốt sổ ngay
                   </button>
                 )}
