@@ -65,40 +65,76 @@ export default function ImportExport() {
           return;
         }
 
-        // Data starts from index 10 (Row 11) based on the new format
-        // Finding the header "STT" row dynamically if possible, else use fixed index 9
-        let dataStartIndex = 10;
-        for(let i=0; i<data.length; i++) {
-          if (data[i][0] === 'STT') {
+        // 3. DYNAMIC COLUMN DETECTION
+        let dataStartIndex = 0;
+        let colIdx = { code: -1, name: -1, unit: -1, qty: -1, price: -1, total: -1 };
+        
+        for (let i = 0; i < data.length; i++) {
+          const row = data[i];
+          if (row.some(cell => cell?.toString().toLowerCase().includes('tên hàng'))) {
             dataStartIndex = i + 1;
+            const header = row.map(c => c?.toString().toLowerCase() || '');
+            colIdx = {
+              code: header.findIndex(c => c.includes('mã hàng') || c === 'mã'),
+              name: header.findIndex(c => c.includes('tên hàng') || c.includes('tên hàng hóa')),
+              unit: header.findIndex(c => c.includes('đvt') || c.includes('đơn vị tính')),
+              qty: header.findIndex(c => c.includes('số lượng') || c === 'sl'),
+              price: header.findIndex(c => c.includes('đơn giá')),
+              total: header.findIndex(c => c.includes('thành tiền') || c.includes('tổng cộng tiền'))
+            };
             break;
           }
+        }
+
+        if (dataStartIndex === 0 || colIdx.name === -1) {
+          setLogs(prev => [...prev, { msg: 'Không tìm thấy dòng tiêu đề (Tên hàng) hợp lệ.', type: 'error' }]);
+          return;
         }
 
         const items: Omit<Transaction, 'id'>[] = [];
         let successCount = 0;
 
+        const extractCodeFromName = (text: string) => {
+          const codeMatch = text.match(/[A-Z]{2,}[A-Z0-9.]+/);
+          if (codeMatch) {
+            const code = codeMatch[0];
+            const name = text.replace(code, '').replace(/[().,]/g, ' ').replace(/\s+/g, ' ').trim();
+            return { code: code.toUpperCase(), name };
+          }
+          return { code: '', name: text };
+        };
+
         for (let i = dataStartIndex; i < data.length; i++) {
           const row = data[i];
-          if (!row[1] || !row[2]) continue; // Skip if Code or Name is empty
+          const nameContent = row[colIdx.name]?.toString().trim() || '';
+          if (!nameContent || nameContent.includes('CỘNG TIỀN')) break;
+          if (row.every(cell => !cell)) continue;
 
-          // Stop if we hit the footer "CỘNG TIỀN HÀNG HÓA"
-          if (row[0] && row[0].toString().includes('CỘNG TIỀN')) break;
-          if (row.slice(1).every(cell => !cell)) continue; 
+          let itemCode = '';
+          let itemName = '';
 
-          const itemCode = row[1].toString().trim().toUpperCase();
-          const itemName = row[2].toString().trim();
-          const unit = row[3] || 'Món';
-          const quantity = parseFloat(row[4]?.toString().replace(/,/g, '') || '0');
-          const price = parseFloat(row[5]?.toString().replace(/[",]/g, '') || '0');
-          const total = parseFloat(row[6]?.toString().replace(/[",]/g, '') || '0');
+          // Logic detection
+          const codeFromCol = colIdx.code !== -1 ? row[colIdx.code]?.toString().trim() : '';
+          
+          if (codeFromCol && codeFromCol.length > 3) {
+            itemCode = codeFromCol.toUpperCase();
+            itemName = nameContent;
+          } else {
+            const extracted = extractCodeFromName(nameContent);
+            itemCode = extracted.code || 'NO-CODE';
+            itemName = extracted.name;
+          }
+
+          const quantity = parseFloat(row[colIdx.qty]?.toString().replace(/,/g, '') || '0');
+          const price = parseFloat(row[colIdx.price]?.toString().replace(/[",]/g, '') || '0');
+          const total = parseFloat(row[colIdx.total]?.toString().replace(/[",]/g, '') || '0');
 
           items.push({
             type: importType,
             date: isoInvoiceDate,
             itemCode: itemCode,
             itemName: itemName,
-            unit: unit,
+            unit: row[colIdx.unit] || 'Món',
             quantity,
             price,
             discount: 0,
