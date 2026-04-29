@@ -1,7 +1,7 @@
 import express from "express";
 import { createServer as createViteServer } from "vite";
 import path from "path";
-import apiRouter from "./api/index";
+import apiApp from "./api/index";
 
 async function startServer() {
   const app = express();
@@ -9,8 +9,8 @@ async function startServer() {
 
   app.use(express.json({ limit: '50mb' }));
 
-  // Mount API router
-  app.use("/api", apiRouter);
+  // Mount API app
+  app.use(apiApp);
 
   // Vite middleware for development
   if (process.env.NODE_ENV !== "production") {

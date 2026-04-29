@@ -5,7 +5,8 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 const { Pool } = pg;
-const router = express.Router();
+const app = express();
+app.use(express.json({ limit: '50mb' }));
 
 // Database configuration
 const dbUrl = process.env.DATABASE_URL;
@@ -17,8 +18,51 @@ const pool = new Pool({
   }
 });
 
+// Initialize database tables
+async function initDb() {
+  if (!dbUrl) return;
+  const client = await pool.connect();
+  try {
+    console.log("[Database] Initializing tables...");
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS transactions (
+        id TEXT PRIMARY KEY,
+        type TEXT,
+        date TEXT,
+        item_code TEXT,
+        item_name TEXT,
+        unit TEXT,
+        quantity FLOAT,
+        price FLOAT,
+        discount FLOAT,
+        total FLOAT,
+        invoice_number TEXT,
+        customer TEXT,
+        note TEXT,
+        cogs FLOAT
+      );
+      CREATE TABLE IF NOT EXISTS opening_balances (
+        item_code TEXT,
+        month INTEGER,
+        year INTEGER,
+        quantity FLOAT,
+        value FLOAT,
+        PRIMARY KEY (item_code, month, year)
+      );
+    `);
+    console.log("[Database] Tables initialized successfully.");
+  } catch (err: any) {
+    console.error("[Database] Initialization error:", err.message);
+  } finally {
+    client.release();
+  }
+}
+
+// Run init in background
+initDb();
+
 // 0. Connection Status Check
-router.get("/db-status", async (req, res) => {
+app.get("/api/db-status", async (req, res) => {
   if (!process.env.DATABASE_URL) {
     return res.status(200).json({ 
       status: "missing_env", 
@@ -40,7 +84,7 @@ router.get("/db-status", async (req, res) => {
 });
 
 // 1. Get all transactions
-router.get("/transactions", async (req, res) => {
+app.get("/api/transactions", async (req, res) => {
   try {
     const result = await pool.query('SELECT * FROM transactions ORDER BY date DESC');
     res.json(result.rows);
@@ -50,7 +94,7 @@ router.get("/transactions", async (req, res) => {
 });
 
 // 2. Bulk Transactions
-router.post("/transactions/bulk", async (req, res) => {
+app.post("/api/transactions/bulk", async (req, res) => {
   const { items } = req.body;
   if (!Array.isArray(items)) return res.status(400).json({ error: "Invalid data" });
   const client = await pool.connect();
@@ -78,7 +122,7 @@ router.post("/transactions/bulk", async (req, res) => {
 });
 
 // 3. Delete Single
-router.delete("/transactions/:id", async (req, res) => {
+app.delete("/api/transactions/:id", async (req, res) => {
   try {
     await pool.query('DELETE FROM transactions WHERE id = $1', [req.params.id]);
     res.json({ success: true });
@@ -88,7 +132,7 @@ router.delete("/transactions/:id", async (req, res) => {
 });
 
 // 4. Delete Invoice
-router.delete("/invoices/:number", async (req, res) => {
+app.delete("/api/invoices/:number", async (req, res) => {
   try {
     await pool.query('DELETE FROM transactions WHERE invoice_number = $1', [req.params.number]);
     res.json({ success: true });
@@ -98,7 +142,7 @@ router.delete("/invoices/:number", async (req, res) => {
 });
 
 // 5. Get OB
-router.get("/opening-balances", async (req, res) => {
+app.get("/api/opening-balances", async (req, res) => {
   try {
     const result = await pool.query('SELECT * FROM opening_balances');
     res.json(result.rows);
@@ -108,7 +152,7 @@ router.get("/opening-balances", async (req, res) => {
 });
 
 // 6. Save OB
-router.post("/opening-balances", async (req, res) => {
+app.post("/api/opening-balances", async (req, res) => {
   const { item_code, month, year, quantity, value } = req.body;
   try {
     await pool.query(
@@ -124,7 +168,7 @@ router.post("/opening-balances", async (req, res) => {
 });
 
 // 7. Reset
-router.post("/reset", async (req, res) => {
+app.post("/api/reset", async (req, res) => {
   try {
     await pool.query('TRUNCATE transactions, opening_balances');
     res.json({ success: true });
@@ -133,4 +177,5 @@ router.post("/reset", async (req, res) => {
   }
 });
 
-export default router;
+export default app;
+
