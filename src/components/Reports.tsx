@@ -38,7 +38,7 @@ export default function Reports() {
     const invMap = new Map<string, { id: string, date: string, customer: string, total: number, items: number, number: string, details: any[] }>();
     
     filteredData.forEach(tx => {
-      const key = tx.invoiceNumber || 'NO-NUM';
+      const key = tx.invoiceNumber || (tx as any).invoice_number || 'NO-NUM';
       const existing = invMap.get(key);
       if (existing) {
         existing.total += tx.total;
@@ -271,7 +271,7 @@ export default function Reports() {
                                             {tx.type === 'IN' ? 'NHẬP' : 'XUẤT'}
                                           </span>
                                         </td>
-                                        <td className="px-4 py-2 text-slate-500 font-medium">{tx.invoiceNumber}</td>
+                                        <td className="px-4 py-2 text-slate-500 font-medium">{tx.invoiceNumber || (tx as any).invoice_number}</td>
                                         <td className="px-4 py-2 text-slate-600 truncate max-w-[150px]" title={tx.customer}>{tx.customer}</td>
                                         <td className="px-4 py-2 text-center font-bold text-slate-900">{tx.quantity}</td>
                                         <td className="px-4 py-2 text-left text-slate-500 font-mono text-[10px]">{tx.itemCode}</td>
@@ -319,7 +319,7 @@ export default function Reports() {
                         <td className="px-6 py-4">
                           <div className="text-sm font-medium text-slate-900">{tx.itemName}</div>
                           <div className="text-xs text-slate-500 font-mono">CODE: {tx.itemCode}</div>
-                          <div className="text-[10px] bg-slate-100 text-slate-500 px-1 inline-block rounded">Số HD: {tx.invoiceNumber}</div>
+                          <div className="text-[10px] bg-slate-100 text-slate-500 px-1 inline-block rounded">Số HD: {tx.invoiceNumber || (tx as any).invoice_number}</div>
                         </td>
                         <td className="px-6 py-4 text-sm text-slate-600">{tx.customer}</td>
                         <td className="px-6 py-4 text-sm font-medium text-slate-900">{tx.quantity} {tx.unit}</td>

@@ -40,9 +40,22 @@ export default function ImportExport() {
         const [d, m, y] = invoiceDateStr.split('/');
         const isoInvoiceDate = `${y}-${m}-${d}`;
 
-        // Header info (Sender/Receiver) - Rows 2 and 5
-        const sellerName = (data[1][1] || '').trim();
-        const buyerName = (data[4][1] || '').trim();
+        // Header info (Sender/Receiver) - Search for keywords
+        let sellerName = '';
+        let buyerName = '';
+        
+        data.slice(0, 10).forEach(row => {
+          const content = row.join(' ').toLowerCase();
+          if (content.includes('đơn vị bán hàng') || content.includes('người bán')) {
+            sellerName = row.find((cell, idx) => idx > 0 && cell && cell.trim())?.trim() || '';
+          }
+          if (content.includes('họ tên người mua') || content.includes('người mua') || content.includes('đơn vị mua')) {
+            buyerName = row.find((cell, idx) => idx > 0 && cell && cell.trim())?.trim() || '';
+          }
+        });
+
+        if (!sellerName) sellerName = (data[1][1] || '').trim(); // Fallback to fixed rows
+        if (!buyerName) buyerName = (data[4][1] || '').trim();
         
         const customerName = importType === 'IN' ? sellerName : buyerName;
 
