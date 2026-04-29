@@ -47,22 +47,26 @@ async function startServer() {
   
   // 0. Connection Status Check
   app.get("/api/db-status", async (req, res) => {
-    if (!process.env.DATABASE_URL) {
+    const dbUrl = process.env.DATABASE_URL;
+    
+    if (!dbUrl) {
       return res.status(200).json({ 
         status: "missing_env", 
-        message: "Chưa cấu hình DATABASE_URL trong phần Settings của AI Studio." 
+        message: "Chưa cấu hình DATABASE_URL trong AI Studio Settings." 
       });
     }
+
     try {
+      // Dùng connect() để kiểm tra kết nối thực tế
       const client = await pool.connect();
       const result = await client.query('SELECT NOW()');
       client.release();
       res.json({ status: "connected", time: result.rows[0].now });
-    } catch (err) {
-      console.error("DB Status Check Error:", err);
+    } catch (err: any) {
+      console.error("DB Connection Error:", err.message);
       res.status(200).json({ 
         status: "error", 
-        message: err instanceof Error ? err.message : "Không thể kết nối đến Database" 
+        message: err.message || "Không thể kết nối đến Database" 
       });
     }
   });

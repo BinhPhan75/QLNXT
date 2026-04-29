@@ -112,16 +112,25 @@ export default function Layout() {
                         dbStatus === 'checking' ? 'bg-amber-400' : 
                         dbStatus === 'missing' ? 'bg-amber-500' : 'bg-rose-500'
                       }`} />
-                      <span className="text-[10px] font-medium text-slate-500 uppercase tracking-wider">
+                      <span className={`text-[10px] font-medium uppercase tracking-wider ${
+                        dbStatus === 'connected' ? 'text-emerald-600' : 
+                        dbStatus === 'missing' ? 'text-amber-600' : 
+                        dbStatus === 'error' ? 'text-rose-600' : 'text-slate-500'
+                      }`}>
                         {dbStatus === 'connected' ? 'Database Online' : 
                          dbStatus === 'checking' ? 'Connecting...' : 
                          dbStatus === 'missing' ? 'Thiếu Config' : 'DB Offline'}
                       </span>
                     </div>
-                    {dbStatus !== 'connected' && dbStatus !== 'checking' && (
-                      <span className="text-[9px] text-rose-400 font-medium truncate max-w-[120px]">
-                        {dbError || 'Lỗi kết nối'}
-                      </span>
+                    {(dbStatus === 'missing' || dbStatus === 'error') && (
+                      <div className="mt-1 flex flex-col gap-0.5">
+                        <span className="text-[9px] text-slate-500 leading-tight">
+                          {dbStatus === 'missing' ? 'Vui lòng nhấn ⚙️ Settings -> Env Vars' : 'Sai thông tin Database'}
+                        </span>
+                        <span className="text-[8px] text-rose-400 italic truncate max-w-[150px]" title={dbError}>
+                          {dbError}
+                        </span>
+                      </div>
                     )}
                   </div>
               </div>
