@@ -21,6 +21,11 @@ export default function Layout() {
     const checkDb = async () => {
       try {
         const res = await fetch('/api/db-status');
+        if (!res.ok) {
+          setDbStatus('error');
+          setDbError(`Server trả về lỗi ${res.status}`);
+          return;
+        }
         const data = await res.json();
         if (data.status === 'connected') {
           setDbStatus('connected');
@@ -34,11 +39,11 @@ export default function Layout() {
         }
       } catch (err) {
         setDbStatus('error');
-        setDbError('Không thể gọi API kiểm tra Database');
+        setDbError('Không thể gọi API (Server có thể chưa chạy)');
       }
     };
     checkDb();
-    const interval = setInterval(checkDb, 30000); // Check every 30s
+    const interval = setInterval(checkDb, 30000); 
     return () => clearInterval(interval);
   }, []);
 
