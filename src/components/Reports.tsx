@@ -62,12 +62,19 @@ export default function Reports() {
   }, [transactions, reportType]);
 
   const totals = useMemo(() => {
+    if (reportType === 'STOCK') {
+      return filteredProducts.reduce((acc, curr) => ({
+        qty: acc.qty + curr.currentStock,
+        total: acc.total + (curr.currentStock * curr.averageCost),
+        cogs: 0
+      }), { qty: 0, total: 0, cogs: 0 });
+    }
     return filteredData.reduce((acc, curr) => ({
       qty: acc.qty + curr.quantity,
       total: acc.total + curr.total,
       cogs: acc.cogs + (curr.cogs || 0)
     }), { qty: 0, total: 0, cogs: 0 });
-  }, [filteredData]);
+  }, [filteredData, filteredProducts, reportType]);
 
   const handleDeleteInvoice = (invNum: string) => {
     if (confirm(`Bạn có chắc chắn muốn xóa toàn bộ hóa đơn số ${invNum}? Hành động này sẽ xóa tất cả các dòng hàng đi kèm.`)) {
@@ -79,7 +86,9 @@ export default function Reports() {
     <div className="space-y-6">
       <header className="flex flex-col md:flex-row md:items-end justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Báo Cáo {reportType === 'BUY' ? 'Mua Hàng' : 'Bán Hàng'}</h1>
+          <h1 className="text-2xl font-bold text-slate-900">
+            {reportType === 'BUY' ? 'Báo Cáo Mua Hàng' : reportType === 'SELL' ? 'Báo Cáo Bán Hàng' : 'Báo Cáo Tồn Kho'}
+          </h1>
           <p className="text-slate-500">Tổng hợp dữ liệu giao dịch theo thời gian</p>
         </div>
         <div className="flex flex-col gap-2 md:items-end">
@@ -96,37 +105,53 @@ export default function Reports() {
             >
               Báo cáo Bán
             </button>
-          </div>
-          <div className="flex p-1 bg-slate-100 rounded-lg">
             <button 
-              onClick={() => setViewMode('TRANSACTION')}
-              className={`px-3 py-1 text-xs font-medium rounded-md transition-all ${viewMode === 'TRANSACTION' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500'}`}
+              onClick={() => setReportType('STOCK')}
+              className={`px-4 py-1.5 text-sm font-medium rounded-md transition-all ${reportType === 'STOCK' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500'}`}
             >
-              Chi tiết hàng
-            </button>
-            <button 
-              onClick={() => setViewMode('INVOICE')}
-              className={`px-3 py-1 text-xs font-medium rounded-md transition-all ${viewMode === 'INVOICE' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500'}`}
-            >
-              Theo hóa đơn
+              Báo cáo Tồn
             </button>
           </div>
+          {reportType !== 'STOCK' && (
+            <div className="flex p-1 bg-slate-100 rounded-lg">
+              <button 
+                onClick={() => setViewMode('TRANSACTION')}
+                className={`px-3 py-1 text-xs font-medium rounded-md transition-all ${viewMode === 'TRANSACTION' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500'}`}
+              >
+                Chi tiết hàng
+              </button>
+              <button 
+                onClick={() => setViewMode('INVOICE')}
+                className={`px-3 py-1 text-xs font-medium rounded-md transition-all ${viewMode === 'INVOICE' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500'}`}
+              >
+                Theo hóa đơn
+              </button>
+            </div>
+          )}
         </div>
       </header>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
-          <p className="text-slate-500 text-sm mb-1">Tổng số lượng</p>
+          <p className="text-slate-500 text-sm mb-1">Tổng số lượng {reportType === 'STOCK' ? 'tồn' : ''}</p>
           <p className="text-2xl font-bold text-slate-900">{totals.qty} <span className="text-sm font-normal text-slate-400">sản phẩm</span></p>
         </div>
         <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
-          <p className="text-slate-500 text-sm mb-1">Tổng giá trị {reportType === 'SELL' ? 'Doanh thu' : ''}</p>
+          <p className="text-slate-500 text-sm mb-1">
+            {reportType === 'SELL' ? 'Tổng doanh thu' : reportType === 'BUY' ? 'Tổng giá trị mua' : 'Tổng giá trị kho'}
+          </p>
           <p className="text-2xl font-bold text-blue-600">{formatCurrency(totals.total)}</p>
         </div>
         {reportType === 'SELL' && (
           <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
             <p className="text-slate-500 text-sm mb-1">Tổng giá vốn</p>
             <p className="text-2xl font-bold text-red-500">{formatCurrency(totals.cogs)}</p>
+          </div>
+        )}
+        {reportType === 'STOCK' && (
+          <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+            <p className="text-slate-500 text-sm mb-1">Mặt hàng trong kho</p>
+            <p className="text-2xl font-bold text-slate-900">{filteredProducts.length}</p>
           </div>
         )}
       </div>
@@ -137,21 +162,23 @@ export default function Reports() {
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
             <input 
               type="text" 
-              placeholder="Tìm theo mã hoặc tên hàng..."
+              placeholder={reportType === 'STOCK' ? "Tìm theo mã hoặc tên hàng..." : "Tìm theo mã, tên hoặc số HĐ..."}
               className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-blue-500/20"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
             />
           </div>
           <div className="flex gap-2">
-            <select 
-              className="px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-blue-500/20 text-sm"
-              value={customerFilter}
-              onChange={(e) => setCustomerFilter(e.target.value)}
-            >
-              <option value="">Tất cả khách/nhà CC</option>
-              {customers.map(c => <option key={c} value={c}>{c}</option>)}
-            </select>
+            {reportType !== 'STOCK' && (
+              <select 
+                className="px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-blue-500/20 text-sm"
+                value={customerFilter}
+                onChange={(e) => setCustomerFilter(e.target.value)}
+              >
+                <option value="">Tất cả khách/nhà CC</option>
+                {customers.map(c => <option key={c} value={c}>{c}</option>)}
+              </select>
+            )}
             <button className="flex items-center gap-2 px-4 py-2 bg-slate-900 text-white rounded-lg hover:bg-slate-800 transition-colors text-sm">
               <Download size={16} /> Export
             </button>
@@ -160,7 +187,93 @@ export default function Reports() {
 
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
-            {viewMode === 'TRANSACTION' ? (
+            {reportType === 'STOCK' ? (
+              <>
+                <thead>
+                  <tr className="bg-slate-50 text-slate-500 text-xs font-semibold uppercase tracking-wider">
+                    <th className="px-6 py-4">Mã hàng</th>
+                    <th className="px-6 py-4">Tên hàng hóa</th>
+                    <th className="px-6 py-4">ĐVT</th>
+                    <th className="px-6 py-4">Tồn kho</th>
+                    <th className="px-6 py-4">Giá vốn bình quân</th>
+                    <th className="px-6 py-4 text-right">Tổng giá trị tồn</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {filteredProducts.length === 0 ? (
+                    <tr>
+                      <td colSpan={6} className="px-6 py-12 text-center text-slate-400 italic">
+                        Không có hàng hóa nào trong kho
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredProducts.map((p) => (
+                      <React.Fragment key={p.code}>
+                        <tr 
+                          onClick={() => setExpandedProduct(expandedProduct === p.code ? null : p.code)}
+                          className={`hover:bg-slate-50 transition-colors cursor-pointer ${expandedProduct === p.code ? 'bg-blue-50/30' : ''}`}
+                        >
+                          <td className="px-6 py-4 text-sm font-mono font-bold text-slate-900">{p.code}</td>
+                          <td className="px-6 py-4 text-sm text-slate-700">{p.name}</td>
+                          <td className="px-6 py-4 text-sm text-slate-600">{p.unit}</td>
+                          <td className={`px-6 py-4 text-sm font-bold ${p.currentStock > 0 ? 'text-slate-900' : 'text-red-500'}`}>
+                            {p.currentStock}
+                          </td>
+                          <td className="px-6 py-4 text-sm text-slate-600 font-medium">{formatCurrency(p.averageCost)}</td>
+                          <td className="px-6 py-4 text-sm text-right font-bold text-blue-600">
+                            {formatCurrency(p.currentStock * p.averageCost)}
+                          </td>
+                        </tr>
+                        {expandedProduct === p.code && (
+                          <tr className="bg-slate-50/80">
+                            <td colSpan={6} className="px-6 py-4">
+                              <div className="bg-white rounded-lg border border-slate-200 overflow-hidden shadow-inner">
+                                <p className="px-4 py-2 bg-slate-100 text-[10px] font-bold text-slate-500 uppercase tracking-widest border-b border-slate-200">
+                                  Lịch sử giao dịch: {p.code}
+                                </p>
+                                <table className="w-full text-[11px]">
+                                  <thead className="bg-slate-50/50">
+                                    <tr className="text-slate-500 border-b border-slate-100">
+                                      <th className="px-4 py-2 text-left">Ngày</th>
+                                      <th className="px-4 py-2 text-left">Loại</th>
+                                      <th className="px-4 py-2 text-left">Hóa đơn</th>
+                                      <th className="px-4 py-2 text-left">Đối tác</th>
+                                      <th className="px-4 py-2 text-center">SL</th>
+                                      <th className="px-4 py-2 text-right">Đơn giá</th>
+                                      <th className="px-4 py-2 text-right">Thành tiền</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody className="divide-y divide-slate-50">
+                                    {transactions
+                                      .filter(t => t.itemCode === p.code)
+                                      .sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+                                      .map((tx, idx) => (
+                                      <tr key={idx} className="hover:bg-slate-50">
+                                        <td className="px-4 py-2 text-slate-600">{formatDate(tx.date)}</td>
+                                        <td className="px-4 py-2 font-bold">
+                                          <span className={tx.type === 'IN' ? 'text-green-600' : 'text-red-500'}>
+                                            {tx.type === 'IN' ? 'NHẬP' : 'XUẤT'}
+                                          </span>
+                                        </td>
+                                        <td className="px-4 py-2 text-slate-500">{tx.invoiceNumber}</td>
+                                        <td className="px-4 py-2 text-slate-600">{tx.customer}</td>
+                                        <td className="px-4 py-2 text-center font-medium">{tx.quantity}</td>
+                                        <td className="px-4 py-2 text-right text-slate-500">{formatCurrency(tx.price)}</td>
+                                        <td className="px-4 py-2 text-right font-bold text-slate-700">{formatCurrency(tx.total)}</td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                      </React.Fragment>
+                    ))
+                  )}
+                </tbody>
+              </>
+            ) : viewMode === 'TRANSACTION' ? (
               <>
                 <thead>
                   <tr className="bg-slate-50 text-slate-500 text-xs font-semibold uppercase tracking-wider">
