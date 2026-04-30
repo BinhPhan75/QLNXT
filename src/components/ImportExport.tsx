@@ -28,13 +28,22 @@ export default function ImportExport() {
         const titleRow = data[0][0] || '';
         const secondColHeader = data[0][1] || '';
         
-        // Extract Invoice Number from titleRow "HÓA ĐƠN BÁN HÀNG - Số: 74"
-        const invoiceNumMatch = titleRow.match(/Số:\s*(\d+)/);
-        const invoiceNum = invoiceNumMatch ? invoiceNumMatch[1] : 'UNK-' + Date.now();
+        // Extract Invoice Number from cell B1 (data[0][1]) as requested by user
+        let rawInvoiceNum = (data[0][1] || '').toString().trim();
+        // Cleanup: remove "Số:" or similar labels if present
+        const invoiceCleanupMatch = rawInvoiceNum.match(/(?:Số|No|HD|HĐ)[:\s]*([A-Z0-9\-/]+)/i);
+        const invoiceNum = invoiceCleanupMatch ? invoiceCleanupMatch[1] : (rawInvoiceNum || 'UNK-' + Date.now());
         
-        // Extract Date from secondColHeader "Ký hiệu: 2C26MNT | Ngày: 12/01/2026"
-        const dateMatch = secondColHeader.match(/Ngày:\s*(\d{2}\/\d{2}\/\d{4})/);
-        const invoiceDateStr = dateMatch ? dateMatch[1] : new Date().toLocaleDateString('vi-VN');
+        // Extract Date from secondColHeader? If B1 is just Number, Date might be elsewhere?
+        // Let's search for "Ngày" in the first row or first few rows if B1 is taken.
+        let invoiceDateStr = new Date().toLocaleDateString('vi-VN');
+        const searchRange = data.slice(0, 5);
+        searchRange.forEach(row => {
+          row.forEach(cell => {
+            const dateMatch = cell.match(/Ngày:\s*(\d{2}\/\d{2}\/\d{4})/);
+            if (dateMatch) invoiceDateStr = dateMatch[1];
+          });
+        });
         
         // Convert to ISO for comparison
         const [d, m, y] = invoiceDateStr.split('/');
