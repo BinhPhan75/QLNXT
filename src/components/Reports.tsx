@@ -348,10 +348,10 @@ export default function Reports() {
                     filteredData.map((tx) => (
                       <tr key={tx.id} className="hover:bg-slate-50/50 transition-colors">
                         <td className="px-6 py-4 text-sm text-slate-600">
-                          <div className="flex flex-col">
-                            <span>{formatDate(tx.date)}</span>
-                            <span className="text-[10px] text-slate-400 italic">HĐ: {tx.invoiceDate ? formatDate(tx.invoiceDate) : '--'}</span>
-                          </div>
+                          {formatDate(tx.date)}
+                        </td>
+                        <td className="px-6 py-4 text-sm text-slate-400 italic">
+                          {tx.invoiceDate ? formatDate(tx.invoiceDate) : '--'}
                         </td>
                         <td className="px-6 py-4">
                           <div className="text-sm font-medium text-slate-900">{tx.itemName}</div>
@@ -440,23 +440,37 @@ export default function Reports() {
                                       <th className="px-4 py-2 text-left">Mã hàng</th>
                                       <th className="px-4 py-2 text-left">Tên hàng</th>
                                       <th className="px-4 py-2 text-center">SL</th>
-                                      <th className="px-4 py-2 text-right">Đơn giá</th>
+                                      <th className="px-4 py-2 text-right border-l border-slate-100">Đơn giá</th>
                                       <th className="px-4 py-2 text-right">Thành tiền</th>
-                                      {reportType === 'SELL' && <th className="px-4 py-2 text-right">Giá vốn</th>}
+                                      {reportType === 'SELL' && (
+                                        <>
+                                          <th className="px-4 py-2 text-right text-red-500 border-l border-slate-100">Giá vốn</th>
+                                          <th className="px-4 py-2 text-right text-green-600">Lợi nhuận</th>
+                                        </>
+                                      )}
                                     </tr>
                                   </thead>
                                   <tbody className="divide-y divide-slate-50">
                                     {inv.details.map((item, idx) => (
-                                      <tr key={idx}>
-                                        <td className="px-4 py-2 font-mono font-medium">{item.itemCode}</td>
-                                        <td className="px-4 py-2 text-slate-700">{item.itemName}</td>
-                                        <td className="px-4 py-2 text-center">{item.quantity} {item.unit}</td>
-                                        <td className="px-4 py-2 text-right">{formatCurrency(item.price)}</td>
-                                        <td className="px-4 py-2 text-right font-bold">{formatCurrency(item.total)}</td>
+                                      <tr key={idx} className="hover:bg-slate-50/30">
+                                        <td className="px-4 py-2 font-mono font-medium text-[10px]">{item.itemCode}</td>
+                                        <td className="px-4 py-2 text-slate-700 max-w-[200px] truncate">{item.itemName}</td>
+                                        <td className="px-4 py-2 text-center font-medium">{item.quantity} {item.unit}</td>
+                                        <td className="px-4 py-2 text-right border-l border-slate-50 text-slate-500">{formatCurrency(item.price)}</td>
+                                        <td className="px-4 py-2 text-right font-bold text-slate-900">{formatCurrency(item.total)}</td>
                                         {reportType === 'SELL' && (
-                                          <td className="px-4 py-2 text-right text-red-500">
-                                            {item.cogs ? formatCurrency(item.cogs) : '--'}
-                                          </td>
+                                          <>
+                                            <td className="px-4 py-2 text-right text-red-500 border-l border-slate-50 font-medium">
+                                              {item.cogs ? formatCurrency(item.cogs) : '--'}
+                                            </td>
+                                            <td className="px-4 py-2 text-right font-bold">
+                                              {item.cogs ? (
+                                                <span className={item.total - item.cogs > 0 ? 'text-green-600' : 'text-red-500'}>
+                                                  {formatCurrency(item.total - item.cogs)}
+                                                </span>
+                                              ) : '--'}
+                                            </td>
+                                          </>
                                         )}
                                       </tr>
                                     ))}

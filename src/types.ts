@@ -27,6 +27,7 @@ export interface Transaction {
   total: number;
   customer: string; 
   invoiceNumber?: string;
+  invoiceDate?: string;
   cogs?: number; 
 }
 
