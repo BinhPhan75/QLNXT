@@ -12,7 +12,7 @@ interface InventoryContextType {
   logout: () => void;
   importTransactions: (newTransactions: Omit<Transaction, 'id'>[]) => void;
   deleteInvoice: (invoiceNumber: string) => void;
-  calculateMonthlyCOGS: (month: number, year: number) => { success: boolean; message: string };
+  calculateMonthlyCOGS: (month: number, year: number) => Promise<{ success: boolean; message: string }>;
   setManualOpeningBalance: (balance: OpeningBalance) => void;
   lockMonth: (month: number, year: number) => void;
   unlockMonth: (month: number, year: number) => void;
@@ -258,140 +258,145 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   };
 
   const calculateMonthlyCOGS = async (targetMonth: number, targetYear: number) => {
-    let warnNoPurchases = false;
-
-    const prevMonth = targetMonth === 0 ? 11 : targetMonth - 1;
-    const prevYear = targetMonth === 0 ? targetYear - 1 : targetYear;
-
-    const getFinalStateAt = (code: string, targetMonth: number, targetYear: number) => {
-      // Find the most recent manual opening balance <= targetMonth/Year
-      const relevantOBs = manualOpeningBalances
-        .filter(b => b.itemCode === code && (b.year < targetYear || (b.year === targetYear && b.month <= targetMonth)))
-        .sort((a, b) => (b.year * 12 + b.month) - (a.year * 12 + a.month));
-      
-      const manualOB = relevantOBs[0];
-      
-      let qty = 0;
-      let totalValue = 0;
-      let avgCost = 0;
-      let startDate: { month: number, year: number } | null = null;
-
-      if (manualOB) {
-        qty = manualOB.quantity;
-        totalValue = manualOB.totalValue;
-        avgCost = qty > 0 ? totalValue / qty : 0;
-        startDate = { month: manualOB.month, year: manualOB.year };
-      }
-
-      const cutoffDate = new Date(targetYear, targetMonth, 1);
-      const priorTxs = transactions.filter(t => {
-        if (t.itemCode !== code) return false;
-        const { month: m, year: y } = getYearMonth(t.invoiceDate || t.date);
-        const d = new Date(y, m, 1);
-        
-        // If we have a manual OB, only consider transactions strictly AFTER that OB month
-        if (startDate) {
-          const startD = new Date(startDate.year, startDate.month, 1);
-          return d >= startD && d < cutoffDate;
-        }
-        return d < cutoffDate;
-      });
-
-      priorTxs.sort((a,b) => {
-        const dateA = new Date(a.invoiceDate || a.date).getTime();
-        const dateB = new Date(b.invoiceDate || b.date).getTime();
-        return dateA - dateB;
-      }).forEach(t => {
-        if (t.type === 'IN') {
-          totalValue += (t.quantity * t.price);
-          qty += t.quantity;
-          if (qty > 0) avgCost = totalValue / qty;
-        } else {
-          // Use stored cogs if available, else running average
-          const consumed = (t.cogs || (avgCost * t.quantity));
-          qty -= t.quantity;
-          totalValue -= consumed;
-          // Ensure value doesn't go below 0 due to rounding
-          if (totalValue < 0.01 && qty <= 0) totalValue = 0;
-        }
-      });
-
-      return { qty, totalValue, avgCost };
-    };
-
-    const targetMonthTxs = transactions.filter(tx => {
-      const { month: m, year: y } = getYearMonth(tx.invoiceDate || tx.date);
-      return m === targetMonth && y === targetYear;
-    });
-
-    if (targetMonthTxs.length === 0) {
-      return { success: false, message: `Tháng ${targetMonth + 1}/${targetYear} không có dữ liệu giao dịch.` };
-    }
-
-    const itemCodesInMonth = Array.from(new Set(targetMonthTxs.map(t => t.itemCode))) as string[];
-    const calculationMap: Record<string, { openingQty: number; openingValue: number; inQty: number; inValue: number; avgCost: number }> = {};
-
-    itemCodesInMonth.forEach((code: string) => {
-      const os = getFinalStateAt(code, targetMonth, targetYear);
-      const itemsInMonth = targetMonthTxs.filter(t => t.itemCode === code && t.type === 'IN');
-      
-      const inQty = itemsInMonth.reduce((acc, curr) => acc + curr.quantity, 0);
-      const inValue = itemsInMonth.reduce((acc, curr) => acc + (curr.quantity * curr.price), 0);
-
-      const totalQty = os.qty + inQty;
-      const totalValue = os.totalValue + inValue;
-      
-      let avgCost = 0;
-      if (totalQty > 0) {
-        avgCost = totalValue / totalQty;
-      } else if (os.qty > 0) {
-        avgCost = os.avgCost;
-      }
-
-      if (itemsInMonth.length === 0 && inQty === 0 && os.qty > 0) {
-        warnNoPurchases = true;
-      }
-
-      calculationMap[code] = {
-        openingQty: os.qty,
-        openingValue: os.totalValue,
-        inQty,
-        inValue,
-        avgCost
-      };
-    });
-
-    const itemsToUpdate: Transaction[] = [];
-    const newTransactions = transactions.map(tx => {
-      const { month: m, year: y } = getYearMonth(tx.invoiceDate || tx.date);
-      if (tx.type === 'OUT' && m === targetMonth && y === targetYear) {
-        const cost = calculationMap[tx.itemCode]?.avgCost || 0;
-        const updatedTx = { ...tx, cogs: cost * tx.quantity };
-        itemsToUpdate.push(updatedTx);
-        return updatedTx;
-      }
-      return tx;
-    });
-
     try {
-      // Save updated COGS to server
-      if (itemsToUpdate.length > 0) {
-        await fetch('/api/transactions/bulk', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ items: itemsToUpdate })
-        });
+      let warnNoPurchases = false;
+
+      // Optimize: Pre-calculate date info for all transactions once
+      const txsWithDates = transactions.map(tx => ({
+        ...tx,
+        dateInfo: getYearMonth(tx.invoiceDate || tx.date)
+      }));
+
+      const targetMonthTxs = txsWithDates.filter(tx => 
+        tx.dateInfo.month === targetMonth && tx.dateInfo.year === targetYear
+      );
+
+      if (targetMonthTxs.length === 0) {
+        return { success: false, message: `Tháng ${targetMonth + 1}/${targetYear} không có dữ liệu giao dịch.` };
       }
+
+      const getFinalStateAt = (code: string, tMonth: number, tYear: number) => {
+        // Find most recent manual OB <= target month/year
+        const relevantOBs = manualOpeningBalances
+          .filter(b => b.itemCode === code && (b.year < tYear || (b.year === tYear && b.month <= tMonth)))
+          .sort((a, b) => (b.year * 12 + b.month) - (a.year * 12 + a.month));
+        
+        const manualOB = relevantOBs[0];
+        let qty = 0;
+        let totalValue = 0;
+        let avgCost = 0;
+        let startDate: { month: number, year: number } | null = null;
+
+        if (manualOB) {
+          qty = manualOB.quantity;
+          totalValue = manualOB.totalValue;
+          avgCost = qty > 0 ? totalValue / qty : 0;
+          startDate = { month: manualOB.month, year: manualOB.year };
+        }
+
+        const priorTxs = txsWithDates.filter(t => {
+          if (t.itemCode !== code) return false;
+          const { month: m, year: y } = t.dateInfo;
+          
+          if (startDate) {
+            if (y < startDate.year) return false;
+            if (y === startDate.year && m < startDate.month) return false;
+          }
+          
+          // Must be strictly before targetMonth/targetYear
+          if (y < tYear) return true;
+          if (y === tYear && m < tMonth) return true;
+          return false;
+        });
+
+        priorTxs.sort((a,b) => {
+          const dateA = new Date(a.invoiceDate || a.date).getTime();
+          const dateB = new Date(b.invoiceDate || b.date).getTime();
+          return dateA - dateB;
+        }).forEach(t => {
+          if (t.type === 'IN') {
+            totalValue += (t.quantity * t.price);
+            qty += t.quantity;
+            if (qty > 0) avgCost = totalValue / qty;
+          } else {
+            const consumed = (t.cogs || (avgCost * t.quantity));
+            qty -= t.quantity;
+            totalValue -= consumed;
+            if (totalValue < 0.01 && qty <= 0) totalValue = 0;
+          }
+        });
+
+        return { qty, totalValue, avgCost };
+      };
+
+      const itemCodesInMonth = Array.from(new Set(targetMonthTxs.map(t => t.itemCode))).filter(Boolean) as string[];
+      const calculationMap: Record<string, { openingQty: number; openingValue: number; inQty: number; inValue: number; avgCost: number }> = {};
+
+      itemCodesInMonth.forEach((code: string) => {
+        const os = getFinalStateAt(code, targetMonth, targetYear);
+        const itemsInMonth = targetMonthTxs.filter(t => t.itemCode === code && t.type === 'IN');
+        
+        const inQty = itemsInMonth.reduce((acc, curr) => acc + curr.quantity, 0);
+        const inValue = itemsInMonth.reduce((acc, curr) => acc + (curr.quantity * curr.price), 0);
+
+        const totalQty = os.qty + inQty;
+        const totalValue = os.totalValue + inValue;
+        
+        let avgCost = 0;
+        if (totalQty > 0) {
+          avgCost = totalValue / totalQty;
+        } else if (os.qty > 0) {
+          avgCost = os.avgCost;
+        }
+
+        if (itemsInMonth.length === 0 && inQty === 0 && os.qty > 0) {
+          warnNoPurchases = true;
+        }
+
+        calculationMap[code] = {
+          openingQty: os.qty,
+          openingValue: os.totalValue,
+          inQty,
+          inValue,
+          avgCost
+        };
+      });
+
+      const itemsToUpdate: Transaction[] = [];
+      const newTransactions = transactions.map(tx => {
+        const { month: m, year: y } = getYearMonth(tx.invoiceDate || tx.date);
+        if (tx.type === 'OUT' && m === targetMonth && y === targetYear) {
+          const cost = (calculationMap[tx.itemCode]?.avgCost) || 0;
+          const updatedTx = { ...tx, cogs: cost * tx.quantity };
+          itemsToUpdate.push(updatedTx);
+          return updatedTx;
+        }
+        return tx;
+      });
+
+      if (itemsToUpdate.length === 0) {
+        return { success: true, message: `Tháng ${targetMonth + 1}/${targetYear} không có hóa đơn bán ra nào cần gán giá vốn.` };
+      }
+
+      // Save updated COGS to server
+      const res = await fetch('/api/transactions/bulk', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ items: itemsToUpdate })
+      });
+      
+      if (!res.ok) throw new Error(`Server returned ${res.status}`);
       
       setTransactions(newTransactions);
-      let message = `Đã tính toán xong giá vốn tháng ${targetMonth + 1}/${targetYear}.`;
+      let message = `Đã tính toán và gán giá vốn cho ${itemsToUpdate.length} dòng hàng trong tháng ${targetMonth + 1}/${targetYear}.`;
       if (warnNoPurchases) {
         message += " Lưu ý: Một số mặt hàng không có giao dịch Nhập trong tháng, hệ thống đã áp dụng đơn giá tồn đầu kỳ.";
       }
       return { success: true, message };
+
     } catch (err) {
-      console.error(err);
-      return { success: false, message: "Lỗi khi lưu giá vốn lên server." };
+      console.error("Calculation Crash:", err);
+      return { success: false, message: `Lỗi trong quá trình tính toán: ${err instanceof Error ? err.message : String(err)}` };
     }
   };
 

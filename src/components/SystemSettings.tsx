@@ -25,11 +25,17 @@ export default function SystemSettings() {
   const isCurrentMonthClosed = closedMonths.includes(`${selectedMonth + 1}-${selectedYear}`);
 
   const handleCalculate = async () => {
-    // We allow calculation even if month is not closed, but warn or recommend closing first if preferred.
-    // However, the user says "after closing month, COGS calculation error".
-    // Let's make it more flexible.
-    const result = await calculateMonthlyCOGS(selectedMonth, selectedYear);
-    alert(result.message);
+    try {
+      const result = await calculateMonthlyCOGS(selectedMonth, selectedYear);
+      if (result && result.message) {
+        alert(result.message);
+      } else {
+        alert("Có lỗi xảy ra trong quá trình tính toán. Phản hồi từ hệ thống không xác định.");
+      }
+    } catch (error) {
+      console.error("handleCalculate error:", error);
+      alert("Đã xảy ra lỗi khi gọi hàm tính toán giá vốn.");
+    }
   };
 
   const handleAddOB = (e: React.FormEvent) => {
