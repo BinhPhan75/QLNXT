@@ -242,7 +242,8 @@ export default function Reports() {
                                 <table className="w-full text-[11px]">
                                   <thead className="bg-slate-50/50">
                                     <tr className="text-slate-500 border-b border-slate-100">
-                                      <th className="px-4 py-2 text-left">Ngày</th>
+                                      <th className="px-4 py-2 text-left">Ngày Import</th>
+                                      <th className="px-4 py-2 text-left">Ngày HĐ</th>
                                       <th className="px-4 py-2 text-left">Loại</th>
                                       <th className="px-4 py-2 text-left">Hóa đơn</th>
                                       <th className="px-4 py-2 text-left">Đối tác</th>
@@ -265,7 +266,8 @@ export default function Reports() {
                                       .sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime())
                                       .map((tx, idx) => (
                                       <tr key={idx} className="hover:bg-slate-50 border-b border-slate-50 last:border-0">
-                                        <td className="px-4 py-2 text-slate-600">{formatDate(tx.date)}</td>
+                                        <td className="px-4 py-2 text-slate-600 text-xs whitespace-nowrap">{formatDate(tx.date)}</td>
+                                        <td className="px-4 py-2 text-slate-400 text-[10px] italic whitespace-nowrap">{tx.invoiceDate ? formatDate(tx.invoiceDate) : '-'}</td>
                                         <td className="px-4 py-2 font-bold">
                                           <span className={tx.type === 'IN' ? 'text-green-600' : 'text-red-500'}>
                                             {tx.type === 'IN' ? 'NHẬP' : 'XUẤT'}
@@ -295,7 +297,8 @@ export default function Reports() {
               <>
                 <thead>
                   <tr className="bg-slate-50 text-slate-500 text-xs font-semibold uppercase tracking-wider">
-                    <th className="px-6 py-4">Ngày</th>
+                    <th className="px-6 py-4">Ngày Import</th>
+                    <th className="px-6 py-4">Ngày HĐ</th>
                     <th className="px-6 py-4">Mặt hàng</th>
                     <th className="px-6 py-4">Đối tác</th>
                     <th className="px-6 py-4">Số lượng</th>
@@ -315,7 +318,12 @@ export default function Reports() {
                   ) : (
                     filteredData.map((tx) => (
                       <tr key={tx.id} className="hover:bg-slate-50/50 transition-colors">
-                        <td className="px-6 py-4 text-sm text-slate-600">{formatDate(tx.date)}</td>
+                        <td className="px-6 py-4 text-sm text-slate-600">
+                          <div className="flex flex-col">
+                            <span>{formatDate(tx.date)}</span>
+                            <span className="text-[10px] text-slate-400 italic">HĐ: {tx.invoiceDate ? formatDate(tx.invoiceDate) : '--'}</span>
+                          </div>
+                        </td>
                         <td className="px-6 py-4">
                           <div className="text-sm font-medium text-slate-900">{tx.itemName}</div>
                           <div className="text-xs text-slate-500 font-mono">CODE: {tx.itemCode}</div>

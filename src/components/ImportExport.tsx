@@ -30,25 +30,33 @@ export default function ImportExport() {
         
         // Extract Invoice Number from cell B1 (data[0][1]) as requested by user
         let rawInvoiceNum = (data[0][1] || '').toString().trim();
-        // Cleanup: remove "Số:" or similar labels if present
-        const invoiceCleanupMatch = rawInvoiceNum.match(/(?:Số|No|HD|HĐ)[:\s]*([A-Z0-9\-/]+)/i);
-        const invoiceNum = invoiceCleanupMatch ? invoiceCleanupMatch[1] : (rawInvoiceNum || 'UNK-' + Date.now());
+        const invoiceNumMatch = rawInvoiceNum.match(/(?:Số|No|HD|HĐ)[:\s]*([A-Z0-9\-/]+)/i);
+        const invoiceNum = invoiceNumMatch ? invoiceNumMatch[1] : (rawInvoiceNum || 'UNK-' + Date.now());
         
-        // Extract Date from secondColHeader? If B1 is just Number, Date might be elsewhere?
-        // Let's search for "Ngày" in the first row or first few rows if B1 is taken.
-        let invoiceDateStr = new Date().toLocaleDateString('vi-VN');
-        const searchRange = data.slice(0, 5);
-        searchRange.forEach(row => {
-          row.forEach(cell => {
-            const dateMatch = cell.match(/Ngày:\s*(\d{2}\/\d{2}\/\d{4})/);
-            if (dateMatch) invoiceDateStr = dateMatch[1];
+        // Extract Invoice Date from cell B3 (data[2][1])
+        let invoiceDateStr = (data[2][1] || '').toString().trim();
+        
+        // Fallback: search for "Ngày" label if B3 is empty or not a date
+        if (!invoiceDateStr || !invoiceDateStr.includes('/')) {
+          const searchRange = data.slice(0, 5);
+          searchRange.forEach(row => {
+            row.forEach(cell => {
+              const dateMatch = cell.match(/Ngày:\s*(\d{2}\/\d{2}\/\d{4})/);
+              if (dateMatch) invoiceDateStr = dateMatch[1];
+            });
           });
-        });
-        
-        // Convert to ISO for comparison
-        const [d, m, y] = invoiceDateStr.split('/');
-        const isoInvoiceDate = `${y}-${m}-${d}`;
+        }
 
+        // Import Date = Today (This will be the primary date for Reports)
+        const importDate = new Date().toISOString().split('T')[0];
+        
+        // Format Invoice Date for display/storage (YYYY-MM-DD)
+        let formattedInvoiceDate = invoiceDateStr;
+        if (invoiceDateStr.includes('/')) {
+          const [d, m, y] = invoiceDateStr.split('/');
+          formattedInvoiceDate = `${y}-${m}-${d}`;
+        }
+        
         // Header info (Sender/Receiver) - Search for keywords
         let sellerName = '';
         let buyerName = '';
@@ -169,7 +177,8 @@ export default function ImportExport() {
 
           items.push({
             type: importType,
-            date: isoInvoiceDate,
+            date: importDate,
+            invoiceDate: formattedInvoiceDate,
             itemCode: itemCode,
             itemName: itemName,
             unit: row[colIdx.unit] || 'Món',

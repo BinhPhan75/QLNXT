@@ -48,6 +48,7 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
           itemCode: (t.item_code || t.itemCode || '').toString(),
           itemName: (t.item_name || t.itemName || '').toString(),
           invoiceNumber: (t.invoice_number || t.invoiceNumber || '').toString(),
+          invoiceDate: (t.invoice_date || t.invoiceDate || '').toString(),
           customer: (t.customer || '').toString(),
           quantity: parseFloat(t.quantity || 0),
           price: parseFloat(t.price || 0),

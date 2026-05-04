@@ -55,6 +55,7 @@ async function initDb() {
       ['discount', 'FLOAT'],
       ['total', 'FLOAT'],
       ['invoice_number', 'TEXT'],
+      ['invoice_date', 'TEXT'],
       ['customer', 'TEXT'],
       ['note', 'TEXT'],
       ['cogs', 'FLOAT']
@@ -149,12 +150,13 @@ router.post("/transactions/bulk", async (req, res) => {
     await client.query('BEGIN');
     for (const item of items) {
       await client.query(
-        `INSERT INTO transactions (id, type, date, item_code, item_name, unit, quantity, price, discount, total, invoice_number, customer, note, cogs)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+        `INSERT INTO transactions (id, type, date, item_code, item_name, unit, quantity, price, discount, total, invoice_number, invoice_date, customer, note, cogs)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
          ON CONFLICT (id) DO UPDATE SET
            type = EXCLUDED.type, date = EXCLUDED.date, item_code = EXCLUDED.item_code, item_name = EXCLUDED.item_name,
            unit = EXCLUDED.unit, quantity = EXCLUDED.quantity, price = EXCLUDED.price, discount = EXCLUDED.discount,
-           total = EXCLUDED.total, invoice_number = EXCLUDED.invoice_number, customer = EXCLUDED.customer, note = EXCLUDED.note, cogs = EXCLUDED.cogs`,
+           total = EXCLUDED.total, invoice_number = EXCLUDED.invoice_number, invoice_date = EXCLUDED.invoice_date,
+           customer = EXCLUDED.customer, note = EXCLUDED.note, cogs = EXCLUDED.cogs`,
         [
           item.id, 
           item.type, 
@@ -166,7 +168,8 @@ router.post("/transactions/bulk", async (req, res) => {
           item.price, 
           item.discount, 
           item.total, 
-          item.invoiceNumber || item.invoice_number, 
+          item.invoiceNumber || item.invoice_number,
+          item.invoiceDate || item.invoice_date,
           item.customer, 
           item.note, 
           item.cogs || 0
