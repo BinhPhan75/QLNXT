@@ -28,10 +28,17 @@ export default function ImportExport() {
         const titleRow = data[0][0] || '';
         const secondColHeader = data[0][1] || '';
         
-        // Extract Invoice Number from cell B1 (data[0][1]) as requested by user
-        let rawInvoiceNum = (data[0][1] || '').toString().trim();
-        const invoiceNumMatch = rawInvoiceNum.match(/(?:Số|No|HD|HĐ)[:\s]*([A-Z0-9\-/]+)/i);
-        const invoiceNum = invoiceNumMatch ? invoiceNumMatch[1] : (rawInvoiceNum || 'UNK-' + Date.now());
+        // Extract Invoice Number 
+        let invoiceNum = '';
+        if (importType === 'OUT') {
+          // Bán ra: Extract number from A1 (titleRow) e.g. "HÓA ĐƠN BÁN HÀNG - Số: 74"
+          const match = titleRow.match(/(?:Số|No|HD|HĐ)[:\s]*([A-Z0-9\-/]+)/i);
+          invoiceNum = match ? match[1] : (secondColHeader || 'UNK-' + Date.now()).toString().trim();
+        } else {
+          // Mua vào: Extract from B1 (secondColHeader)
+          const match = secondColHeader.match(/(?:Số|No|HD|HĐ)[:\s]*([A-Z0-9\-/]+)/i);
+          invoiceNum = match ? match[1] : (secondColHeader || 'UNK-' + Date.now()).toString().trim();
+        }
         
         // Extract Invoice Date from cell B3 (data[2][1])
         let invoiceDateStr = (data[2][1] || '').toString().trim();
