@@ -25,10 +25,9 @@ export default function SystemSettings() {
   const isCurrentMonthClosed = closedMonths.includes(`${selectedMonth + 1}-${selectedYear}`);
 
   const handleCalculate = () => {
-    if (!isCurrentMonthClosed) {
-      alert("Vui lòng 'Chốt số liệu tháng' để xác nhận bộ số liệu trước khi tính giá vốn.");
-      return;
-    }
+    // We allow calculation even if month is not closed, but warn or recommend closing first if preferred.
+    // However, the user says "after closing month, COGS calculation error".
+    // Let's make it more flexible.
     const result = calculateMonthlyCOGS(selectedMonth, selectedYear);
     alert(result.message);
   };
@@ -81,8 +80,7 @@ export default function SystemSettings() {
                 <select 
                   value={selectedMonth}
                   onChange={(e) => setSelectedMonth(parseInt(e.target.value))}
-                  disabled={isCurrentMonthClosed}
-                  className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500/20 disabled:opacity-60"
+                  className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500/20"
                 >
                   {months.map((m, i) => <option key={i} value={i}>{m}</option>)}
                 </select>
@@ -92,8 +90,7 @@ export default function SystemSettings() {
                 <select 
                   value={selectedYear}
                   onChange={(e) => setSelectedYear(parseInt(e.target.value))}
-                  disabled={isCurrentMonthClosed}
-                  className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500/20 disabled:opacity-60"
+                  className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500/20"
                 >
                   {years.map(y => <option key={y} value={y}>{y}</option>)}
                 </select>

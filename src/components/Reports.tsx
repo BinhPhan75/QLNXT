@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { useInventory } from '../InventoryContext';
-import { formatCurrency, formatDate } from '../lib/utils';
+import { formatCurrency, formatDate, getYearMonth } from '../lib/utils';
 import { Search, Filter, Download, Calendar, Trash2, FileText } from 'lucide-react';
 
 export default function Reports() {
@@ -22,8 +22,8 @@ export default function Reports() {
 
       // Date filtering based on Invoice Date as accounting anchor
       if (selectedMonth !== 'ALL') {
-        const d = new Date(tx.invoiceDate || tx.date);
-        if (d.getMonth() !== selectedMonth || d.getFullYear() !== selectedYear) return false;
+        const { month, year } = getYearMonth(tx.invoiceDate || tx.date);
+        if (month !== selectedMonth || year !== selectedYear) return false;
       }
 
       const matchesSearch = tx.itemName.toLowerCase().includes(searchTerm.toLowerCase()) || 

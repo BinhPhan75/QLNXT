@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { Product, Transaction, User, OpeningBalance } from './types';
+import { getYearMonth } from './lib/utils';
 
 interface InventoryContextType {
   products: Product[];
@@ -125,8 +126,9 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   };
 
   const isMonthClosed = (txDate: string | Date, invoiceDate?: string) => {
-    const d = new Date(invoiceDate || txDate);
-    const key = `${d.getMonth() + 1}-${d.getFullYear()}`;
+    const { month, year } = getYearMonth(invoiceDate || txDate);
+    if (month === -1) return false;
+    const key = `${month + 1}-${year}`;
     return closedMonths.includes(key);
   };
 
@@ -264,7 +266,8 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     const getFinalStateAt = (code: string, month: number, year: number) => {
       const cutoffDate = new Date(year, month, 1);
       const priorTxs = transactions.filter(t => {
-        const d = new Date(t.invoiceDate || t.date);
+        const { month: m, year: y } = getYearMonth(t.invoiceDate || t.date);
+        const d = new Date(y, m, 1);
         return t.itemCode === code && d < cutoffDate;
       });
       
@@ -299,8 +302,8 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     };
 
     const targetMonthTxs = transactions.filter(tx => {
-      const d = new Date(tx.invoiceDate || tx.date);
-      return d.getMonth() === targetMonth && d.getFullYear() === targetYear;
+      const { month: m, year: y } = getYearMonth(tx.invoiceDate || tx.date);
+      return m === targetMonth && y === targetYear;
     });
 
     if (targetMonthTxs.length === 0) {
@@ -342,8 +345,8 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
     const itemsToUpdate: Transaction[] = [];
     const newTransactions = transactions.map(tx => {
-      const d = new Date(tx.invoiceDate || tx.date);
-      if (tx.type === 'OUT' && d.getMonth() === targetMonth && d.getFullYear() === targetYear) {
+      const { month: m, year: y } = getYearMonth(tx.invoiceDate || tx.date);
+      if (tx.type === 'OUT' && m === targetMonth && y === targetYear) {
         const cost = calculationMap[tx.itemCode]?.avgCost || 0;
         const updatedTx = { ...tx, cogs: cost * tx.quantity };
         itemsToUpdate.push(updatedTx);
