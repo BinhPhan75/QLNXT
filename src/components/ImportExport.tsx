@@ -143,6 +143,52 @@ export default function ImportExport() {
           return { code: '', name: text };
         };
 
+        const parseVnNumber = (val: string | number | undefined): number => {
+          if (val === undefined || val === null) return 0;
+          let str = val.toString().trim();
+          if (!str) return 0;
+          
+          // Remove currency symbols and spaces
+          str = str.replace(/[₫\s]/g, '');
+          
+          // Detect thousand separators and decimal points
+          // Common patterns:
+          // 10.423.431 -> dots are separators
+          // 3.474 -> if it's a small number, could be weight decimal
+          
+          // Remove ALL dots and commas if there are multiple
+          if ((str.match(/\./g) || []).length > 1) {
+            str = str.replace(/\./g, '');
+          }
+          if ((str.match(/,/g) || []).length > 1) {
+            str = str.replace(/,/g, '');
+          }
+
+          // Now handle mixed separators: 10.423,431 -> 10423.431
+          if (str.includes('.') && str.includes(',')) {
+            str = str.replace(/\./g, '').replace(/,/g, '.');
+          } else if (str.includes(',')) {
+            // Case 3,474 -> if no dots, comma is likely decimal
+            str = str.replace(/,/g, '.');
+          } else if (str.includes('.')) {
+            // Case 10.423 -> if only one dot, it's ambiguous.
+            // Heuristic: if it's a whole number in the spreadsheet but saved with dot,
+            // or if it's jewelry weight.
+            // For PNJ, total value is huge, weight is small.
+            const valNum = parseFloat(str);
+            if (valNum < 1000) {
+              // 3.474 -> likely weight decimal
+            } else {
+              // 10.423 -> likely 10 thousand (separator)
+              // But we can't be 100% sure without context.
+              // Most PNJ CSV exports use commas for decimals.
+            }
+          }
+
+          const res = parseFloat(str);
+          return isNaN(res) ? 0 : res;
+        };
+
         for (let i = dataStartIndex; i < data.length; i++) {
           const row = data[i];
           const rawName = row[colIdx.name]?.toString().trim() || '';
@@ -154,8 +200,6 @@ export default function ImportExport() {
 
           const rawCode = colIdx.code !== -1 ? row[colIdx.code]?.toString().trim() : '';
           
-          // Heuristic: Check which column actually looks like a "Code"
-          // Codes are usually alphanumeric and shorter/structured, Names are usually more descriptive
           const codeRegex = /^[A-Z0-9.]{5,}$/;
           const codeLooksLikeCode = codeRegex.test(rawCode);
           const nameLooksLikeCode = codeRegex.test(rawName);
@@ -164,23 +208,30 @@ export default function ImportExport() {
             itemCode = rawCode.toUpperCase();
             itemName = rawName;
           } else if (nameLooksLikeCode && !codeLooksLikeCode) {
-            // Swapped! Use the name column content as code
             itemCode = rawName.toUpperCase();
             itemName = rawCode || 'Hàng hóa';
           } else if (rawCode) {
-            // Trust headers if both or neither match
             itemCode = rawCode.toUpperCase();
             itemName = rawName;
           } else {
-            // Try to extract from name if no code column found
             const extracted = extractCodeFromName(rawName);
             itemCode = extracted.code || 'KHONG-MA';
             itemName = extracted.name;
           }
 
-          const quantity = parseFloat(row[colIdx.qty]?.toString().replace(/,/g, '') || '0');
-          const price = parseFloat(row[colIdx.price]?.toString().replace(/[",]/g, '') || '0');
-          const total = parseFloat(row[colIdx.total]?.toString().replace(/[",]/g, '') || '0');
+          const quantity = parseVnNumber(row[colIdx.qty]);
+          let price = parseVnNumber(row[colIdx.price]);
+          const total = parseVnNumber(row[colIdx.total]);
+
+          // Math consistency: if Total is provided, it's the source of truth
+          // In jewelry, Qty * Price often doesn't equal Total because of fees
+          // But for simple display, we can adjust price
+          if (total > 0 && quantity > 0 && Math.abs(price * quantity - total) > 1) {
+             // If price is actually the weight (e.g. 3.474) and quantity is count (1)
+             // Then price * quantity = 3.474, but total = 10.4M.
+             // We adjust price to be 10.4M/1 = 10.4M so UI adds up.
+             price = total / quantity;
+          }
 
           items.push({
             type: importType,

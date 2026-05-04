@@ -330,17 +330,21 @@ export default function Reports() {
                     <th className="px-6 py-4">Ngày HĐ</th>
                     <th className="px-6 py-4">Mặt hàng</th>
                     <th className="px-6 py-4">Đối tác</th>
-                    <th className="px-6 py-4">Số lượng</th>
-                    <th className="px-6 py-4">Đơn giá</th>
-                    <th className="px-6 py-4">Thành tiền</th>
-                    {reportType === 'SELL' && <th className="px-6 py-4">Giá vốn</th>}
-                    {reportType === 'SELL' && <th className="px-6 py-4">Lợi nhuận</th>}
+                    <th className="px-6 py-4 text-center">Số lượng</th>
+                    <th className="px-6 py-4 text-right">Đơn giá</th>
+                    <th className="px-6 py-4 text-right">Thành tiền</th>
+                    {reportType === 'SELL' && (
+                      <>
+                        <th className="px-6 py-4 text-right text-red-500">Giá vốn</th>
+                        <th className="px-6 py-4 text-right text-green-600">Lợi nhuận</th>
+                      </>
+                    )}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {filteredData.length === 0 ? (
                     <tr>
-                      <td colSpan={reportType === 'SELL' ? 8 : 6} className="px-6 py-12 text-center text-slate-400 italic">
+                      <td colSpan={reportType === 'SELL' ? 9 : 7} className="px-6 py-12 text-center text-slate-400 italic">
                         Không tìm thấy dữ liệu phù hợp
                       </td>
                     </tr>
@@ -359,22 +363,22 @@ export default function Reports() {
                           <div className="text-[10px] bg-slate-100 text-slate-500 px-1 inline-block rounded">Số HD: {tx.invoiceNumber || (tx as any).invoice_number}</div>
                         </td>
                         <td className="px-6 py-4 text-sm text-slate-600">{tx.customer}</td>
-                        <td className="px-6 py-4 text-sm font-medium text-slate-900">{tx.quantity} {tx.unit}</td>
-                        <td className="px-6 py-4 text-sm text-slate-600">{formatCurrency(tx.price)}</td>
-                        <td className="px-6 py-4 text-sm font-semibold text-slate-900">{formatCurrency(tx.total)}</td>
+                        <td className="px-6 py-4 text-sm font-medium text-slate-900 text-center">{tx.quantity} {tx.unit}</td>
+                        <td className="px-6 py-4 text-sm text-slate-600 text-right">{formatCurrency(tx.price)}</td>
+                        <td className="px-6 py-4 text-sm font-bold text-slate-900 text-right">{formatCurrency(tx.total)}</td>
                         {reportType === 'SELL' && (
-                          <td className="px-6 py-4 text-sm text-red-500">
-                            {tx.cogs ? formatCurrency(tx.cogs) : <span className="text-slate-300 italic">Chưa tính</span>}
-                          </td>
-                        )}
-                        {reportType === 'SELL' && (
-                          <td className="px-6 py-4 text-sm font-medium">
-                            {tx.cogs ? (
-                              <span className={tx.total - tx.cogs > 0 ? 'text-green-600' : 'text-red-600'}>
-                                {formatCurrency(tx.total - tx.cogs)}
-                              </span>
-                            ) : '--'}
-                          </td>
+                          <>
+                            <td className="px-6 py-4 text-sm text-red-500 text-right font-medium">
+                              {tx.cogs ? formatCurrency(tx.cogs) : <span className="text-slate-300 italic">--</span>}
+                            </td>
+                            <td className="px-6 py-4 text-sm font-bold text-right">
+                              {tx.cogs ? (
+                                <span className={tx.total - tx.cogs > 0 ? 'text-green-600' : 'text-red-500'}>
+                                  {formatCurrency(tx.total - tx.cogs)}
+                                </span>
+                              ) : '--'}
+                            </td>
+                          </>
                         )}
                       </tr>
                     ))
