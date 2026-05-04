@@ -263,41 +263,59 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     const prevMonth = targetMonth === 0 ? 11 : targetMonth - 1;
     const prevYear = targetMonth === 0 ? targetYear - 1 : targetYear;
 
-    const getFinalStateAt = (code: string, month: number, year: number) => {
-      const cutoffDate = new Date(year, month, 1);
-      const priorTxs = transactions.filter(t => {
-        const { month: m, year: y } = getYearMonth(t.invoiceDate || t.date);
-        const d = new Date(y, m, 1);
-        return t.itemCode === code && d < cutoffDate;
-      });
+    const getFinalStateAt = (code: string, targetMonth: number, targetYear: number) => {
+      // Find the most recent manual opening balance <= targetMonth/Year
+      const relevantOBs = manualOpeningBalances
+        .filter(b => b.itemCode === code && (b.year < targetYear || (b.year === targetYear && b.month <= targetMonth)))
+        .sort((a, b) => (b.year * 12 + b.month) - (a.year * 12 + a.month));
+      
+      const manualOB = relevantOBs[0];
       
       let qty = 0;
       let totalValue = 0;
       let avgCost = 0;
+      let startDate: { month: number, year: number } | null = null;
 
-      const manualOB = manualOpeningBalances.find(b => b.itemCode === code && b.month === month && b.year === year);
-      
       if (manualOB) {
         qty = manualOB.quantity;
         totalValue = manualOB.totalValue;
         avgCost = qty > 0 ? totalValue / qty : 0;
-      } else {
-        priorTxs.sort((a,b) => {
-          const dateA = new Date(a.invoiceDate || a.date).getTime();
-          const dateB = new Date(b.invoiceDate || b.date).getTime();
-          return dateA - dateB;
-        }).forEach(t => {
-          if (t.type === 'IN') {
-            totalValue += (t.quantity * t.price);
-            qty += t.quantity;
-            if (qty > 0) avgCost = totalValue / qty;
-          } else {
-            const consumed = (t.cogs || (avgCost * t.quantity));
-            qty -= t.quantity;
-            totalValue -= consumed;
-          }
-        });
+        startDate = { month: manualOB.month, year: manualOB.year };
       }
+
+      const cutoffDate = new Date(targetYear, targetMonth, 1);
+      const priorTxs = transactions.filter(t => {
+        if (t.itemCode !== code) return false;
+        const { month: m, year: y } = getYearMonth(t.invoiceDate || t.date);
+        const d = new Date(y, m, 1);
+        
+        // If we have a manual OB, only consider transactions strictly AFTER that OB month
+        if (startDate) {
+          const startD = new Date(startDate.year, startDate.month, 1);
+          return d >= startD && d < cutoffDate;
+        }
+        return d < cutoffDate;
+      });
+
+      priorTxs.sort((a,b) => {
+        const dateA = new Date(a.invoiceDate || a.date).getTime();
+        const dateB = new Date(b.invoiceDate || b.date).getTime();
+        return dateA - dateB;
+      }).forEach(t => {
+        if (t.type === 'IN') {
+          totalValue += (t.quantity * t.price);
+          qty += t.quantity;
+          if (qty > 0) avgCost = totalValue / qty;
+        } else {
+          // Use stored cogs if available, else running average
+          const consumed = (t.cogs || (avgCost * t.quantity));
+          qty -= t.quantity;
+          totalValue -= consumed;
+          // Ensure value doesn't go below 0 due to rounding
+          if (totalValue < 0.01 && qty <= 0) totalValue = 0;
+        }
+      });
+
       return { qty, totalValue, avgCost };
     };
 

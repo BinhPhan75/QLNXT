@@ -24,11 +24,11 @@ export default function SystemSettings() {
 
   const isCurrentMonthClosed = closedMonths.includes(`${selectedMonth + 1}-${selectedYear}`);
 
-  const handleCalculate = () => {
+  const handleCalculate = async () => {
     // We allow calculation even if month is not closed, but warn or recommend closing first if preferred.
     // However, the user says "after closing month, COGS calculation error".
     // Let's make it more flexible.
-    const result = calculateMonthlyCOGS(selectedMonth, selectedYear);
+    const result = await calculateMonthlyCOGS(selectedMonth, selectedYear);
     alert(result.message);
   };
 
