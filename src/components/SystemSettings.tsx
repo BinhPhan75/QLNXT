@@ -77,7 +77,7 @@ export default function SystemSettings() {
 
             <div className="grid grid-cols-2 gap-4 mb-8">
               <div>
-                <label className="block text-xs font-semibold text-slate-400 uppercase mb-1">Chọn Tháng</label>
+                <label className="block text-xs font-semibold text-slate-400 uppercase mb-1">Kỳ kế toán (Tháng)</label>
                 <select 
                   value={selectedMonth}
                   onChange={(e) => setSelectedMonth(parseInt(e.target.value))}
@@ -88,7 +88,7 @@ export default function SystemSettings() {
                 </select>
               </div>
               <div>
-                <label className="block text-xs font-semibold text-slate-400 uppercase mb-1">Chọn Năm</label>
+                <label className="block text-xs font-semibold text-slate-400 uppercase mb-1">Năm tài chính</label>
                 <select 
                   value={selectedYear}
                   onChange={(e) => setSelectedYear(parseInt(e.target.value))}

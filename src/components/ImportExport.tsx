@@ -79,7 +79,7 @@ export default function ImportExport() {
         // 1. DUPLICATE CHECK
         const isDuplicate = transactions.some(t => 
           t.invoiceNumber === invoiceNum && 
-          t.date === isoInvoiceDate && 
+          (t.invoiceDate === formattedInvoiceDate || t.date === formattedInvoiceDate) && 
           t.customer === customerName &&
           t.type === importType
         );
@@ -89,8 +89,8 @@ export default function ImportExport() {
           return;
         }
 
-        // 2. CLOSED MONTH CHECK
-        if (isMonthClosed(isoInvoiceDate)) {
+        // 2. CLOSED MONTH CHECK (Using formattedInvoiceDate as the accounting period)
+        if (isMonthClosed(importDate, formattedInvoiceDate)) {
           setLogs(prev => [...prev, { msg: `CẢNH BÁO: Hóa đơn thuộc vào tháng đã chốt sổ (${invoiceDateStr}).`, type: 'error' }]);
           return;
         }

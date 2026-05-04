@@ -9,6 +9,8 @@ export default function Reports() {
   const [viewMode, setViewMode] = useState<'TRANSACTION' | 'INVOICE'>('TRANSACTION');
   const [searchTerm, setSearchTerm] = useState('');
   const [customerFilter, setCustomerFilter] = useState('');
+  const [selectedMonth, setSelectedMonth] = useState<number | 'ALL'>(new Date().getMonth());
+  const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear());
   
   const [expandedInvoice, setExpandedInvoice] = useState<string | null>(null);
   const [expandedProduct, setExpandedProduct] = useState<string | null>(null);
@@ -18,6 +20,12 @@ export default function Reports() {
       const isType = reportType === 'BUY' ? tx.type === 'IN' : tx.type === 'OUT';
       if (reportType !== 'STOCK' && !isType) return false;
 
+      // Date filtering based on Invoice Date as accounting anchor
+      if (selectedMonth !== 'ALL') {
+        const d = new Date(tx.invoiceDate || tx.date);
+        if (d.getMonth() !== selectedMonth || d.getFullYear() !== selectedYear) return false;
+      }
+
       const matchesSearch = tx.itemName.toLowerCase().includes(searchTerm.toLowerCase()) || 
                            tx.itemCode.toLowerCase().includes(searchTerm.toLowerCase()) ||
                            tx.invoiceNumber?.toLowerCase().includes(searchTerm.toLowerCase());
@@ -25,7 +33,7 @@ export default function Reports() {
 
       return matchesSearch && matchesCustomer;
     });
-  }, [transactions, reportType, searchTerm, customerFilter]);
+  }, [transactions, reportType, searchTerm, customerFilter, selectedMonth, selectedYear]);
 
   const filteredProducts = useMemo(() => {
     return products.filter(p => 
@@ -48,7 +56,7 @@ export default function Reports() {
         invMap.set(key, {
           id: tx.id,
           number: key,
-          date: tx.date,
+          date: tx.invoiceDate || tx.date,
           customer: tx.customer,
           total: tx.total,
           items: 1,
@@ -166,6 +174,27 @@ export default function Reports() {
 
       <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
         <div className="p-4 border-b border-slate-100 flex flex-col md:flex-row gap-4">
+          <div className="flex gap-2 min-w-fit">
+            <select 
+              className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-blue-500/20 text-sm font-medium"
+              value={selectedMonth}
+              onChange={(e) => setSelectedMonth(e.target.value === 'ALL' ? 'ALL' : parseInt(e.target.value))}
+            >
+              <option value="ALL">Tất cả tháng</option>
+              {Array.from({ length: 12 }, (_, i) => (
+                <option key={i} value={i}>Tháng {i + 1}</option>
+              ))}
+            </select>
+            <select 
+              className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-blue-500/20 text-sm font-medium"
+              value={selectedYear}
+              onChange={(e) => setSelectedYear(parseInt(e.target.value))}
+            >
+              {[2024, 2025, 2026].map(y => (
+                <option key={y} value={y}>Năm {y}</option>
+              ))}
+            </select>
+          </div>
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
             <input 

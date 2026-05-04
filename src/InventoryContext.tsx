@@ -124,8 +124,8 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     setUser(null);
   };
 
-  const isMonthClosed = (date: string | Date) => {
-    const d = new Date(date);
+  const isMonthClosed = (txDate: string | Date, invoiceDate?: string) => {
+    const d = new Date(invoiceDate || txDate);
     const key = `${d.getMonth() + 1}-${d.getFullYear()}`;
     return closedMonths.includes(key);
   };
@@ -134,7 +134,7 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     const txToDelete = transactions.filter(t => t.invoiceNumber === invNum);
     if (txToDelete.length === 0) return;
 
-    if (isMonthClosed(txToDelete[0].date)) {
+    if (isMonthClosed(txToDelete[0].date, txToDelete[0].invoiceDate)) {
       alert("Không thể xóa hóa đơn thuộc tháng đã chốt sổ.");
       return;
     }
@@ -263,7 +263,10 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
     const getFinalStateAt = (code: string, month: number, year: number) => {
       const cutoffDate = new Date(year, month, 1);
-      const priorTxs = transactions.filter(t => t.itemCode === code && new Date(t.date) < cutoffDate);
+      const priorTxs = transactions.filter(t => {
+        const d = new Date(t.invoiceDate || t.date);
+        return t.itemCode === code && d < cutoffDate;
+      });
       
       let qty = 0;
       let totalValue = 0;
@@ -276,7 +279,11 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         totalValue = manualOB.totalValue;
         avgCost = qty > 0 ? totalValue / qty : 0;
       } else {
-        priorTxs.sort((a,b) => new Date(a.date).getTime() - new Date(b.date).getTime()).forEach(t => {
+        priorTxs.sort((a,b) => {
+          const dateA = new Date(a.invoiceDate || a.date).getTime();
+          const dateB = new Date(b.invoiceDate || b.date).getTime();
+          return dateA - dateB;
+        }).forEach(t => {
           if (t.type === 'IN') {
             totalValue += (t.quantity * t.price);
             qty += t.quantity;
@@ -292,7 +299,7 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     };
 
     const targetMonthTxs = transactions.filter(tx => {
-      const d = new Date(tx.date);
+      const d = new Date(tx.invoiceDate || tx.date);
       return d.getMonth() === targetMonth && d.getFullYear() === targetYear;
     });
 
@@ -335,7 +342,7 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
     const itemsToUpdate: Transaction[] = [];
     const newTransactions = transactions.map(tx => {
-      const d = new Date(tx.date);
+      const d = new Date(tx.invoiceDate || tx.date);
       if (tx.type === 'OUT' && d.getMonth() === targetMonth && d.getFullYear() === targetYear) {
         const cost = calculationMap[tx.itemCode]?.avgCost || 0;
         const updatedTx = { ...tx, cogs: cost * tx.quantity };
