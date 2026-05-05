@@ -97,7 +97,7 @@ export default function Login() {
 
         <div className="mt-8 pt-6 border-t border-slate-100 text-center">
           <p className="text-xs text-slate-400">
-            Hệ thống quản lý Nhập - Xuất - Tồn hàng Trang sức * NGHIATIN GOLD
+            Hãng Chế Tác và Kinh Doanh Trang Sức PNJ
           </p>
         </div>
       </motion.div>

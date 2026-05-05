@@ -1,20 +1,27 @@
 import React, { useState } from 'react';
 import Papa from 'papaparse';
 import { useInventory } from '../InventoryContext';
-import { Upload, FileDown, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { Upload, FileDown, AlertCircle, CheckCircle2, FileText, Loader2 } from 'lucide-react';
 import { motion } from 'motion/react';
 import { Transaction } from '../types';
+import { extractInvoiceFromPdf, convertExtractedToTransactions } from '../services/geminiService';
 
 export default function ImportExport() {
   const { importTransactions, transactions, isMonthClosed } = useInventory();
   const [importType, setImportType] = useState<'IN' | 'OUT'>('IN');
-  const [logs, setLogs] = useState<{ msg: string; type: 'success' | 'error' | 'info' }[]>([]);
+  const [logs, setLogs] = useState<{ msg: string; type: 'success' | 'error' | 'info' | 'loading' }[]>([]);
+  const [isProcessingPdf, setIsProcessingPdf] = useState(false);
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    setLogs([{ msg: `Đang xử lý file: ${file.name}...`, type: 'info' }]);
+    if (file.type === 'application/pdf') {
+      handlePdfUpload(file);
+      return;
+    }
+
+    setLogs([{ msg: `Đang xử lý file CSV: ${file.name}...`, type: 'info' }]);
 
     Papa.parse(file, {
       complete: (results) => {
@@ -265,6 +272,48 @@ export default function ImportExport() {
     e.target.value = '';
   };
 
+  const handlePdfUpload = async (file: File) => {
+    setIsProcessingPdf(true);
+    setLogs([{ msg: `Đang phân tích hóa đơn PDF bằng AI: ${file.name}...`, type: 'loading' }]);
+
+    try {
+      const base64 = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.readAsDataURL(file);
+        reader.onload = () => resolve((reader.result as string).split(',')[1]);
+        reader.onerror = error => reject(error);
+      });
+
+      const extracted = await extractInvoiceFromPdf(base64);
+      const newTransactions = convertExtractedToTransactions(extracted, importType);
+
+      // Check Duplicates
+      const isDuplicate = transactions.some(t => 
+        t.invoiceNumber === extracted.invoiceNumber && 
+        t.invoiceDate === extracted.invoiceDate && 
+        t.customer === extracted.customer &&
+        t.type === importType
+      );
+
+      if (isDuplicate) {
+        setLogs(prev => [...prev, { msg: `CẢNH BÁO: Hóa đơn PDF số ${extracted.invoiceNumber} từ ${extracted.customer} đã tồn tại.`, type: 'error' }]);
+        return;
+      }
+
+      // Done
+      importTransactions(newTransactions);
+      setLogs(prev => [...prev.filter(l => l.type !== 'loading'), { 
+        msg: `Đã nhập thành công ${newTransactions.length} hàng từ hóa đơn AI ${extracted.invoiceNumber}.`, 
+        type: 'success' 
+      }]);
+    } catch (err: any) {
+      console.error(err);
+      setLogs(prev => [...prev.filter(l => l.type !== 'loading'), { msg: `Lỗi xử lý AI: ${err.message}`, type: 'error' }]);
+    } finally {
+      setIsProcessingPdf(false);
+    }
+  };
+
   return (
     <div className="max-w-4xl mx-auto space-y-6">
       <header className="flex items-center justify-between">
@@ -302,13 +351,21 @@ export default function ImportExport() {
               </button>
             </div>
 
-            <label className="flex flex-col items-center justify-center w-full h-40 border-2 border-dashed border-slate-300 rounded-xl cursor-pointer hover:bg-slate-50 hover:border-blue-400 transition-all">
+            <label className={`flex flex-col items-center justify-center w-full h-40 border-2 border-dashed rounded-xl transition-all ${isProcessingPdf ? 'bg-slate-50 border-blue-300 cursor-not-allowed' : 'border-slate-300 cursor-pointer hover:bg-slate-50 hover:border-blue-400'}`}>
               <div className="flex flex-col items-center justify-center pt-5 pb-6">
-                <Upload className="w-10 h-10 text-slate-400 mb-3" />
-                <p className="text-sm text-slate-600">Click để chọn hoặc kéo thả file CSV</p>
+                {isProcessingPdf ? (
+                  <Loader2 className="w-10 h-10 text-blue-500 animate-spin mb-3" />
+                ) : (
+                  <Upload className="w-10 h-10 text-slate-400 mb-3" />
+                )}
+                <p className="text-sm text-slate-600">Click để chọn hoặc kéo thả file CSV / PDF</p>
                 <p className="text-xs text-slate-400 mt-1">Dẫn mẫu: HOÁ ĐƠN {importType === 'IN' ? 'MUA' : 'BÁN'}</p>
+                <div className="flex gap-2 mt-2">
+                   <span className="px-2 py-0.5 bg-blue-100 text-blue-600 text-[10px] font-bold rounded">CSV</span>
+                   <span className="px-2 py-0.5 bg-red-100 text-red-600 text-[10px] font-bold rounded">PDF AI</span>
+                </div>
               </div>
-              <input type="file" className="hidden" accept=".csv" onChange={handleFileUpload} />
+              <input type="file" className="hidden" accept=".csv,.pdf" onChange={handleFileUpload} disabled={isProcessingPdf} />
             </label>
           </div>
         </motion.div>
@@ -328,10 +385,13 @@ export default function ImportExport() {
                 className={`flex gap-3 text-sm p-3 rounded-lg ${
                   log.type === 'success' ? 'bg-green-50 text-green-700 border border-green-100' :
                   log.type === 'error' ? 'bg-red-50 text-red-700 border border-red-100' :
+                  log.type === 'loading' ? 'bg-blue-50 text-blue-700 border border-blue-100 animate-pulse' :
                   'bg-blue-50 text-blue-700 border border-blue-100'
                 }`}
               >
-                {log.type === 'success' ? <CheckCircle2 size={16} className="shrink-0" /> : <AlertCircle size={16} className="shrink-0" />}
+                {log.type === 'success' ? <CheckCircle2 size={16} className="shrink-0" /> : 
+                 log.type === 'loading' ? <Loader2 size={16} className="shrink-0 animate-spin" /> :
+                 <AlertCircle size={16} className="shrink-0" />}
                 {log.msg}
               </div>
             ))}
