@@ -570,6 +570,60 @@ export default function Reports({ mode }: ReportsProps) {
 
                             <div className="mt-4 pt-3 border-t border-slate-200 text-[10px] text-slate-500">
                               <p className="font-bold text-red-500 uppercase">💡 Lời khuyên:</p>
+                              {mode === 'REVENUE' && debugStats.revCount === 0 && debugStats.pnjCount > 0 && (
+                                <div className="mt-2 p-2 bg-amber-50 border border-amber-200 rounded text-slate-800">
+                                  <p className="mb-2 font-medium">⚠️ Có vẻ dữ liệu của bạn đang bị đánh dấu sai nguồn (PNJ thay vì {mode}).</p>
+                                  <button 
+                                    onClick={async () => {
+                                      if (confirm(`Bạn có muốn chuyển toàn bộ ${debugStats.pnjCount} giao dịch sang bộ lọc ${mode} không?`)) {
+                                        try {
+                                          const res = await fetch('/api/migrate-source', {
+                                            method: 'POST',
+                                            headers: { 'Content-Type': 'application/json' },
+                                            body: JSON.stringify({ from: 'PNJ', to: mode })
+                                          });
+                                          if (res.ok) {
+                                            alert('Đã chuyển đổi thành công. Trang sẽ tải lại dữ liệu.');
+                                            window.location.reload();
+                                          }
+                                        } catch (e) {
+                                          alert('Lỗi khi chuyển đổi.');
+                                        }
+                                      }
+                                    }}
+                                    className="px-3 py-1 bg-amber-500 text-white font-bold rounded hover:bg-amber-600 transition-colors"
+                                  >
+                                    Khắc phục ngay: Chuyển PNJ → {mode}
+                                  </button>
+                                </div>
+                              )}
+                              {mode === 'PNJ' && debugStats.pnjCount === 0 && debugStats.revCount > 0 && (
+                                <div className="mt-2 p-2 bg-amber-50 border border-amber-200 rounded text-slate-800">
+                                  <p className="mb-2 font-medium">⚠️ Có vẻ dữ liệu của bạn đang bị đánh dấu là REVENUE.</p>
+                                  <button 
+                                    onClick={async () => {
+                                      if (confirm(`Bạn có muốn chuyển toàn bộ ${debugStats.revCount} giao dịch sang bộ lọc ${mode} không?`)) {
+                                        try {
+                                          const res = await fetch('/api/migrate-source', {
+                                            method: 'POST',
+                                            headers: { 'Content-Type': 'application/json' },
+                                            body: JSON.stringify({ from: 'REVENUE', to: mode })
+                                          });
+                                          if (res.ok) {
+                                            alert('Đã chuyển đổi thành công. Trang sẽ tải lại dữ liệu.');
+                                            window.location.reload();
+                                          }
+                                        } catch (e) {
+                                          alert('Lỗi khi chuyển đổi.');
+                                        }
+                                      }
+                                    }}
+                                    className="px-3 py-1 bg-amber-500 text-white font-bold rounded hover:bg-amber-600 transition-colors"
+                                  >
+                                    Khắc phục ngay: Chuyển REVENUE → {mode}
+                                  </button>
+                                </div>
+                              )}
                               {mode === 'REVENUE' && reportType === 'SELL' && debugStats.inCount > 0 && debugStats.outCount === 0 && (
                                 <p className="mt-1">• Bạn đang ở báo cáo Doanh thu (loại Xuất/Bán) nhưng dữ liệu bạn import có thể là loại Nhập/Mua (IN). Hãy kiểm tra lại cột "Loại" hoặc "Type" trong file Excel.</p>
                               )}

@@ -258,6 +258,21 @@ router.post("/reset", async (req, res) => {
   }
 });
 
+// 8. Fix Metadata (Migration)
+router.post("/migrate-source", async (req, res) => {
+  const { from, to } = req.body;
+  try {
+    const result = await pool.query(
+      'UPDATE transactions SET source = $1 WHERE source = $2 OR source IS NULL',
+      [to, from]
+    );
+    res.json({ success: true, count: result.rowCount });
+  } catch (err: any) {
+    console.error("[API] Migration Error:", err.message);
+    res.status(500).json({ error: "Failed to migrate" });
+  }
+});
+
 // Mounting the router at BOTH /api and / to handle different environment routing
 app.use("/api", router);
 app.use("/", router);
