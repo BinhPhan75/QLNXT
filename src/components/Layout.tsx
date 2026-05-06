@@ -243,7 +243,6 @@ export default function Layout() {
                     exit={{ height: 0, opacity: 0 }}
                     className="overflow-hidden pl-4"
                   >
-                    <div className="py-1 px-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">NGHIATINGOLD</div>
                     <button
                       onClick={() => handleTabChange('inv_nghiatingold_import')}
                       className={`w-full flex items-center gap-3 px-4 py-2 rounded-xl transition-all text-sm ${
@@ -264,7 +263,7 @@ export default function Layout() {
                       }`}
                     >
                       <BarChart3 size={18} />
-                      Báo cáo NGHIATINGOLD
+                      Báo cáo tồn kho
                     </button>
 
                     <div className="py-1 mt-2 px-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Vàng khác</div>

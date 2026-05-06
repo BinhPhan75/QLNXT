@@ -306,7 +306,7 @@ export default function Reports({ mode }: ReportsProps) {
             {reportType === 'BUY' ? 'Báo Cáo Mua Hàng' : reportType === 'SELL' ? (mode === 'REVENUE' ? 'Báo Cáo Doanh Thu' : 'Báo Cáo Bán Hàng') : 'Báo Cáo Tồn Kho'}
           </h1>
           <p className="text-slate-500">
-            {mode === 'REVENUE' ? 'Theo dõi doanh thu bán hàng chi tiết' : 'Tổng hợp dữ liệu giao dịch NGHIATINGOLD theo thời gian'}
+            {mode === 'REVENUE' ? 'Theo dõi doanh thu bán hàng chi tiết' : 'Tổng hợp dữ liệu giao dịch theo thời gian'}
           </p>
         </div>
         <div className="flex flex-col gap-2 md:items-end">
@@ -604,93 +604,6 @@ export default function Reports({ mode }: ReportsProps) {
                       <td colSpan={mode === 'REVENUE' ? 12 : 9} className="px-6 py-12 text-center">
                         <div className="max-w-md mx-auto space-y-4">
                           <p className="text-slate-400 italic">Không tìm thấy dữ liệu phù hợp với bộ lọc hiện tại</p>
-                          
-                          <div className="bg-slate-50 p-4 rounded-lg text-left text-xs space-y-2 border border-slate-200">
-                            <p className="font-bold text-slate-700 underline mb-2">Thông tin chẩn đoán:</p>
-                            <p>• Tổng số giao dịch trong hệ thống: <span className="font-bold">{debugStats.totalCount}</span></p>
-                            <p>• Phân loại Nguồn: <span className="text-blue-600 font-bold">REVENUE ({debugStats.revCount})</span> / <span className="text-orange-600 font-bold">NGHIATINGOLD ({debugStats.pnjCount})</span></p>
-                            <p>• Trong bộ lọc <span className="font-bold">{mode}</span>: 
-                              Hóa đơn mua (IN): <span className="font-bold">{debugStats.inCount}</span> | 
-                              Hóa đơn bán (OUT): <span className="font-bold">{debugStats.outCount}</span>
-                            </p>
-                            
-                            {debugStats.dateCounts.size > 0 && (
-                              <div className="mt-2">
-                                <p className="font-semibold text-slate-600">Dữ liệu hiện có ở các tháng:</p>
-                                <div className="flex flex-wrap gap-2 mt-1">
-                                  {Array.from(debugStats.dateCounts.entries()).map(([key, count]) => (
-                                    <span key={key} className="px-2 py-1 bg-white border border-slate-200 rounded font-mono">
-                                      Tháng {key}: {count} dòng
-                                    </span>
-                                  ))}
-                                </div>
-                              </div>
-                            )}
-
-                            <div className="mt-4 pt-3 border-t border-slate-200 text-[10px] text-slate-500">
-                              <p className="font-bold text-red-500 uppercase">💡 Lời khuyên:</p>
-                              {mode === 'REVENUE' && debugStats.revCount === 0 && debugStats.pnjCount > 0 && (
-                                <div className="mt-2 p-2 bg-amber-50 border border-amber-200 rounded text-slate-800">
-                                  <p className="mb-2 font-medium">⚠️ Có vẻ dữ liệu của bạn đang bị đánh dấu sai nguồn (NGHIATINGOLD thay vì {mode}).</p>
-                                  <button 
-                                    onClick={async () => {
-                                      if (confirm(`Bạn có muốn chuyển toàn bộ ${debugStats.pnjCount} giao dịch sang bộ lọc ${mode} không?`)) {
-                                        try {
-                                          const res = await fetch('/api/migrate-source', {
-                                            method: 'POST',
-                                            headers: { 'Content-Type': 'application/json' },
-                                            body: JSON.stringify({ from: 'NGHIATINGOLD', to: mode })
-                                          });
-                                          if (res.ok) {
-                                            alert('Đã chuyển đổi thành công. Trang sẽ tải lại dữ liệu.');
-                                            window.location.reload();
-                                          }
-                                        } catch (e) {
-                                          alert('Lỗi khi chuyển đổi.');
-                                        }
-                                      }
-                                    }}
-                                    className="px-3 py-1 bg-amber-500 text-white font-bold rounded hover:bg-amber-600 transition-colors"
-                                  >
-                                    Khắc phục ngay: Chuyển NGHIATINGOLD → {mode}
-                                  </button>
-                                </div>
-                              )}
-                              {mode === 'NGHIATINGOLD' && debugStats.pnjCount === 0 && debugStats.revCount > 0 && (
-                                <div className="mt-2 p-2 bg-amber-50 border border-amber-200 rounded text-slate-800">
-                                  <p className="mb-2 font-medium">⚠️ Có vẻ dữ liệu của bạn đang bị đánh dấu là REVENUE.</p>
-                                  <button 
-                                    onClick={async () => {
-                                      if (confirm(`Bạn có muốn chuyển toàn bộ ${debugStats.revCount} giao dịch sang bộ lọc ${mode} không?`)) {
-                                        try {
-                                          const res = await fetch('/api/migrate-source', {
-                                            method: 'POST',
-                                            headers: { 'Content-Type': 'application/json' },
-                                            body: JSON.stringify({ from: 'REVENUE', to: mode })
-                                          });
-                                          if (res.ok) {
-                                            alert('Đã chuyển đổi thành công. Trang sẽ tải lại dữ liệu.');
-                                            window.location.reload();
-                                          }
-                                        } catch (e) {
-                                          alert('Lỗi khi chuyển đổi.');
-                                        }
-                                      }
-                                    }}
-                                    className="px-3 py-1 bg-amber-500 text-white font-bold rounded hover:bg-amber-600 transition-colors"
-                                  >
-                                    Khắc phục ngay: Chuyển REVENUE → {mode}
-                                  </button>
-                                </div>
-                              )}
-                              {mode === 'REVENUE' && reportType === 'SELL' && debugStats.inCount > 0 && debugStats.outCount === 0 && (
-                                <p className="mt-1">• Bạn đang ở báo cáo Doanh thu (loại Xuất/Bán) nhưng dữ liệu bạn import có thể là loại Nhập/Mua (IN). Hãy kiểm tra lại cột "Loại" hoặc "Type" trong file Excel.</p>
-                              )}
-                              {selectedMonth !== 'ALL' && debugStats.dateCounts.size > 0 && !debugStats.dateCounts.has(`${(selectedMonth as number) + 1}/${selectedYear}`) && (
-                                <p className="mt-1">• Không có dữ liệu cho Tháng {selectedMonth as number + 1}/{selectedYear}. Hãy thử đổi sang "Tất cả tháng" hoặc chọn tháng có dữ liệu ở trên.</p>
-                              )}
-                            </div>
-                          </div>
                         </div>
                       </td>
                     </tr>
