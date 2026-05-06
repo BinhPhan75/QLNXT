@@ -8,7 +8,7 @@ import ImportExport from './ImportExport';
 import Reports from './Reports';
 import SystemSettings from './SystemSettings';
 import BankStatements from './BankStatements';
-import { formatCurrency } from '../lib/utils';
+import { formatCurrency, formatQuantity } from '../lib/utils';
 
 export default function Layout() {
   const { user, logout, products, bankStatements } = useInventory();
@@ -397,7 +397,7 @@ function DashboardView({ setActiveTab }: { setActiveTab: (tab: any) => void }) {
     { label: 'Tổng mặt hàng', value: products.length, sub: 'Loại sản phẩm', color: 'blue' },
     { label: 'Biến động Thu NH', value: new Intl.NumberFormat('vi-VN').format(bankSummary.in), sub: 'VND', color: 'green' },
     { label: 'Biến động Chi NH', value: new Intl.NumberFormat('vi-VN').format(bankSummary.out), sub: 'VND', color: 'red' },
-    { label: 'Tồn kho', value: products.reduce((acc, p) => acc + p.currentStock, 0).toFixed(3), sub: 'Số lượng chỉ', color: 'amber' },
+    { label: 'Tồn kho', value: formatQuantity(products.reduce((acc, p) => acc + p.currentStock, 0)), sub: 'Số lượng chỉ', color: 'amber' },
   ];
 
   return (
@@ -449,7 +449,7 @@ function DashboardView({ setActiveTab }: { setActiveTab: (tab: any) => void }) {
                           <p className="text-xs text-slate-500">{p.code}</p>
                         </td>
                         <td className="px-6 py-4 text-slate-600">{p.unit}</td>
-                        <td className="px-6 py-4 text-slate-900 font-medium">{p.currentStock.toFixed(3)}</td>
+                        <td className="px-6 py-4 text-slate-900 font-medium">{formatQuantity(p.currentStock)}</td>
                         <td className="px-6 py-4 text-blue-600 font-semibold">{formatCurrency(p.averageCost)}</td>
                       </tr>
                     ))

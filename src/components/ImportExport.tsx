@@ -11,6 +11,85 @@ interface ImportExportProps {
   mode: 'REVENUE' | 'NGHIATINGOLD';
 }
 
+const parseVnNumber = (val: string | number | undefined, isQuantity: boolean = false): number => {
+  if (val === undefined || val === null) return 0;
+  let str = val.toString().trim();
+  if (!str) return 0;
+  
+  // Clean characters
+  str = str.replace(/[₫\s]/g, '');
+
+  // Case 1: Both . and , are present
+  if (str.includes('.') && str.includes(',')) {
+    const lastDot = str.lastIndexOf('.');
+    const lastComma = str.lastIndexOf(',');
+    if (lastComma > lastDot) {
+      // VN Style: 1.234.567,89 -> 1234567.89
+      return parseFloat(str.replace(/\./g, '').replace(/,/g, '.')) || 0;
+    } else {
+      // US Style: 1,234,567.89 -> 1234567.89
+      return parseFloat(str.replace(/,/g, '')) || 0;
+    }
+  }
+
+  // Case 2: Only comma ,
+  if (str.includes(',')) {
+    const commas = (str.match(/,/g) || []).length;
+    if (commas > 1) {
+      // Multiple commas: 1,234,567 -> 1234567
+      return parseFloat(str.replace(/,/g, '')) || 0;
+    }
+    // Single comma: 1,234
+    // If it's a quantity (weight) or a small value, it's likely decimal 1.234
+    if (isQuantity || parseFloat(str.replace(',', '.')) < 500) {
+       return parseFloat(str.replace(',', '.')) || 0;
+    }
+    // Otherwise it's likely 1234 (thousands)
+    return parseFloat(str.replace(/,/g, '')) || 0;
+  }
+
+  // Case 3: Only dot .
+  if (str.includes('.')) {
+    const dots = (str.match(/\./g) || []).length;
+    if (dots > 1) {
+      // Multiple dots: 1.234.567
+      const parts = str.split('.');
+      const last = parts.pop()!;
+      
+      if (isQuantity) {
+        // For quantity (gold weight), the last part is almost always the decimal part
+        // Example: 1.234.567 -> 1234.567 (1 lượng 2 chỉ 3 phân 4 ly...)
+        return parseFloat(parts.join('') + '.' + last) || 0;
+      }
+      
+      if (last.length === 3 && parts[parts.length-1].length === 3) {
+         // Money/Large numbers: 1.234.000 -> 1234000
+         return parseFloat(parts.join('') + last) || 0;
+      }
+      return parseFloat(parts.join('') + '.' + last) || 0;
+    }
+    
+    // One dot: 1.234
+    // Ambiguous case. 
+    if (isQuantity) {
+      // For gold weight, 1.234 is almost certainly 1 point 234.
+      // Even if it's 1,234 items, "one point something" items is impossible, 
+      // but in this gold app, quantity is mostly weight.
+      return parseFloat(str);
+    }
+    
+    const parts = str.split('.');
+    if (parts[1].length === 3) {
+       // Price 5.000 -> 5000
+       const val = parseFloat(str.replace('.', ''));
+       if (val >= 1000) return val;
+    }
+    return parseFloat(str);
+  }
+
+  return parseFloat(str) || 0;
+};
+
 export default function ImportExport({ mode }: ImportExportProps) {
   const { importTransactions, transactions, isMonthClosed } = useInventory();
   const [importType, setImportType] = useState<'IN' | 'OUT'>(mode === 'REVENUE' ? 'OUT' : 'IN');
@@ -70,7 +149,6 @@ export default function ImportExport({ mode }: ImportExportProps) {
       return;
     }
 
-    // Try to detect if it's the specific format with 20+ columns
     let isDetailedReport = false;
     let headerRowIdx = -1;
 
@@ -105,7 +183,6 @@ export default function ImportExport({ mode }: ImportExportProps) {
     const importDate = new Date().toISOString().split('T')[0];
 
     rows.forEach(row => {
-      // Skipping empty rows or subtotal rows
       if (!row[3] || !row[14]) return; 
       
       const invoiceNum = row[3]?.toString().trim();
@@ -124,11 +201,9 @@ export default function ImportExport({ mode }: ImportExportProps) {
       const itemName = row[15]?.toString().trim() || 'Hàng hóa';
       const unit = row[17]?.toString().trim() || 'Chỉ';
       
-      const parseVal = (v: any) => parseVnNumber(v);
-
-      const quantity = parseVal(row[18]);
-      const price = parseVal(row[19]);
-      const total = parseVal(row[20]);
+      const quantity = parseVnNumber(row[18], true);
+      const price = parseVnNumber(row[19], false);
+      const total = parseVnNumber(row[20], false);
 
       items.push({
         type: importType,
@@ -261,65 +336,6 @@ export default function ImportExport({ mode }: ImportExportProps) {
     const items: Omit<Transaction, 'id'>[] = [];
     let successCount = 0;
 
-    const parseVnNumber = (val: string | number | undefined): number => {
-      if (val === undefined || val === null) return 0;
-      let str = val.toString().trim();
-      if (!str) return 0;
-      
-      // Clean characters
-      str = str.replace(/[₫\s]/g, '');
-
-      // Case 1: Both . and , are present
-      if (str.includes('.') && str.includes(',')) {
-        const lastDot = str.lastIndexOf('.');
-        const lastComma = str.lastIndexOf(',');
-        if (lastComma > lastDot) {
-          // VN Style: 1.234.567,89 -> 1234567.89
-          return parseFloat(str.replace(/\./g, '').replace(/,/g, '.')) || 0;
-        } else {
-          // US Style: 1,234,567.89 -> 1234567.89
-          return parseFloat(str.replace(/,/g, '')) || 0;
-        }
-      }
-
-      // Case 2: Only comma ,
-      if (str.includes(',')) {
-        const commas = (str.match(/,/g) || []).length;
-        if (commas > 1) {
-          // Multiple commas: 1,234,567 -> 1234567
-          return parseFloat(str.replace(/,/g, '')) || 0;
-        }
-        // Single comma: assume decimal in VN or separator in US?
-        // Gold quantity 1,234 is almost certainly decimal 1.234
-        // Price 5,000 is almost certainly 5000.
-        // We'll treat single comma as decimal for consistency with VN
-        return parseFloat(str.replace(/,/g, '.')) || 0;
-      }
-
-      // Case 3: Only dot .
-      if (str.includes('.')) {
-        const dots = (str.match(/\./g) || []).length;
-        if (dots > 1) {
-          // Multiple dots: User says dots for both thousands and decimal
-          // 1.234.567.89 (VN/Hybrid) -> 1234567.89
-          const parts = str.split('.');
-          const last = parts.pop();
-          return parseFloat(parts.join('') + '.' + last) || 0;
-        }
-        // One dot: 1.234
-        // Could be decimal (1.234) or thousands (1234)
-        // Default parseFloat handles dot as decimal, which covers weights.
-        // If it's a price like 5.000, it becomes 5. This is the risk.
-        // But for jewelry weight, 1.234 is very common.
-        const res = parseFloat(str);
-        // Heuristic: If it's something like 5.000, 10.000, maybe it's 5000? 
-        // No, let's trust the user knows 1.234 is decimal or that they'll use dots for both if they want.
-        return isNaN(res) ? 0 : res;
-      }
-
-      return parseFloat(str) || 0;
-    };
-
     for (let i = dataStartIndex; i < data.length; i++) {
       const row = data[i];
       const rawName = row[colIdx.name]?.toString().trim() || '';
@@ -338,9 +354,9 @@ export default function ImportExport({ mode }: ImportExportProps) {
         itemName = rawName;
       }
 
-      const quantity = parseVnNumber(row[colIdx.qty]);
-      let price = parseVnNumber(row[colIdx.price]);
-      const total = parseVnNumber(row[colIdx.total]);
+      const quantity = parseVnNumber(row[colIdx.qty], true);
+      let price = parseVnNumber(row[colIdx.price], false);
+      const total = parseVnNumber(row[colIdx.total], false);
 
       if (total > 0 && quantity > 0 && Math.abs(price * quantity - total) > 1) {
          price = total / quantity;
@@ -392,7 +408,6 @@ export default function ImportExport({ mode }: ImportExportProps) {
           source: 'NGHIATINGOLD' as TransactionSource
       }));
 
-      // Check Duplicates
       const isDuplicate = transactions.some(t => 
         t.invoiceNumber === extracted.invoiceNumber && 
         t.invoiceDate === extracted.invoiceDate && 

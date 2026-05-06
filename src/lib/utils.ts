@@ -13,6 +13,14 @@ export function formatCurrency(value: number) {
   }).format(value);
 }
 
+export function formatQuantity(value: number, decimals: number = 3) {
+  if (value === undefined || value === null || isNaN(value)) return "0";
+  return new Intl.NumberFormat("vi-VN", {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: decimals,
+  }).format(value);
+}
+
 export function formatDate(date: string | Date) {
   if (!date) return "";
   const dateStr = date.toString();
