@@ -98,14 +98,18 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         const productMap = new Map<string, Product>();
         mappedTxs.forEach((item: Transaction) => {
           const code = item.itemCode.trim().toUpperCase();
-          const existing = productMap.get(code);
+          const name = item.itemName.trim();
+          // If code is missing, use name as the key
+          const key = (code && code !== 'KHONG-MA') ? code : `NAME_${name.toLowerCase()}`;
+          
+          const existing = productMap.get(key);
           if (existing) {
             if (item.type === 'IN') existing.currentStock += item.quantity;
             else existing.currentStock -= item.quantity;
           } else {
-            productMap.set(code, {
-              code: code,
-              name: item.itemName,
+            productMap.set(key, {
+              code: (code && code !== 'KHONG-MA') ? code : 'KHONG-MA',
+              name: name,
               unit: item.unit,
               currentStock: item.type === 'IN' ? item.quantity : -item.quantity,
               averageCost: 0
@@ -180,14 +184,17 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       const productMap = new Map<string, Product>();
       remainingTxs.forEach(item => {
         const code = item.itemCode.trim().toUpperCase();
-        const existing = productMap.get(code);
+        const name = item.itemName.trim();
+        const key = (code && code !== 'KHONG-MA') ? code : `NAME_${name.toLowerCase()}`;
+        
+        const existing = productMap.get(key);
         if (existing) {
           if (item.type === 'IN') existing.currentStock += item.quantity;
           else existing.currentStock -= item.quantity;
         } else {
-          productMap.set(code, {
-            code: code,
-            name: item.itemName,
+          productMap.set(key, {
+            code: (code && code !== 'KHONG-MA') ? code : 'KHONG-MA',
+            name: name,
             unit: item.unit,
             currentStock: item.type === 'IN' ? item.quantity : -item.quantity,
             averageCost: 0
@@ -230,15 +237,18 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       // Update products list
       const productMap = new Map<string, Product>();
       updatedTransactions.forEach(item => {
-        const code = item.itemCode; 
-        const existing = productMap.get(code);
+        const code = item.itemCode.trim().toUpperCase();
+        const name = item.itemName.trim();
+        const key = (code && code !== 'KHONG-MA') ? code : `NAME_${name.toLowerCase()}`;
+        
+        const existing = productMap.get(key);
         if (existing) {
           if (item.type === 'IN') existing.currentStock += item.quantity;
           else existing.currentStock -= item.quantity;
         } else {
-          productMap.set(code, {
-            code: code,
-            name: item.itemName,
+          productMap.set(key, {
+            code: (code && code !== 'KHONG-MA') ? code : 'KHONG-MA',
+            name: name,
             unit: item.unit,
             currentStock: item.type === 'IN' ? item.quantity : -item.quantity,
             averageCost: 0
@@ -316,7 +326,26 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   };
 
   const calculateMonthlyCOGS = async (targetMonth: number, targetYear: number, sourceFilter?: TransactionSource) => {
-    const getItemKey = (t: any) => t.itemCode && t.itemCode !== 'KHONG-MA' ? t.itemCode : t.itemName;
+    // 1. Build a name-to-code mapping to handle items missing codes in some transactions
+    const nameToCodeMap: Record<string, string> = {};
+    transactions.forEach(t => {
+      if (t.itemName && t.itemCode && t.itemCode !== 'KHONG-MA') {
+        const normalizedName = t.itemName.trim().toLowerCase();
+        // Prefer the most frequent code if name has multiple? For now just take the first valid one
+        if (!nameToCodeMap[normalizedName]) {
+          nameToCodeMap[normalizedName] = t.itemCode;
+        }
+      }
+    });
+
+    const getItemKey = (t: any) => {
+      if (t.itemCode && t.itemCode !== 'KHONG-MA') return t.itemCode;
+      if (t.itemName) {
+        const normalizedName = t.itemName.trim().toLowerCase();
+        return nameToCodeMap[normalizedName] || t.itemName;
+      }
+      return 'UNKNOWN';
+    };
 
     try {
       const txsWithDates = transactions.map(tx => ({
@@ -324,16 +353,26 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         dateInfo: getYearMonth(tx.invoiceDate || tx.date)
       }));
 
-      const targetMonthTxs = txsWithDates.filter(tx => 
-        tx.dateInfo.month === targetMonth && tx.dateInfo.year === targetYear &&
-        (!sourceFilter || tx.source === sourceFilter)
+      // Diagnostic info
+      const allSourceTxs = txsWithDates.filter(tx => !sourceFilter || tx.source === sourceFilter);
+      const targetMonthTxs = allSourceTxs.filter(tx => 
+        tx.dateInfo.month === targetMonth && tx.dateInfo.year === targetYear
       );
 
       if (targetMonthTxs.length === 0) {
-        return { success: false, message: `Tháng ${targetMonth + 1}/${targetYear} không có dữ liệu giao dịch${sourceFilter ? ` loại ${sourceFilter}` : ''}.` };
+        const totalInCategory = allSourceTxs.length;
+        const totalInMonthAnyCategory = txsWithDates.filter(tx => tx.dateInfo.month === targetMonth && tx.dateInfo.year === targetYear).length;
+        
+        let detail = `Tháng ${targetMonth + 1}/${targetYear} không có dữ liệu giao dịch${sourceFilter ? ` loại ${sourceFilter}` : ''}.`;
+        if (totalInMonthAnyCategory > 0 && totalInCategory > 0) {
+          detail += `\n(Tìm thấy ${totalInMonthAnyCategory} giao dịch trong tháng này nhưng thuộc loại khác. Có tổng ${totalInCategory} giao dịch loại ${sourceFilter} ở các tháng khác)`;
+        } else if (totalInMonthAnyCategory === 0) {
+          detail += `\n(Không tìm thấy bất kỳ giao dịch nào trong tháng ${targetMonth + 1}/${targetYear} trên toàn hệ thống)`;
+        }
+        return { success: false, message: detail };
       }
 
-      const itemKeysInMonth = Array.from(new Set(targetMonthTxs.map(t => getItemKey(t)))).filter(Boolean) as string[];
+      const itemKeysInMonth = Array.from(new Set(targetMonthTxs.map(t => getItemKey(t)))).filter(k => k !== 'UNKNOWN') as string[];
       const priceAssignmentMap: Record<string, number> = {};
       let warnNoPurchases = false;
 
@@ -343,9 +382,12 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
           t.dateInfo.year < targetYear || (t.dateInfo.year === targetYear && t.dateInfo.month <= targetMonth)
         ) && (!sourceFilter || t.source === sourceFilter));
         
-        const itemOBs = manualOpeningBalances.filter(b => (b.itemCode === key || b.itemName === key) && (
-          b.year < targetYear || (b.year === targetYear && b.month <= targetMonth)
-        ));
+        const itemOBs = manualOpeningBalances.filter(b => {
+          const obKey = (b.itemCode && b.itemCode !== 'KHONG-MA') ? b.itemCode : (b.itemName ? (nameToCodeMap[b.itemName.trim().toLowerCase()] || b.itemName) : '');
+          return obKey === key && (
+            b.year < targetYear || (b.year === targetYear && b.month <= targetMonth)
+          );
+        });
 
         if (itemHistory.length === 0 && itemOBs.length === 0) {
           priceAssignmentMap[key] = 0;
