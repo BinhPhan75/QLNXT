@@ -388,7 +388,7 @@ export default function Reports({ mode }: ReportsProps) {
         </div>
 
         <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse">
+          <table className={`w-full text-left border-collapse ${mode === 'REVENUE' && reportType === 'SELL' ? 'min-w-[1200px]' : 'min-w-[1000px]'}`}>
             {reportType === 'STOCK' ? (
               <>
                 <thead>
@@ -499,22 +499,22 @@ export default function Reports({ mode }: ReportsProps) {
                     <th className="px-4 py-4 min-w-[150px]">Mặt hàng</th>
                     {mode === 'REVENUE' ? (
                       <>
-                        <th className="px-3 py-4 text-center">SL</th>
-                        <th className="px-3 py-4 text-right">Đơn giá</th>
-                        <th className="px-3 py-4 text-right">Thành tiền</th>
-                        <th className="px-3 py-4 text-right">Tiền công</th>
-                        <th className="px-3 py-4 text-right text-red-500">Chiết khấu</th>
-                        <th className="px-3 py-4 text-right font-bold text-blue-600">Thành tiền sau CK</th>
+                        <th className="px-3 py-4 text-center whitespace-nowrap">SL</th>
+                        <th className="px-3 py-4 text-right whitespace-nowrap">Đơn giá</th>
+                        <th className="px-3 py-4 text-right whitespace-nowrap">Thành tiền</th>
+                        <th className="px-3 py-4 text-right whitespace-nowrap">Tiền công</th>
+                        <th className="px-3 py-4 text-right text-red-500 whitespace-nowrap">Chiết khấu</th>
+                        <th className="px-3 py-4 text-right font-bold text-blue-600 whitespace-nowrap">Thành tiền sau CK</th>
                       </>
                     ) : (
                       <>
-                        <th className="px-3 py-4 text-center">Số lượng</th>
-                        <th className="px-3 py-4 text-right">Đơn giá</th>
-                        <th className="px-3 py-4 text-right">Thành tiền</th>
+                        <th className="px-3 py-4 text-center whitespace-nowrap">Số lượng</th>
+                        <th className="px-3 py-4 text-right whitespace-nowrap">Đơn giá</th>
+                        <th className="px-3 py-4 text-right whitespace-nowrap">Thành tiền</th>
                         {reportType === 'SELL' && (
                           <>
-                            <th className="px-3 py-4 text-right text-red-500">Giá vốn</th>
-                            <th className="px-3 py-4 text-right text-green-600">Lợi nhuận</th>
+                            <th className="px-3 py-4 text-right text-red-500 whitespace-nowrap">Giá vốn</th>
+                            <th className="px-3 py-4 text-right text-green-600 whitespace-nowrap">Lợi nhuận</th>
                           </>
                         )}
                       </>
@@ -544,12 +544,12 @@ export default function Reports({ mode }: ReportsProps) {
                               <td className="px-3 py-4 text-slate-500 text-[10px]">{row.customerCard || '-'}</td>
                               <td className="px-4 py-4 text-slate-400 text-[10px] truncate max-w-[150px]" title={row.address}>{row.address || '-'}</td>
                               <td className="px-4 py-4 text-slate-700 font-bold">{row.displayName}</td>
-                              <td className="px-3 py-4 text-center text-slate-900">{row.quantity}</td>
-                              <td className="px-3 py-4 text-right text-slate-600">{formatCurrency(row.avgPrice)}</td>
-                              <td className="px-3 py-4 text-right text-slate-900">{formatCurrency(row.itemTotal)}</td>
-                              <td className="px-3 py-4 text-right text-green-600 font-bold">{row.laborTotal > 0 ? formatCurrency(row.laborTotal) : '-'}</td>
-                              <td className="px-3 py-4 text-right text-red-500 font-bold">{row.discountTotal > 0 ? formatCurrency(row.discountTotal) : '-'}</td>
-                              <td className="px-3 py-4 text-right font-bold text-blue-700 text-sm">{formatCurrency(row.finalTotal)}</td>
+                              <td className="px-3 py-4 text-center text-slate-900 whitespace-nowrap">{row.quantity}</td>
+                              <td className="px-3 py-4 text-right text-slate-600 whitespace-nowrap">{formatCurrency(row.avgPrice)}</td>
+                              <td className="px-3 py-4 text-right text-slate-900 whitespace-nowrap">{formatCurrency(row.itemTotal)}</td>
+                              <td className="px-3 py-4 text-right text-green-600 font-bold whitespace-nowrap">{row.laborTotal > 0 ? formatCurrency(row.laborTotal) : '-'}</td>
+                              <td className="px-3 py-4 text-right text-red-500 font-bold whitespace-nowrap">{row.discountTotal > 0 ? formatCurrency(row.discountTotal) : '-'}</td>
+                              <td className="px-3 py-4 text-right font-bold text-blue-700 text-sm whitespace-nowrap">{formatCurrency(row.finalTotal)}</td>
                             </tr>
                             {isExpanded && (
                               <tr>
