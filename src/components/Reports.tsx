@@ -36,14 +36,78 @@ export default function Reports({ mode }: ReportsProps) {
         if (month !== selectedMonth || year !== selectedYear) return false;
       }
 
-      const matchesSearch = tx.itemName.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                           tx.itemCode.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                           tx.invoiceNumber?.toLowerCase().includes(searchTerm.toLowerCase());
+      const matchesSearch = (tx.itemName || '').toLowerCase().includes(searchTerm.toLowerCase()) || 
+                           (tx.itemCode || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+                           (tx.invoiceNumber || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+                           (tx.customer || '').toLowerCase().includes(searchTerm.toLowerCase());
       const matchesCustomer = !customerFilter || tx.customer === customerFilter;
 
       return matchesSearch && matchesCustomer;
     });
   }, [sourceFilteredTransactions, reportType, searchTerm, customerFilter, selectedMonth, selectedYear]);
+
+  // Specialized Revenue Grouping
+  const revenueRows = useMemo(() => {
+    if (mode !== 'REVENUE' || reportType !== 'SELL') return [];
+
+    const groups = new Map<string, any>();
+
+    filteredData.forEach(tx => {
+      const key = `${tx.invoiceNumber}_${tx.invoiceDate}_${tx.customer}`;
+      const nameLower = (tx.itemName || '').toLowerCase();
+      const isLabor = nameLower.includes('công') || nameLower.includes('gia công');
+      const isDiscount = nameLower.includes('chiết khấu') || nameLower.includes('giảm giá');
+      
+      const existing = groups.get(key);
+      if (existing) {
+        if (isLabor) {
+          existing.laborTotal += tx.total;
+        } else if (isDiscount) {
+          existing.discountTotal += Math.abs(tx.total);
+        } else {
+          existing.mainItems.push(tx);
+          existing.itemTotal += tx.total;
+          existing.quantity += tx.quantity;
+        }
+        existing.finalTotal += tx.total;
+        existing.details.push(tx);
+      } else {
+        groups.set(key, {
+          key,
+          invoiceNumber: tx.invoiceNumber,
+          invoiceDate: tx.invoiceDate || tx.date,
+          customer: tx.customer,
+          customerCard: tx.customerCard || (tx as any).cccd,
+          address: tx.address,
+          mainItems: (isLabor || isDiscount) ? [] : [tx],
+          itemTotal: (isLabor || isDiscount) ? 0 : tx.total,
+          laborTotal: isLabor ? tx.total : 0,
+          discountTotal: isDiscount ? Math.abs(tx.total) : 0,
+          quantity: (isLabor || isDiscount) ? 0 : tx.quantity,
+          finalTotal: tx.total,
+          details: [tx]
+        });
+      }
+    });
+
+    return Array.from(groups.values()).map(row => {
+      const mainNames = Array.from(new Set(row.mainItems.map((i: any) => i.itemName))).join(', ');
+      const avgPrice = row.quantity > 0 ? row.itemTotal / row.quantity : 0;
+      
+      return {
+        ...row,
+        displayName: mainNames || 'Hóa đơn tổng hợp',
+        avgPrice
+      };
+    });
+  }, [filteredData, mode, reportType]);
+
+  const filteredDataDisplay = useMemo(() => {
+    if (mode === 'REVENUE' && reportType === 'SELL' && viewMode === 'TRANSACTION') {
+      return revenueRows;
+    }
+    return filteredData;
+  }, [filteredData, revenueRows, mode, reportType, viewMode]);
 
   const filteredProducts = useMemo(() => {
     return products.filter(p => 
@@ -341,67 +405,100 @@ export default function Reports({ mode }: ReportsProps) {
             ) : viewMode === 'TRANSACTION' ? (
               <>
                 <thead>
-                  <tr className="bg-slate-50 text-slate-500 text-xs font-semibold uppercase tracking-wider">
-                    <th className="px-6 py-4">Ngày Import</th>
-                    <th className="px-6 py-4">Ngày HĐ</th>
-                    <th className="px-6 py-4">Mặt hàng</th>
-                    <th className="px-6 py-4">Đối tác</th>
-                    <th className="px-6 py-4 text-center">Số lượng</th>
-                    <th className="px-6 py-4 text-right">Đơn giá</th>
-                    <th className="px-6 py-4 text-right">Thành tiền</th>
-                    {reportType === 'SELL' && (
+                  <tr className="bg-slate-50 text-slate-500 text-[10px] font-semibold uppercase tracking-wider">
+                    <th className="px-3 py-4 whitespace-nowrap">Ngày HĐ</th>
+                    <th className="px-3 py-4 whitespace-nowrap">Số HĐ</th>
+                    <th className="px-4 py-4 min-w-[120px]">Khách hàng</th>
+                    <th className="px-3 py-4">CCCD</th>
+                    <th className="px-4 py-4 min-w-[150px]">Địa chỉ</th>
+                    <th className="px-4 py-4 min-w-[150px]">Mặt hàng</th>
+                    {mode === 'REVENUE' ? (
                       <>
-                        <th className="px-6 py-4 text-right text-red-500">Giá vốn</th>
-                        <th className="px-6 py-4 text-right text-green-600">Lợi nhuận</th>
+                        <th className="px-3 py-4 text-center">SL</th>
+                        <th className="px-3 py-4 text-right">Đơn giá</th>
+                        <th className="px-3 py-4 text-right">Thành tiền</th>
+                        <th className="px-3 py-4 text-right">Tiền công</th>
+                        <th className="px-3 py-4 text-right text-red-500">Chiết khấu</th>
+                        <th className="px-3 py-4 text-right font-bold text-blue-600">Thành tiền sau CK</th>
+                      </>
+                    ) : (
+                      <>
+                        <th className="px-3 py-4 text-center">Số lượng</th>
+                        <th className="px-3 py-4 text-right">Đơn giá</th>
+                        <th className="px-3 py-4 text-right">Thành tiền</th>
+                        {reportType === 'SELL' && (
+                          <>
+                            <th className="px-3 py-4 text-right text-red-500">Giá vốn</th>
+                            <th className="px-3 py-4 text-right text-green-600">Lợi nhuận</th>
+                          </>
+                        )}
                       </>
                     )}
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {filteredData.length === 0 ? (
+                <tbody className="divide-y divide-slate-100 font-medium">
+                  {filteredDataDisplay.length === 0 ? (
                     <tr>
-                      <td colSpan={reportType === 'SELL' ? 9 : 7} className="px-6 py-12 text-center text-slate-400 italic">
+                      <td colSpan={mode === 'REVENUE' ? 12 : 9} className="px-6 py-12 text-center text-slate-400 italic">
                         Không tìm thấy dữ liệu phù hợp
                       </td>
                     </tr>
                   ) : (
-                    filteredData.map((tx) => (
-                      <tr key={tx.id} className="hover:bg-slate-50/50 transition-colors">
-                        <td className="px-6 py-4 text-sm text-slate-600">
-                          {formatDate(tx.date)}
-                        </td>
-                        <td className="px-6 py-4 text-sm text-slate-400 italic">
-                          {tx.invoiceDate ? formatDate(tx.invoiceDate) : '--'}
-                        </td>
-                        <td className="px-6 py-4">
-                          <div className="text-sm font-medium text-slate-900">{tx.itemName}</div>
-                          <div className="text-xs text-slate-500 font-mono">CODE: {tx.itemCode}</div>
-                          <div className="text-[10px] bg-slate-100 text-slate-500 px-1 inline-block rounded">Số HD: {tx.invoiceNumber || (tx as any).invoice_number}</div>
-                        </td>
-                        <td className="px-6 py-4">
-                          <div className="text-sm font-medium text-slate-900">{tx.customer}</div>
-                          {tx.customerCard && <div className="text-[10px] text-slate-400">CCCD: {tx.customerCard}</div>}
-                          {tx.address && <div className="text-[10px] text-slate-400 truncate max-w-[150px]" title={tx.address}>{tx.address}</div>}
-                        </td>
-                        <td className="px-6 py-4 text-sm font-medium text-slate-900 text-center">{tx.quantity} {tx.unit}</td>
-                        <td className="px-6 py-4 text-sm text-slate-600 text-right">{formatCurrency(tx.price)}</td>
-                        <td className="px-6 py-4 text-sm font-bold text-slate-900 text-right">{formatCurrency(tx.total)}</td>
-                        {reportType === 'SELL' && (
-                          <>
-                            <td className="px-6 py-4 text-sm text-red-500 text-right font-medium">
-                              {tx.cogs ? formatCurrency(tx.cogs) : <span className="text-slate-300 italic">--</span>}
-                            </td>
-                            <td className="px-6 py-4 text-sm font-bold text-right">
-                              {tx.cogs ? (
-                                <span className={tx.total - tx.cogs > 0 ? 'text-green-600' : 'text-red-500'}>
-                                  {formatCurrency(tx.total - tx.cogs)}
-                                </span>
-                              ) : '--'}
-                            </td>
-                          </>
-                        )}
-                      </tr>
-                    ))
+                    filteredDataDisplay.map((row: any) => {
+                      if (mode === 'REVENUE' && reportType === 'SELL') {
+                        return (
+                          <tr key={row.key} className="hover:bg-slate-50/50 transition-colors text-xs">
+                            <td className="px-3 py-4 whitespace-nowrap text-slate-500">{formatDate(row.invoiceDate)}</td>
+                            <td className="px-3 py-4 font-bold text-blue-600">{row.invoiceNumber}</td>
+                            <td className="px-4 py-4 text-slate-900">{row.customer}</td>
+                            <td className="px-3 py-4 text-slate-500 text-[10px]">{row.customerCard || '-'}</td>
+                            <td className="px-4 py-4 text-slate-400 text-[10px] truncate max-w-[150px]" title={row.address}>{row.address || '-'}</td>
+                            <td className="px-4 py-4 text-slate-700 font-bold">{row.displayName}</td>
+                            <td className="px-3 py-4 text-center text-slate-900">{row.quantity}</td>
+                            <td className="px-3 py-4 text-right text-slate-600">{formatCurrency(row.avgPrice)}</td>
+                            <td className="px-3 py-4 text-right text-slate-900">{formatCurrency(row.itemTotal)}</td>
+                            <td className="px-3 py-4 text-right text-green-600 font-bold">{row.laborTotal > 0 ? formatCurrency(row.laborTotal) : '-'}</td>
+                            <td className="px-3 py-4 text-right text-red-500 font-bold">{row.discountTotal > 0 ? formatCurrency(row.discountTotal) : '-'}</td>
+                            <td className="px-3 py-4 text-right font-bold text-blue-700 text-sm">{formatCurrency(row.finalTotal)}</td>
+                          </tr>
+                        );
+                      }
+
+                      // Original Row Rendering for PNJ
+                      const tx = row;
+                      return (
+                        <tr key={tx.id} className="hover:bg-slate-50/50 transition-colors text-xs">
+                          <td className="px-3 py-4 text-slate-600">
+                            {formatDate(tx.invoiceDate || tx.date)}
+                          </td>
+                          <td className="px-3 py-4 font-bold text-slate-900">{tx.invoiceNumber}</td>
+                          <td className="px-4 py-4 text-slate-900">{tx.customer}</td>
+                          <td className="px-3 py-4 text-slate-400">{tx.customerCard || '-'}</td>
+                          <td className="px-4 py-4 text-slate-400 text-[10px] truncate max-w-[150px]">{tx.address || '-'}</td>
+                          <td className="px-4 py-4">
+                            <div className="font-bold text-slate-900">{tx.itemName}</div>
+                            <div className="text-[10px] text-slate-400 font-mono">CODE: {tx.itemCode}</div>
+                          </td>
+                          <td className="px-3 py-4 text-center text-slate-900 font-bold">{tx.quantity} {tx.unit}</td>
+                          <td className="px-3 py-4 text-right text-slate-600">{formatCurrency(tx.price)}</td>
+                          <td className="px-3 py-4 text-right font-bold text-slate-900">{formatCurrency(tx.total)}</td>
+                          {reportType === 'SELL' && (
+                            <>
+                              <td className="px-3 py-4 text-right text-red-500 font-bold">
+                                {tx.cogs ? formatCurrency(tx.cogs) : <span className="text-slate-300 italic">--</span>}
+                              </td>
+                              <td className="px-3 py-4 text-right font-bold">
+                                {tx.cogs ? (
+                                  <span className={tx.total - tx.cogs > 0 ? 'text-green-600' : 'text-red-500'}>
+                                    {formatCurrency(tx.total - tx.cogs)}
+                                  </span>
+                                ) : '--'}
+                              </td>
+                            </>
+                          )}
+                        </tr>
+                      );
+                    })
                   )}
                 </tbody>
               </>
