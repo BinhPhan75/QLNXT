@@ -405,8 +405,8 @@ export default function Reports({ mode }: ReportsProps) {
           </div>
         </div>
 
-        <div className="overflow-x-auto">
-          <table className={`w-full text-left border-collapse ${mode === 'REVENUE' && reportType === 'SELL' ? 'min-w-[1200px]' : 'min-w-[1000px]'}`}>
+        <div className="overflow-x-auto rounded-xl border border-slate-200">
+          <table className={`w-full text-left border-collapse ${mode === 'REVENUE' && reportType === 'SELL' ? 'min-w-[1100px]' : 'min-w-[950px]'}`}>
             {reportType === 'STOCK' ? (
               <>
                 <thead>
@@ -509,30 +509,30 @@ export default function Reports({ mode }: ReportsProps) {
               <>
                 <thead>
                   <tr className="bg-slate-50 text-slate-500 text-[10px] font-semibold uppercase tracking-wider">
-                    <th className="px-3 py-4 whitespace-nowrap">Ngày HĐ</th>
-                    <th className="px-3 py-4 whitespace-nowrap">Số HĐ</th>
-                    <th className="px-4 py-4 min-w-[120px]">Khách hàng</th>
-                    <th className="px-3 py-4">CCCD</th>
-                    <th className="px-4 py-4 min-w-[150px]">Địa chỉ</th>
-                    <th className="px-4 py-4 min-w-[150px]">Mặt hàng</th>
+                    <th className="px-2 py-3 whitespace-nowrap">Ngày HĐ</th>
+                    <th className="px-2 py-3 whitespace-nowrap">Số HĐ</th>
+                    <th className="px-3 py-3 min-w-[110px]">Khách hàng</th>
+                    <th className="px-2 py-3">CCCD</th>
+                    <th className="px-2 py-3 min-w-[120px]">Địa chỉ</th>
+                    <th className="px-3 py-3 min-w-[140px]">Mặt hàng</th>
                     {mode === 'REVENUE' ? (
                       <>
-                        <th className="px-3 py-4 text-center whitespace-nowrap">SL</th>
-                        <th className="px-3 py-4 text-right whitespace-nowrap">Đơn giá</th>
-                        <th className="px-3 py-4 text-right whitespace-nowrap">Thành tiền</th>
-                        <th className="px-3 py-4 text-right whitespace-nowrap">Tiền công</th>
-                        <th className="px-3 py-4 text-right text-red-500 whitespace-nowrap">Chiết khấu</th>
-                        <th className="px-3 py-4 text-right font-bold text-blue-600 whitespace-nowrap">Thành tiền sau CK</th>
+                        <th className="px-2 py-3 text-center whitespace-nowrap">SL</th>
+                        <th className="px-2 py-3 text-right whitespace-nowrap">Đơn giá</th>
+                        <th className="px-2 py-3 text-right whitespace-nowrap">Thành tiền</th>
+                        <th className="px-2 py-3 text-right whitespace-nowrap">Tiền công</th>
+                        <th className="px-2 py-3 text-right text-red-500 whitespace-nowrap">Chiết khấu</th>
+                        <th className="px-2 py-3 text-right font-bold text-blue-600 whitespace-nowrap">Thành tiền sau CK</th>
                       </>
                     ) : (
                       <>
-                        <th className="px-3 py-4 text-center whitespace-nowrap">Số lượng</th>
-                        <th className="px-3 py-4 text-right whitespace-nowrap">Đơn giá</th>
-                        <th className="px-3 py-4 text-right whitespace-nowrap">Thành tiền</th>
+                        <th className="px-2 py-3 text-center whitespace-nowrap">Số lượng</th>
+                        <th className="px-2 py-3 text-right whitespace-nowrap">Đơn giá</th>
+                        <th className="px-2 py-3 text-right whitespace-nowrap">Thành tiền</th>
                         {reportType === 'SELL' && (
                           <>
-                            <th className="px-3 py-4 text-right text-red-500 whitespace-nowrap">Giá vốn</th>
-                            <th className="px-3 py-4 text-right text-green-600 whitespace-nowrap">Lợi nhuận</th>
+                            <th className="px-2 py-3 text-right text-red-500 whitespace-nowrap">Giá vốn</th>
+                            <th className="px-2 py-3 text-right text-green-600 whitespace-nowrap">Lợi nhuận</th>
                           </>
                         )}
                       </>
@@ -643,20 +643,20 @@ export default function Reports({ mode }: ReportsProps) {
                           <React.Fragment key={row.key}>
                             <tr 
                               onClick={() => setExpandedRevenueKey(isExpanded ? null : row.key)}
-                              className={`hover:bg-blue-50/30 transition-colors cursor-pointer text-xs ${isExpanded ? 'bg-blue-50/50' : ''}`}
+                              className={`hover:bg-blue-50/30 transition-colors cursor-pointer text-[11px] ${isExpanded ? 'bg-blue-50/50' : ''}`}
                             >
-                              <td className="px-3 py-4 whitespace-nowrap text-slate-500">{formatDate(row.invoiceDate)}</td>
-                              <td className="px-3 py-4 font-bold text-blue-600">{row.invoiceNumber}</td>
-                              <td className="px-4 py-4 text-slate-900">{row.customer}</td>
-                              <td className="px-3 py-4 text-slate-500 text-[10px]">{row.customerCard || '-'}</td>
-                              <td className="px-4 py-4 text-slate-400 text-[10px] truncate max-w-[150px]" title={row.address}>{row.address || '-'}</td>
-                              <td className="px-4 py-4 text-slate-700 font-bold">{row.displayName}</td>
-                              <td className="px-3 py-4 text-center text-slate-900 whitespace-nowrap">{row.quantity}</td>
-                              <td className="px-3 py-4 text-right text-slate-600 whitespace-nowrap">{formatCurrency(row.avgPrice)}</td>
-                              <td className="px-3 py-4 text-right text-slate-900 whitespace-nowrap">{formatCurrency(row.itemTotal)}</td>
-                              <td className="px-3 py-4 text-right text-green-600 font-bold whitespace-nowrap">{row.laborTotal > 0 ? formatCurrency(row.laborTotal) : '-'}</td>
-                              <td className="px-3 py-4 text-right text-red-500 font-bold whitespace-nowrap">{row.discountTotal > 0 ? formatCurrency(row.discountTotal) : '-'}</td>
-                              <td className="px-3 py-4 text-right font-bold text-blue-700 text-sm whitespace-nowrap">{formatCurrency(row.finalTotal)}</td>
+                              <td className="px-2 py-3 whitespace-nowrap text-slate-500">{formatDate(row.invoiceDate)}</td>
+                              <td className="px-2 py-3 font-bold text-blue-600">{row.invoiceNumber}</td>
+                              <td className="px-3 py-3 text-slate-900 leading-tight max-w-[120px] truncate" title={row.customer}>{row.customer}</td>
+                              <td className="px-2 py-3 text-slate-500 text-[10px]">{row.customerCard || '-'}</td>
+                              <td className="px-2 py-3 text-slate-400 text-[10px] truncate max-w-[120px]" title={row.address}>{row.address || '-'}</td>
+                              <td className="px-3 py-3 text-slate-700 font-bold leading-tight">{row.displayName}</td>
+                              <td className="px-2 py-3 text-center text-slate-900 whitespace-nowrap">{row.quantity}</td>
+                              <td className="px-2 py-3 text-right text-slate-600 whitespace-nowrap">{formatCurrency(row.avgPrice)}</td>
+                              <td className="px-2 py-3 text-right text-slate-900 whitespace-nowrap">{formatCurrency(row.itemTotal)}</td>
+                              <td className="px-2 py-3 text-right text-green-600 font-bold whitespace-nowrap">{row.laborTotal > 0 ? formatCurrency(row.laborTotal) : '-'}</td>
+                              <td className="px-2 py-3 text-right text-red-500 font-bold whitespace-nowrap">{row.discountTotal > 0 ? formatCurrency(row.discountTotal) : '-'}</td>
+                              <td className="px-2 py-3 text-right font-bold text-blue-700 text-sm whitespace-nowrap">{formatCurrency(row.finalTotal)}</td>
                             </tr>
                             {isExpanded && (
                               <tr>
@@ -695,27 +695,27 @@ export default function Reports({ mode }: ReportsProps) {
                       // Original Row Rendering for PNJ
                       const tx = row;
                       return (
-                        <tr key={tx.id} className="hover:bg-slate-50/50 transition-colors text-xs">
-                          <td className="px-3 py-4 text-slate-600">
+                        <tr key={tx.id} className="hover:bg-slate-50/50 transition-colors text-[11px]">
+                          <td className="px-2 py-3 text-slate-600">
                             {formatDate(tx.invoiceDate || tx.date)}
                           </td>
-                          <td className="px-3 py-4 font-bold text-slate-900">{tx.invoiceNumber}</td>
-                          <td className="px-4 py-4 text-slate-900">{tx.customer}</td>
-                          <td className="px-3 py-4 text-slate-400">{tx.customerCard || '-'}</td>
-                          <td className="px-4 py-4 text-slate-400 text-[10px] truncate max-w-[150px]">{tx.address || '-'}</td>
-                          <td className="px-4 py-4">
-                            <div className="font-bold text-slate-900">{tx.itemName}</div>
-                            <div className="text-[10px] text-slate-400 font-mono">CODE: {tx.itemCode}</div>
+                          <td className="px-2 py-3 font-bold text-slate-900">{tx.invoiceNumber}</td>
+                          <td className="px-3 py-3 text-slate-900 max-w-[110px] truncate" title={tx.customer}>{tx.customer}</td>
+                          <td className="px-2 py-3 text-slate-400 text-[10px]">{tx.customerCard || '-'}</td>
+                          <td className="px-2 py-3 text-slate-400 text-[10px] truncate max-w-[120px]" title={tx.address}>{tx.address || '-'}</td>
+                          <td className="px-3 py-3">
+                            <div className="font-bold text-slate-900 leading-tight">{tx.itemName}</div>
+                            <div className="text-[9px] text-slate-400 font-mono">CODE: {tx.itemCode}</div>
                           </td>
-                          <td className="px-3 py-4 text-center text-slate-900 font-bold">{tx.quantity} {tx.unit}</td>
-                          <td className="px-3 py-4 text-right text-slate-600">{formatCurrency(tx.price)}</td>
-                          <td className="px-3 py-4 text-right font-bold text-slate-900">{formatCurrency(tx.total)}</td>
+                          <td className="px-2 py-3 text-center text-slate-900 font-bold whitespace-nowrap">{tx.quantity} {tx.unit}</td>
+                          <td className="px-2 py-3 text-right text-slate-600 whitespace-nowrap">{formatCurrency(tx.price)}</td>
+                          <td className="px-2 py-3 text-right font-bold text-slate-900 whitespace-nowrap">{formatCurrency(tx.total)}</td>
                           {reportType === 'SELL' && (
                             <>
-                              <td className="px-3 py-4 text-right text-red-500 font-bold">
-                                {tx.cogs ? formatCurrency(tx.cogs) : <span className="text-slate-300 italic">--</span>}
+                              <td className="px-2 py-3 text-right text-red-500 font-bold whitespace-nowrap">
+                                {tx.cogs ? formatCurrency(tx.cogs) : <span className="text-slate-300 italic text-[9px]">--</span>}
                               </td>
-                              <td className="px-3 py-4 text-right font-bold">
+                              <td className="px-2 py-3 text-right font-bold whitespace-nowrap">
                                 {tx.cogs ? (
                                   <span className={tx.total - tx.cogs > 0 ? 'text-green-600' : 'text-red-500'}>
                                     {formatCurrency(tx.total - tx.cogs)}
