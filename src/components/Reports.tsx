@@ -20,7 +20,7 @@ export default function Reports({ mode }: ReportsProps) {
   const [viewMode, setViewMode] = useState<'TRANSACTION' | 'INVOICE'>('TRANSACTION');
   const [searchTerm, setSearchTerm] = useState('');
   const [customerFilter, setCustomerFilter] = useState('');
-  const [selectedMonth, setSelectedMonth] = useState<number | 'ALL'>(new Date().getMonth());
+  const [selectedMonth, setSelectedMonth] = useState<number | 'ALL'>('ALL');
   const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear());
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');

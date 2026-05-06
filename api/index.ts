@@ -31,6 +31,65 @@ async function initDb() {
     // Create source-specific tables
     const tables = ['nghiatingold_transactions', 'revenue_transactions'];
     
+    // Check for legacy pnj_transactions table
+    const checkPnjLegacy = await client.query(`
+      SELECT EXISTS (
+        SELECT FROM information_schema.tables 
+        WHERE table_name = 'pnj_transactions'
+      );
+    `);
+
+    if (checkPnjLegacy.rows[0].exists) {
+      console.log("[Database] Legacy pnj_transactions found. Migrating data...");
+      await client.query(`CREATE TABLE IF NOT EXISTS nghiatingold_transactions (id TEXT PRIMARY KEY, type TEXT, date TEXT)`);
+      try {
+        const colsResult = await client.query(`
+          SELECT column_name FROM information_schema.columns WHERE table_name = 'pnj_transactions'
+        `);
+        const commonCols = colsResult.rows.map(r => r.column_name).filter(c => 
+          ['id', 'type', 'date', 'item_code', 'item_name', 'unit', 'quantity', 'price', 'discount', 'total', 'invoice_number', 'invoice_date', 'customer', 'customer_card', 'address', 'note', 'cogs', 'source'].includes(c)
+        );
+        
+        if (commonCols.length > 0) {
+          const colsStr = commonCols.join(', ');
+          await client.query(`
+            INSERT INTO nghiatingold_transactions (${colsStr})
+            SELECT ${colsStr} FROM pnj_transactions 
+            ON CONFLICT (id) DO NOTHING
+          `);
+          console.log(`[Database] Migrated ${commonCols.length} columns from pnj_transactions.`);
+        }
+      } catch (e) {
+        console.error("Migration error from pnj_transactions:", e);
+      }
+    }
+
+    // Check for legacy general 'transactions' table
+    const checkGenLegacy = await client.query(`
+      SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'transactions')
+    `);
+
+    if (checkGenLegacy.rows[0].exists) {
+      console.log("[Database] Legacy general 'transactions' table found. Migrating...");
+      try {
+        const legacyData = await client.query('SELECT * FROM transactions');
+        for (const row of legacyData.rows) {
+          const source = row.source || (row.id?.startsWith('rev') ? 'REVENUE' : 'NGHIATINGOLD');
+          const targetTable = (source === 'REVENUE') ? 'revenue_transactions' : 'nghiatingold_transactions';
+          
+          await client.query(`
+            INSERT INTO ${targetTable} (id, type, date, item_code, item_name, unit, quantity, price, discount, total, invoice_number, invoice_date, customer, customer_card, address, note, cogs, source)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
+            ON CONFLICT (id) DO NOTHING`,
+            [row.id, row.type, row.date, row.item_code, row.item_name, row.unit, row.quantity, row.price, row.discount, row.total, row.invoice_number, row.invoice_date, row.customer, row.customer_card, row.address, row.note, row.cogs, source]
+          );
+        }
+        console.log(`[Database] Migrated ${legacyData.rowCount} rows from generic transactions table.`);
+      } catch (e) {
+        console.error("Migration error from transactions table:", e);
+      }
+    }
+
     for (const table of tables) {
       await client.query(`
         CREATE TABLE IF NOT EXISTS ${table} (

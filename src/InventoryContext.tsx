@@ -48,22 +48,27 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
           return;
         }
 
-        const mappedTxs = txRes.map((t: any) => ({
-          ...t,
-          itemCode: (t.item_code || t.itemCode || '').toString(),
-          itemName: (t.item_name || t.itemName || '').toString(),
-          invoiceNumber: (t.invoice_number || t.invoiceNumber || '').toString(),
-          invoiceDate: (t.invoice_date || t.invoiceDate || '').toString(),
-          customer: (t.customer || '').toString(),
-          customerCard: (t.customer_card || t.customerCard || '').toString(),
-          address: (t.address || '').toString(),
-          source: (t.source || 'NGHIATINGOLD') as TransactionSource,
-          quantity: parseFloat(t.quantity || 0),
-          price: parseFloat(t.price || 0),
-          discount: parseFloat(t.discount || 0),
-          total: parseFloat(t.total || 0),
-          cogs: parseFloat(t.cogs || 0)
-        }));
+        const mappedTxs = txRes.map((t: any) => {
+          let source = (t.source || 'NGHIATINGOLD') as TransactionSource;
+          if (source === 'PNJ' as any) source = 'NGHIATINGOLD';
+          
+          return {
+            ...t,
+            itemCode: (t.item_code || t.itemCode || '').toString(),
+            itemName: (t.item_name || t.itemCode || '').toString(), // Fallback to code if name missing
+            invoiceNumber: (t.invoice_number || t.invoiceNumber || '').toString(),
+            invoiceDate: (t.invoice_date || t.invoiceDate || '').toString(),
+            customer: (t.customer || '').toString(),
+            customerCard: (t.customer_card || t.customerCard || '').toString(),
+            address: (t.address || '').toString(),
+            source,
+            quantity: parseFloat(t.quantity || 0),
+            price: parseFloat(t.price || 0),
+            discount: parseFloat(t.discount || 0),
+            total: parseFloat(t.total || 0),
+            cogs: parseFloat(t.cogs || 0)
+          };
+        });
 
         const mappedOBs = obRes.map((ob: any) => ({
           itemCode: (ob.item_code || ob.itemCode || '').toString(),
