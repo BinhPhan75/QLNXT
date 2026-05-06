@@ -52,56 +52,83 @@ export default function Reports({ mode }: ReportsProps) {
   const revenueRows = useMemo(() => {
     if (mode !== 'REVENUE' || reportType !== 'SELL') return [];
 
-    const groups = new Map<string, any>();
+    const invoiceGroups = new Map<string, any[]>();
 
     filteredData.forEach(tx => {
       const key = `${tx.invoiceNumber}_${tx.invoiceDate}_${tx.customer}`;
-      const nameLower = (tx.itemName || '').toLowerCase();
-      const isLabor = nameLower.includes('công') || nameLower.includes('gia công');
-      const isDiscount = nameLower.includes('chiết khấu') || nameLower.includes('giảm giá');
-      
-      const existing = groups.get(key);
-      if (existing) {
+      const existing = invoiceGroups.get(key) || [];
+      existing.push(tx);
+      invoiceGroups.set(key, existing);
+    });
+
+    const rows: any[] = [];
+
+    invoiceGroups.forEach((items, key) => {
+      let laborTotal = 0;
+      let discountTotal = 0;
+      const mainItems: any[] = [];
+
+      items.forEach(item => {
+        const nameLower = (item.itemName || '').toLowerCase();
+        const isLabor = nameLower.includes('công') || nameLower.includes('gia công');
+        const isDiscount = nameLower.includes('chiết khấu') || nameLower.includes('giảm giá');
+
         if (isLabor) {
-          existing.laborTotal += tx.total;
+          laborTotal += item.total;
         } else if (isDiscount) {
-          existing.discountTotal += Math.abs(tx.total);
+          discountTotal += Math.abs(item.total);
         } else {
-          existing.mainItems.push(tx);
-          existing.itemTotal += tx.total;
-          existing.quantity += tx.quantity;
+          mainItems.push(item);
         }
-        existing.finalTotal += tx.total;
-        existing.details.push(tx);
+      });
+
+      // If no main items, create a placeholder for labor/discount only invoices
+      if (mainItems.length === 0 && (laborTotal > 0 || discountTotal > 0)) {
+        const first = items[0];
+        rows.push({
+          key: `${key}_fees`,
+          invoiceNumber: first.invoiceNumber,
+          invoiceDate: first.invoiceDate || first.date,
+          customer: first.customer,
+          customerCard: first.customerCard || (first as any).cccd,
+          address: first.address,
+          displayName: 'Dịch vụ / Phí khác',
+          quantity: 0,
+          avgPrice: 0,
+          itemTotal: 0,
+          laborTotal,
+          discountTotal,
+          finalTotal: laborTotal - discountTotal,
+          details: items
+        });
       } else {
-        groups.set(key, {
-          key,
-          invoiceNumber: tx.invoiceNumber,
-          invoiceDate: tx.invoiceDate || tx.date,
-          customer: tx.customer,
-          customerCard: tx.customerCard || (tx as any).cccd,
-          address: tx.address,
-          mainItems: (isLabor || isDiscount) ? [] : [tx],
-          itemTotal: (isLabor || isDiscount) ? 0 : tx.total,
-          laborTotal: isLabor ? tx.total : 0,
-          discountTotal: isDiscount ? Math.abs(tx.total) : 0,
-          quantity: (isLabor || isDiscount) ? 0 : tx.quantity,
-          finalTotal: tx.total,
-          details: [tx]
+        // Create a row for each main product item
+        mainItems.forEach((item, index) => {
+          const isFirstItem = index === 0;
+          const rowLabor = isFirstItem ? laborTotal : 0;
+          const rowDiscount = isFirstItem ? discountTotal : 0;
+          
+          rows.push({
+            key: `${key}_${item.id}`,
+            invoiceNumber: item.invoiceNumber,
+            invoiceDate: item.invoiceDate || item.date,
+            customer: item.customer,
+            customerCard: item.customerCard || (item as any).cccd,
+            address: item.address,
+            displayName: item.itemName,
+            quantity: item.quantity,
+            avgPrice: item.price,
+            itemTotal: item.total,
+            laborTotal: rowLabor,
+            discountTotal: rowDiscount,
+            finalTotal: item.total + rowLabor - rowDiscount,
+            details: isFirstItem ? items : [item] // Show full invoice details on first row if expanded
+          });
         });
       }
     });
 
-    return Array.from(groups.values()).map(row => {
-      const mainNames = Array.from(new Set(row.mainItems.map((i: any) => i.itemName))).join(', ');
-      const avgPrice = row.quantity > 0 ? row.itemTotal / row.quantity : 0;
-      
-      return {
-        ...row,
-        displayName: mainNames || 'Hóa đơn tổng hợp',
-        avgPrice
-      };
-    });
+    return rows;
   }, [filteredData, mode, reportType]);
 
   const filteredDataDisplay = useMemo(() => {
