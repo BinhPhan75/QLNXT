@@ -33,6 +33,13 @@ export default function SystemSettings() {
     try {
       const sourceFilter = calcCategory === 'ALL' ? undefined : calcCategory as any;
       const itemFilter = selectedItemKey === 'ALL' ? undefined : selectedItemKey;
+      
+      const confirmMsg = itemFilter 
+        ? `Bạn có chắc chắn muốn tính giá vốn RIÊNG cho mặt hàng "${itemFilter}" trong tháng ${selectedMonth + 1}/${selectedYear}?`
+        : `Bạn có chắc chắn muốn tính giá vốn CHO TẤT CẢ các mặt hàng của ${calcCategory === 'ALL' ? 'toàn bộ hệ thống' : calcCategory} trong tháng ${selectedMonth + 1}/${selectedYear}? (Hệ thống sẽ tính chi tiết cho từng mã hàng, không gộp chung).`;
+
+      if (!confirm(confirmMsg)) return;
+
       const result = await calculateMonthlyCOGS(selectedMonth, selectedYear, sourceFilter, itemFilter);
       if (result && result.message) {
         alert(result.message);
@@ -143,26 +150,26 @@ export default function SystemSettings() {
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
               <div>
-                <label className="block text-xs font-semibold text-slate-400 uppercase mb-1">Loại dữ liệu nguồn</label>
+                <label className="block text-xs font-semibold text-slate-400 uppercase mb-1">Nguồn dữ liệu</label>
                 <select 
                   value={calcCategory}
                   onChange={(e) => setCalcCategory(e.target.value as any)}
                   className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500/20 font-bold"
                 >
-                  <option value="INVENTORY">Dữ liệu Kho (Vàng 970, 9999, ...)</option>
-                  <option value="REVENUE">Dữ liệu Doanh thu (HĐ bán lẻ)</option>
+                  <option value="INVENTORY">Dữ liệu Kho (Vàng 970, 9999...)</option>
+                  <option value="REVENUE">Hóa đơn Bán lẻ (V610, V970...)</option>
                   <option value="ALL">Tất cả nguồn dữ liệu</option>
                 </select>
               </div>
               <div>
-                <label className="block text-xs font-semibold text-slate-400 uppercase mb-1">Mặt hàng cụ thể</label>
+                <label className="block text-xs font-semibold text-slate-400 uppercase mb-1">Chọn Mặt hàng</label>
                 <select 
                   value={selectedItemKey}
                   onChange={(e) => setSelectedItemKey(e.target.value)}
                   className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500/20 font-bold text-blue-700"
                 >
-                  <option value="ALL">-- Tất cả mặt hàng --</option>
-                  {products.map(p => (
+                  <option value="ALL">-- Tất cả chi tiết --</option>
+                  {products.sort((a,b) => a.code.localeCompare(b.code)).map(p => (
                     <option key={p.code} value={p.code}>{p.code} - {p.name}</option>
                   ))}
                 </select>
