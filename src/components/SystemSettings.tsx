@@ -57,12 +57,50 @@ export default function SystemSettings() {
 
   const currentMonthManualOBs = manualOpeningBalances.filter(b => b.month === selectedMonth && b.year === selectedYear);
 
+  const [dbStatus, setDbStatus] = useState<any>(null);
+  const [loadingDb, setLoadingDb] = useState(false);
+
+  const checkDbStatus = async () => {
+    setLoadingDb(true);
+    try {
+      const res = await fetch('/api/db-status');
+      const data = await res.json();
+      setDbStatus(data);
+    } catch (err) {
+      setDbStatus({ status: 'error', message: 'Không thể kết nối API' });
+    } finally {
+      setLoadingDb(false);
+    }
+  };
+
   return (
     <div className="max-w-5xl mx-auto space-y-6 pb-20">
-      <header>
-        <h1 className="text-2xl font-bold text-slate-900">Module Hệ Thống</h1>
-        <p className="text-slate-500">Quản lý tính toán giá vốn và tham số hệ thống</p>
+      <header className="flex justify-between items-end">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900">Module Hệ Thống</h1>
+          <p className="text-slate-500">Quản lý tính toán giá vốn và tham số hệ thống</p>
+        </div>
+        <button 
+          onClick={checkDbStatus}
+          disabled={loadingDb}
+          className="flex items-center gap-2 px-4 py-2 bg-slate-100 text-slate-700 rounded-lg text-sm font-semibold hover:bg-slate-200"
+        >
+          {loadingDb ? 'Đang kiểm tra...' : 'Kiểm tra Database'}
+        </button>
       </header>
+
+      {dbStatus && (
+        <motion.div 
+          initial={{ opacity: 0, height: 0 }}
+          animate={{ opacity: 1, height: 'auto' }}
+          className={`p-4 rounded-xl border text-sm ${dbStatus.status === 'connected' ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`}
+        >
+          <p className="font-bold mb-2">Kết quả kiểm tra:</p>
+          <pre className="text-[10px] overflow-auto max-h-40 bg-white/50 p-2 rounded">
+            {JSON.stringify(dbStatus, null, 2)}
+          </pre>
+        </motion.div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Main Controls */}

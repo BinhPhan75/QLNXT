@@ -29,7 +29,10 @@ export function getYearMonth(dateStr: string | Date) {
   if (!dateStr) return { month: -1, year: -1 };
   if (dateStr instanceof Date) return { month: dateStr.getMonth(), year: dateStr.getFullYear() };
   
-  const parts = dateStr.toString().split('T')[0].split(/[-/]/);
+  // Normalize string: remove time if present, replace common separators
+  const cleanDate = dateStr.toString().split(' ')[0].split('T')[0];
+  const parts = cleanDate.split(/[-/.]/);
+
   if (parts.length === 3) {
     if (parts[0].length === 4) { // YYYY-MM-DD
       return { month: parseInt(parts[1]) - 1, year: parseInt(parts[0]) };
@@ -37,6 +40,8 @@ export function getYearMonth(dateStr: string | Date) {
       return { month: parseInt(parts[1]) - 1, year: parseInt(parts[2]) };
     }
   }
+  
   const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return { month: -1, year: -1 };
   return { month: d.getMonth(), year: d.getFullYear() };
 }

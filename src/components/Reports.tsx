@@ -248,6 +248,24 @@ export default function Reports({ mode }: ReportsProps) {
     }), { qty: 0, total: 0, cogs: 0 });
   }, [filteredData, filteredProducts, reportType]);
 
+  const debugStats = useMemo(() => {
+    const totalCount = transactions.length;
+    const pnjCount = transactions.filter(t => t.source === 'PNJ').length;
+    const revCount = transactions.filter(t => t.source === 'REVENUE').length;
+    const inCount = sourceFilteredTransactions.filter(t => t.type === 'IN').length;
+    const outCount = sourceFilteredTransactions.filter(t => t.type === 'OUT').length;
+    
+    // Check for future/past months
+    const dateCounts = new Map<string, number>();
+    sourceFilteredTransactions.forEach(t => {
+      const { month, year } = getYearMonth(t.invoiceDate || t.date);
+      const key = `${month + 1}/${year}`;
+      dateCounts.set(key, (dateCounts.get(key) || 0) + 1);
+    });
+
+    return { totalCount, pnjCount, revCount, inCount, outCount, dateCounts };
+  }, [transactions, sourceFilteredTransactions]);
+
   const handleDeleteInvoice = (invNum: string) => {
     if (confirm(`Bạn có chắc chắn muốn xóa toàn bộ hóa đơn số ${invNum}? Hành động này sẽ xóa tất cả các dòng hàng đi kèm.`)) {
       deleteInvoice(invNum);
@@ -524,8 +542,43 @@ export default function Reports({ mode }: ReportsProps) {
                 <tbody className="divide-y divide-slate-100 font-medium">
                   {filteredDataDisplay.length === 0 ? (
                     <tr>
-                      <td colSpan={mode === 'REVENUE' ? 12 : 9} className="px-6 py-12 text-center text-slate-400 italic">
-                        Không tìm thấy dữ liệu phù hợp
+                      <td colSpan={mode === 'REVENUE' ? 12 : 9} className="px-6 py-12 text-center">
+                        <div className="max-w-md mx-auto space-y-4">
+                          <p className="text-slate-400 italic">Không tìm thấy dữ liệu phù hợp với bộ lọc hiện tại</p>
+                          
+                          <div className="bg-slate-50 p-4 rounded-lg text-left text-xs space-y-2 border border-slate-200">
+                            <p className="font-bold text-slate-700 underline mb-2">Thông tin chẩn đoán:</p>
+                            <p>• Tổng số giao dịch trong hệ thống: <span className="font-bold">{debugStats.totalCount}</span></p>
+                            <p>• Phân loại Nguồn: <span className="text-blue-600 font-bold">REVENUE ({debugStats.revCount})</span> / <span className="text-orange-600 font-bold">PNJ ({debugStats.pnjCount})</span></p>
+                            <p>• Trong bộ lọc <span className="font-bold">{mode}</span>: 
+                              Hóa đơn mua (IN): <span className="font-bold">{debugStats.inCount}</span> | 
+                              Hóa đơn bán (OUT): <span className="font-bold">{debugStats.outCount}</span>
+                            </p>
+                            
+                            {debugStats.dateCounts.size > 0 && (
+                              <div className="mt-2">
+                                <p className="font-semibold text-slate-600">Dữ liệu hiện có ở các tháng:</p>
+                                <div className="flex flex-wrap gap-2 mt-1">
+                                  {Array.from(debugStats.dateCounts.entries()).map(([key, count]) => (
+                                    <span key={key} className="px-2 py-1 bg-white border border-slate-200 rounded font-mono">
+                                      Tháng {key}: {count} dòng
+                                    </span>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+
+                            <div className="mt-4 pt-3 border-t border-slate-200 text-[10px] text-slate-500">
+                              <p className="font-bold text-red-500 uppercase">💡 Lời khuyên:</p>
+                              {mode === 'REVENUE' && reportType === 'SELL' && debugStats.inCount > 0 && debugStats.outCount === 0 && (
+                                <p className="mt-1">• Bạn đang ở báo cáo Doanh thu (loại Xuất/Bán) nhưng dữ liệu bạn import có thể là loại Nhập/Mua (IN). Hãy kiểm tra lại cột "Loại" hoặc "Type" trong file Excel.</p>
+                              )}
+                              {selectedMonth !== 'ALL' && debugStats.dateCounts.size > 0 && !debugStats.dateCounts.has(`${(selectedMonth as number) + 1}/${selectedYear}`) && (
+                                <p className="mt-1">• Không có dữ liệu cho Tháng {selectedMonth as number + 1}/{selectedYear}. Hãy thử đổi sang "Tất cả tháng" hoặc chọn tháng có dữ liệu ở trên.</p>
+                              )}
+                            </div>
+                          </div>
+                        </div>
                       </td>
                     </tr>
                   ) : (
