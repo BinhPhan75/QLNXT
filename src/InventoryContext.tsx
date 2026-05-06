@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { Product, Transaction, User, OpeningBalance } from './types';
+import { Product, Transaction, User, OpeningBalance, TransactionSource } from './types';
 import { getYearMonth } from './lib/utils';
 
 interface InventoryContextType {

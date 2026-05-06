@@ -91,6 +91,7 @@ export const convertExtractedToTransactions = (extracted: ExtractedInvoice, type
     quantity: item.quantity,
     unit: item.unit || 'Món',
     price: item.price,
+    discount: 0,
     total: item.total,
     customer: extracted.customer,
   }));

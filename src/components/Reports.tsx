@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { useInventory } from '../InventoryContext';
 import { formatCurrency, formatDate, getYearMonth } from '../lib/utils';
 import { Search, Filter, Download, Calendar, Trash2, FileText } from 'lucide-react';
+import * as XLSX from 'xlsx';
 
 interface ReportsProps {
   mode: 'REVENUE' | 'PNJ';
@@ -109,6 +110,59 @@ export default function Reports({ mode }: ReportsProps) {
     }
     return filteredData;
   }, [filteredData, revenueRows, mode, reportType, viewMode]);
+
+  const handleExport = () => {
+    let exportData: any[] = [];
+    let filename = `Bao_Cao_${mode}_${reportType}_${selectedMonth !== 'ALL' ? (selectedMonth + 1) : 'Ca_nam'}_${selectedYear}.xlsx`;
+
+    if (mode === 'REVENUE' && reportType === 'SELL' && viewMode === 'TRANSACTION') {
+      // Export revenue-grouped data
+      exportData = revenueRows.map(row => ({
+        'Ngày HĐ': formatDate(row.invoiceDate),
+        'Số HĐ': row.invoiceNumber,
+        'Khách hàng': row.customer,
+        'CCCD': row.customerCard || '',
+        'Địa chỉ': row.address || '',
+        'Mặt hàng': row.displayName,
+        'Số lượng': row.quantity,
+        'Đơn giá TB': row.avgPrice,
+        'Thành tiền hàng': row.itemTotal,
+        'Tiền công': row.laborTotal,
+        'Chiết khấu': row.discountTotal,
+        'Tổng cộng sau CK': row.finalTotal
+      }));
+    } else if (reportType === 'STOCK') {
+      exportData = filteredProducts.map(p => ({
+        'Mã hàng': p.code,
+        'Tên hàng': p.name,
+        'ĐVT': p.unit,
+        'Tồn kho': p.currentStock,
+        'Giá vốn BQ': p.averageCost,
+        'Tổng giá trị tồn': p.currentStock * p.averageCost
+      }));
+    } else {
+      // Standard transaction export
+      exportData = filteredData.map(tx => ({
+        'Ngày HĐ': tx.invoiceDate ? formatDate(tx.invoiceDate) : '',
+        'Ngày Import': formatDate(tx.date),
+        'Số HĐ': tx.invoiceNumber || '',
+        'Mã hàng': tx.itemCode,
+        'Tên hàng': tx.itemName,
+        'Loại': tx.type === 'IN' ? 'NHẬP' : 'XUẤT',
+        'Khách hàng': tx.customer,
+        'Số lượng': tx.quantity,
+        'Đơn giá': tx.price,
+        'Thành tiền': tx.total,
+        'Giá vốn': tx.cogs || 0,
+        'Lợi nhuận': tx.cogs ? (tx.total - tx.cogs) : 0
+      }));
+    }
+
+    const ws = XLSX.utils.json_to_sheet(exportData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Sheet1");
+    XLSX.writeFile(wb, filename);
+  };
 
   const filteredProducts = useMemo(() => {
     return products.filter(p => 
@@ -297,7 +351,10 @@ export default function Reports({ mode }: ReportsProps) {
                 {customers.map(c => <option key={c} value={c}>{c}</option>)}
               </select>
             )}
-            <button className="flex items-center gap-2 px-4 py-2 bg-slate-900 text-white rounded-lg hover:bg-slate-800 transition-colors text-sm">
+            <button 
+              onClick={handleExport}
+              className="flex items-center gap-2 px-4 py-2 bg-slate-900 text-white rounded-lg hover:bg-slate-800 transition-colors text-sm"
+            >
               <Download size={16} /> Export
             </button>
           </div>

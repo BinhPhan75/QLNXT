@@ -4,7 +4,7 @@ import * as XLSX from 'xlsx';
 import { useInventory } from '../InventoryContext';
 import { Upload, FileDown, AlertCircle, CheckCircle2, FileText, Loader2 } from 'lucide-react';
 import { motion } from 'motion/react';
-import { Transaction } from '../types';
+import { Transaction, TransactionSource } from '../types';
 import { extractInvoiceFromPdf, convertExtractedToTransactions } from '../services/geminiService';
 
 interface ImportExportProps {
