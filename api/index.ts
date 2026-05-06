@@ -74,7 +74,7 @@ async function initDb() {
       try {
         const legacyData = await client.query('SELECT * FROM transactions');
         for (const row of legacyData.rows) {
-          const source = row.source || (row.id?.startsWith('rev') ? 'REVENUE' : 'NGHIATINGOLD');
+          const source = row.source || (row.id?.startsWith('rev') ? 'REVENUE' : 'INVENTORY');
           const targetTable = (source === 'REVENUE') ? 'revenue_transactions' : 'nghiatingold_transactions';
           
           await client.query(`
@@ -251,7 +251,7 @@ router.get("/transactions", async (req, res) => {
     const rev = await pool.query('SELECT * FROM revenue_transactions ORDER BY date DESC');
     
     const combined = [
-      ...pnj.rows.map(r => ({ ...r, source: 'NGHIATINGOLD' })),
+      ...pnj.rows.map(r => ({ ...r, source: 'INVENTORY' })),
       ...rev.rows.map(r => ({ ...r, source: 'REVENUE' }))
     ];
     
@@ -469,7 +469,7 @@ router.post("/migrate-source", async (req, res) => {
       // Migrate from legacy table to specific tables
       const legacyData = await client.query('SELECT * FROM transactions');
       for (const row of legacyData.rows) {
-        const source = row.source || (row.id.startsWith('rev') ? 'REVENUE' : 'NGHIATINGOLD');
+        const source = row.source || (row.id.startsWith('rev') ? 'REVENUE' : 'INVENTORY');
         const targetTable = getTableName(source);
         
         await client.query(
@@ -483,8 +483,8 @@ router.post("/migrate-source", async (req, res) => {
     }
 
     // Also support intra-table move if needed (though now we have separate tables)
-    // For now just migrate from NGHIATINGOLD table to REVENUE table if 'from' and 'to' are specified
-    if (from === 'NGHIATINGOLD' && to === 'REVENUE') {
+    // For now just migrate from INVENTORY table to REVENUE table if 'from' and 'to' are specified
+    if (from === 'INVENTORY' && to === 'REVENUE') {
       const data = await client.query('SELECT * FROM nghiatingold_transactions');
       for (const row of data.rows) {
         await client.query(

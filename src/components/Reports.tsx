@@ -5,7 +5,7 @@ import { Search, Filter, Download, Calendar, Trash2, FileText } from 'lucide-rea
 import * as XLSX from 'xlsx';
 
 interface ReportsProps {
-  mode: 'REVENUE' | 'NGHIATINGOLD';
+  mode: 'REVENUE' | 'INVENTORY';
 }
 
 export default function Reports({ mode }: ReportsProps) {
@@ -276,7 +276,7 @@ export default function Reports({ mode }: ReportsProps) {
 
   const debugStats = useMemo(() => {
     const totalCount = transactions.length;
-    const pnjCount = transactions.filter(t => t.source === 'NGHIATINGOLD').length;
+    const invCount = transactions.filter(t => t.source === 'INVENTORY').length;
     const revCount = transactions.filter(t => t.source === 'REVENUE').length;
     const inCount = sourceFilteredTransactions.filter(t => t.type === 'IN').length;
     const outCount = sourceFilteredTransactions.filter(t => t.type === 'OUT').length;
@@ -289,7 +289,7 @@ export default function Reports({ mode }: ReportsProps) {
       dateCounts.set(key, (dateCounts.get(key) || 0) + 1);
     });
 
-    return { totalCount, pnjCount, revCount, inCount, outCount, dateCounts };
+    return { totalCount, invCount, revCount, inCount, outCount, dateCounts };
   }, [transactions, sourceFilteredTransactions]);
 
   const handleDeleteInvoice = (invNum: string) => {
@@ -311,7 +311,7 @@ export default function Reports({ mode }: ReportsProps) {
         </div>
         <div className="flex flex-col gap-2 md:items-end">
           <div className="flex p-1 bg-slate-100 rounded-lg">
-            {mode === 'NGHIATINGOLD' && (
+            {mode === 'INVENTORY' && (
               <button 
                 onClick={() => setReportType('BUY')}
                 className={`px-4 py-1.5 text-sm font-medium rounded-md transition-all ${reportType === 'BUY' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500'}`}
@@ -325,7 +325,7 @@ export default function Reports({ mode }: ReportsProps) {
             >
               {mode === 'REVENUE' ? 'Doanh thu' : 'Báo cáo Bán'}
             </button>
-            {mode === 'NGHIATINGOLD' && (
+            {mode === 'INVENTORY' && (
               <button 
                 onClick={() => setReportType('STOCK')}
                 className={`px-4 py-1.5 text-sm font-medium rounded-md transition-all ${reportType === 'STOCK' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500'}`}
@@ -622,7 +622,7 @@ export default function Reports({ mode }: ReportsProps) {
                             <p>- Chế độ xem: {mode}</p>
                             <p>- Loại báo cáo: {reportType}</p>
                             <p>- Tổng số giao dịch trong HT: {debugStats.totalCount}</p>
-                            <p>- Giao dịch thuộc {mode}: {mode === 'REVENUE' ? debugStats.revCount : debugStats.pnjCount}</p>
+                            <p>- Giao dịch thuộc {mode}: {mode === 'REVENUE' ? debugStats.revCount : debugStats.invCount}</p>
                             <p>- Tháng đang chọn: {selectedMonth === 'ALL' ? 'Tất cả' : selectedMonth + 1}/{selectedYear}</p>
                             <p>- Dữ liệu phân bố theo tháng: {JSON.stringify(Object.fromEntries(debugStats.dateCounts))}</p>
                             {debugStats.revCount > 0 && mode === 'REVENUE' && (

@@ -12,7 +12,7 @@ import { formatCurrency, formatQuantity } from '../lib/utils';
 
 export default function Layout() {
   const { user, logout, products, bankStatements } = useInventory();
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'rev_import' | 'rev_report' | 'inv_nghiatingold_import' | 'inv_nghiatingold_report' | 'inv_other' | 'bank' | 'system'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'rev_import' | 'rev_report' | 'inv_import' | 'inv_report' | 'inv_other' | 'bank' | 'system'>('dashboard');
   const [isSidebarOpen, setSidebarOpen] = useState(false);
   const [isRevenueMenuOpen, setRevenueMenuOpen] = useState(true);
   const [isInventoryMenuOpen, setInventoryMenuOpen] = useState(true);
@@ -59,10 +59,10 @@ export default function Layout() {
         return <ImportExport mode="REVENUE" />;
       case 'rev_report':
         return <Reports mode="REVENUE" />;
-      case 'inv_nghiatingold_import':
-        return <ImportExport mode="NGHIATINGOLD" />;
-      case 'inv_nghiatingold_report':
-        return <Reports mode="NGHIATINGOLD" />;
+      case 'inv_import':
+        return <ImportExport mode="INVENTORY" />;
+      case 'inv_report':
+        return <Reports mode="INVENTORY" />;
       case 'inv_other':
         return (
           <div className="flex flex-col items-center justify-center h-96 text-slate-400">
@@ -223,7 +223,7 @@ export default function Layout() {
               <button
                 onClick={() => setInventoryMenuOpen(!isInventoryMenuOpen)}
                 className={`w-full flex items-center justify-between px-4 py-3 rounded-xl transition-all ${
-                  (activeTab === 'inv_nghiatingold_import' || activeTab === 'inv_nghiatingold_report' || activeTab === 'inv_other')
+                  (activeTab === 'inv_import' || activeTab === 'inv_report' || activeTab === 'inv_other')
                   ? 'text-blue-600 font-semibold' 
                   : 'text-slate-500 hover:bg-slate-50 hover:text-slate-700'
                 }`}
@@ -244,9 +244,9 @@ export default function Layout() {
                     className="overflow-hidden pl-4"
                   >
                     <button
-                      onClick={() => handleTabChange('inv_nghiatingold_import')}
+                      onClick={() => handleTabChange('inv_import')}
                       className={`w-full flex items-center gap-3 px-4 py-2 rounded-xl transition-all text-sm ${
-                        activeTab === 'inv_nghiatingold_import' 
+                        activeTab === 'inv_import' 
                         ? 'text-blue-600 bg-blue-50 font-medium' 
                         : 'text-slate-500 hover:text-slate-700'
                       }`}
@@ -255,9 +255,9 @@ export default function Layout() {
                       Import dữ liệu
                     </button>
                     <button
-                      onClick={() => handleTabChange('inv_nghiatingold_report')}
+                      onClick={() => handleTabChange('inv_report')}
                       className={`w-full flex items-center gap-3 px-4 py-2 rounded-xl transition-all text-sm ${
-                        activeTab === 'inv_nghiatingold_report' 
+                        activeTab === 'inv_report' 
                         ? 'text-blue-600 bg-blue-50 font-medium' 
                         : 'text-slate-500 hover:text-slate-700'
                       }`}

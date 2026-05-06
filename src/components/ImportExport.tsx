@@ -8,7 +8,7 @@ import { Transaction, TransactionSource } from '../types';
 import { extractInvoiceFromPdf, convertExtractedToTransactions } from '../services/geminiService';
 
 interface ImportExportProps {
-  mode: 'REVENUE' | 'NGHIATINGOLD';
+  mode: 'REVENUE' | 'INVENTORY';
 }
 
 const parseVnNumber = (val: string | number | undefined, isQuantity: boolean = false): number => {
@@ -111,7 +111,7 @@ export default function ImportExport({ mode }: ImportExportProps) {
 
     const isExcel = file.name.endsWith('.xlsx') || file.name.endsWith('.xls');
     
-    if (isExcel && mode === 'NGHIATINGOLD') {
+    if (isExcel && mode === 'INVENTORY') {
        setLogs([{ msg: 'Dữ liệu tồn kho hiện tại chỉ hỗ trợ file CSV hoặc PDF AI.', type: 'error' }]);
        return;
     }
@@ -162,7 +162,7 @@ export default function ImportExport({ mode }: ImportExportProps) {
     }
 
     if (isDetailedReport) {
-      if (mode === 'NGHIATINGOLD') {
+      if (mode === 'INVENTORY') {
          setLogs(prev => [...prev, { msg: 'File này là Báo cáo chi tiết (Doanh thu). Vui lòng chuyển sang menu Doanh thu để nhập.', type: 'error' }]);
          return;
       }
@@ -295,7 +295,7 @@ export default function ImportExport({ mode }: ImportExportProps) {
       (t.invoiceDate === formattedInvoiceDate || t.date === formattedInvoiceDate) && 
       t.customer === customerName &&
       t.type === importType &&
-      t.source === 'NGHIATINGOLD'
+      t.source === 'INVENTORY'
     );
 
     if (isDuplicate) {
@@ -364,7 +364,7 @@ export default function ImportExport({ mode }: ImportExportProps) {
 
       items.push({
         type: importType,
-        source: 'NGHIATINGOLD',
+        source: 'INVENTORY',
         date: importDate,
         invoiceDate: formattedInvoiceDate,
         itemCode,
@@ -405,7 +405,7 @@ export default function ImportExport({ mode }: ImportExportProps) {
       const extracted = await extractInvoiceFromPdf(base64);
       const newTransactions = convertExtractedToTransactions(extracted, importType).map(t => ({
           ...t,
-          source: 'NGHIATINGOLD' as TransactionSource
+          source: 'INVENTORY' as TransactionSource
       }));
 
       const isDuplicate = transactions.some(t => 
@@ -413,7 +413,7 @@ export default function ImportExport({ mode }: ImportExportProps) {
         t.invoiceDate === extracted.invoiceDate && 
         t.customer === extracted.customer &&
         t.type === importType &&
-        t.source === 'NGHIATINGOLD'
+        t.source === 'INVENTORY'
       );
 
       if (isDuplicate) {

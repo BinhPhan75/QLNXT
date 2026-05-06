@@ -8,7 +8,7 @@ export default function SystemSettings() {
   const { calculateMonthlyCOGS, resetData, products, transactions, setManualOpeningBalance, manualOpeningBalances, lockMonth, unlockMonth, closedMonths } = useInventory();
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth());
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
-  const [calcCategory, setCalcCategory] = useState<'ALL' | 'NGHIATINGOLD' | 'REVENUE'>('NGHIATINGOLD');
+  const [calcCategory, setCalcCategory] = useState<'ALL' | 'INVENTORY' | 'REVENUE'>('INVENTORY');
   const [showOBModal, setShowOBModal] = useState(false);
 
   // Manual OB Form State
@@ -147,7 +147,7 @@ export default function SystemSettings() {
                   onChange={(e) => setCalcCategory(e.target.value as any)}
                   className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500/20 font-bold"
                 >
-                  <option value="NGHIATINGOLD">Quản lý hàng hóa (Vàng 970, 9999, ...)</option>
+                  <option value="INVENTORY">Quản lý hàng hóa (Vàng 970, 9999, ...)</option>
                   <option value="REVENUE">Dữ liệu Doanh thu & Tiền công</option>
                   <option value="ALL">Tất cả (Hàng hóa + Khác)</option>
                 </select>

@@ -49,8 +49,7 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         }
 
         const mappedTxs = txRes.map((t: any) => {
-          let source = (t.source || 'NGHIATINGOLD') as TransactionSource;
-          if (source === 'PNJ' as any) source = 'NGHIATINGOLD';
+          let source = (t.source === 'REVENUE' ? 'REVENUE' : 'INVENTORY') as TransactionSource;
           
           return {
             ...t,
@@ -171,10 +170,10 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     }
 
     // Determine target table from the transactions being deleted
-    const source = txToDelete[0].source || 'NGHIATINGOLD';
+    const source = txToDelete[0].source || 'INVENTORY';
 
     try {
-      const res = await fetch(`/api/invoices/${invNum}?source=${source}`, { method: 'DELETE' });
+      const res = await fetch(`/api/invoices/${invNum}?source=${source === 'REVENUE' ? 'REVENUE' : 'NGHIATINGOLD'}`, { method: 'DELETE' });
       if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
       
       const remainingTxs = transactions.filter(t => t.invoiceNumber !== invNum);
@@ -211,8 +210,7 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
   const importTransactions = async (newItems: Omit<Transaction, 'id'>[]) => {
     const keyedItems = newItems.map(item => {
-      let source = (item.source || 'NGHIATINGOLD') as TransactionSource;
-      if (source === 'PNJ' as any) source = 'NGHIATINGOLD';
+      let source = (item.source === 'REVENUE' ? 'REVENUE' : 'INVENTORY') as TransactionSource;
       
       return { 
         ...item, 
@@ -353,7 +351,6 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         dateInfo: getYearMonth(tx.invoiceDate || tx.date)
       }));
 
-      // Diagnostic info
       const allSourceTxs = txsWithDates.filter(tx => !sourceFilter || tx.source === sourceFilter);
       const targetMonthTxs = allSourceTxs.filter(tx => 
         tx.dateInfo.month === targetMonth && tx.dateInfo.year === targetYear
@@ -363,9 +360,10 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         const totalInCategory = allSourceTxs.length;
         const totalInMonthAnyCategory = txsWithDates.filter(tx => tx.dateInfo.month === targetMonth && tx.dateInfo.year === targetYear).length;
         
-        let detail = `Tháng ${targetMonth + 1}/${targetYear} không có dữ liệu giao dịch${sourceFilter ? ` loại ${sourceFilter}` : ''}.`;
+        let label = sourceFilter === 'REVENUE' ? 'Doanh thu & Tiền công' : 'Quản lý hàng hóa';
+        let detail = `Tháng ${targetMonth + 1}/${targetYear} không có dữ liệu giao dịch ${label}.`;
         if (totalInMonthAnyCategory > 0 && totalInCategory > 0) {
-          detail += `\n(Tìm thấy ${totalInMonthAnyCategory} giao dịch trong tháng này nhưng thuộc loại khác. Có tổng ${totalInCategory} giao dịch loại ${sourceFilter} ở các tháng khác)`;
+          detail += `\n(Tìm thấy ${totalInMonthAnyCategory} giao dịch trong tháng này nhưng thuộc loại khác. Có tổng ${totalInCategory} giao dịch ${label} ở các tháng khác)`;
         } else if (totalInMonthAnyCategory === 0) {
           detail += `\n(Không tìm thấy bất kỳ giao dịch nào trong tháng ${targetMonth + 1}/${targetYear} trên toàn hệ thống)`;
         }
@@ -489,7 +487,8 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       if (!res.ok) throw new Error(`Server returned ${res.status}`);
 
       setTransactions(newTransactions);
-      let message = `Đã tính toán và gán giá vốn cho ${itemsToUpdate.length} dòng hàng trong tháng ${targetMonth + 1}/${targetYear}${sourceFilter ? ` (loại ${sourceFilter})` : ''}.`;
+      let label = sourceFilter === 'REVENUE' ? 'Doanh thu & Tiền công' : 'Quản lý hàng hóa';
+      let message = `Đã tính toán và gán giá vốn cho ${itemsToUpdate.length} dòng hàng trong tháng ${targetMonth + 1}/${targetYear}${sourceFilter ? ` (${label})` : ''}.`;
       if (warnNoPurchases) {
         message += " Lưu ý: Một số mặt hàng không có giao dịch Nhập trong tháng, hệ thống đã áp dụng đơn giá từ kỳ trước.";
       }
