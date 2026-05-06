@@ -729,6 +729,53 @@ export default function Reports({ mode }: ReportsProps) {
                     })
                   )}
                 </tbody>
+                {filteredDataDisplay.length > 0 && (
+                  <tfoot className="border-t-2 border-slate-200">
+                    {mode === 'REVENUE' ? (
+                      <tr className="bg-slate-50 font-bold text-[11px] text-slate-900 border-t border-slate-300">
+                        <td colSpan={6} className="px-2 py-4 text-right uppercase text-slate-500">Tổng cộng:</td>
+                        <td className="px-2 py-4 text-center">
+                          {filteredDataDisplay.reduce((sum: number, r: any) => sum + (Number(r.quantity) || 0), 0).toFixed(1)}
+                        </td>
+                        <td className="px-2 py-4"></td>
+                        <td className="px-2 py-4 text-right text-slate-900 whitespace-nowrap">
+                          {formatCurrency(filteredDataDisplay.reduce((sum: number, r: any) => sum + (Number(r.itemTotal) || 0), 0))}
+                        </td>
+                        <td className="px-2 py-4 text-right text-green-600 whitespace-nowrap">
+                          {formatCurrency(filteredDataDisplay.reduce((sum: number, r: any) => sum + (Number(r.laborTotal) || 0), 0))}
+                        </td>
+                        <td className="px-2 py-4 text-right text-red-500 whitespace-nowrap">
+                          {formatCurrency(filteredDataDisplay.reduce((sum: number, r: any) => sum + (Number(r.discountTotal) || 0), 0))}
+                        </td>
+                        <td className="px-2 py-4 text-right font-bold text-blue-700 text-sm whitespace-nowrap">
+                          {formatCurrency(filteredDataDisplay.reduce((sum: number, r: any) => sum + (Number(r.finalTotal) || 0), 0))}
+                        </td>
+                      </tr>
+                    ) : (
+                      <tr className="bg-slate-50 font-bold text-[11px] text-slate-900 border-t border-slate-300">
+                        <td colSpan={5} className="px-2 py-4 text-right uppercase text-slate-500">Tổng cộng:</td>
+                        <td></td>
+                        <td className="px-2 py-4 text-center">
+                          {filteredDataDisplay.reduce((sum: number, r: any) => sum + (Number(r.quantity) || 0), 0).toFixed(1)}
+                        </td>
+                        <td className="px-2 py-4"></td>
+                        <td className="px-2 py-4 text-right font-bold whitespace-nowrap">
+                          {formatCurrency(filteredDataDisplay.reduce((sum: number, r: any) => sum + (Number(r.total) || 0), 0))}
+                        </td>
+                        {reportType === 'SELL' && (
+                          <>
+                            <td className="px-2 py-4 text-right text-red-500 whitespace-nowrap">
+                              {formatCurrency(filteredDataDisplay.reduce((sum: number, r: any) => sum + (Number(r.cogs) || 0), 0))}
+                            </td>
+                            <td className="px-2 py-4 text-right text-green-600 whitespace-nowrap">
+                              {formatCurrency(filteredDataDisplay.reduce((sum: number, r: any) => sum + ((Number(r.total) || 0) - (Number(r.cogs) || 0)), 0))}
+                            </td>
+                          </>
+                        )}
+                      </tr>
+                    )}
+                  </tfoot>
+                )}
               </>
             ) : (
               <>
