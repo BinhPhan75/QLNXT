@@ -13,6 +13,13 @@ export default function BankStatements() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [filterType, setFilterType] = useState<BankClassification | 'ALL'>('ALL');
   const [searchTerm, setSearchSearchTerm] = useState('');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+
+  const parseDate = (dateStr: string) => {
+    const [d, m, y] = dateStr.split('/').map(Number);
+    return new Date(y, m - 1, d).getTime();
+  };
 
   const handleExport = () => {
     const dataToExport = filteredData.map(item => ({
@@ -197,18 +204,30 @@ export default function BankStatements() {
       const matchesSearch = item.content.toLowerCase().includes(searchTerm.toLowerCase()) ||
                           item.customerName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
                           item.itemInfo?.toLowerCase().includes(searchTerm.toLowerCase());
-      return matchesFilter && matchesSearch;
+      
+      let matchesDate = true;
+      if (startDate || endDate) {
+        const itemTime = parseDate(item.transactionDate);
+        if (startDate) {
+          const start = new Date(startDate).setHours(0,0,0,0);
+          if (itemTime < start) matchesDate = false;
+        }
+        if (endDate) {
+          const end = new Date(endDate).setHours(23,59,59,999);
+          if (itemTime > end) matchesDate = false;
+        }
+      }
+
+      return matchesFilter && matchesSearch && matchesDate;
     });
 
     // Sort by date ascending (DD/MM/YYYY)
     return data.sort((a, b) => {
-      const [d1, m1, y1] = a.transactionDate.split('/').map(Number);
-      const [d2, m2, y2] = b.transactionDate.split('/').map(Number);
-      const dateA = new Date(y1, m1 - 1, d1).getTime();
-      const dateB = new Date(y2, m2 - 1, d2).getTime();
+      const dateA = parseDate(a.transactionDate);
+      const dateB = parseDate(b.transactionDate);
       return dateA - dateB;
     });
-  }, [bankStatements, filterType, searchTerm]);
+  }, [bankStatements, filterType, searchTerm, startDate, endDate]);
 
   const summary = useMemo(() => {
     const deb = filteredData.reduce((sum, item) => sum + item.debit, 0);
@@ -319,6 +338,23 @@ export default function BankStatements() {
                 <option value="FEE">Phí NH</option>
                 <option value="OTHER">Khác</option>
               </select>
+            </div>
+
+            <div className="flex items-center gap-2 text-sm text-slate-600 border border-slate-200 rounded-lg px-3 py-2 bg-white">
+              <span className="text-[10px] uppercase font-bold text-slate-400">Từ</span>
+              <input 
+                type="date"
+                className="focus:outline-none bg-transparent"
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+              />
+              <span className="text-[10px] uppercase font-bold text-slate-400">Đến</span>
+              <input 
+                type="date"
+                className="focus:outline-none bg-transparent"
+                value={endDate}
+                onChange={(e) => setEndDate(e.target.value)}
+              />
             </div>
           </div>
           

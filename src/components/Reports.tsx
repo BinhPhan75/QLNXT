@@ -22,6 +22,18 @@ export default function Reports({ mode }: ReportsProps) {
   const [customerFilter, setCustomerFilter] = useState('');
   const [selectedMonth, setSelectedMonth] = useState<number | 'ALL'>(new Date().getMonth());
   const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear());
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+
+  const parseItemDate = (dateStr: string) => {
+    // Expected formats: YYYY-MM-DD or DD/MM/YYYY
+    if (!dateStr) return 0;
+    if (dateStr.includes('/')) {
+      const [d, m, y] = dateStr.split('/').map(Number);
+      return new Date(y, m - 1, d).getTime();
+    }
+    return new Date(dateStr).getTime();
+  };
   
   const [expandedRevenueKey, setExpandedRevenueKey] = useState<string | null>(null);
   const [expandedInvoice, setExpandedInvoice] = useState<string | null>(null);
@@ -32,8 +44,18 @@ export default function Reports({ mode }: ReportsProps) {
       const isType = reportType === 'BUY' ? tx.type === 'IN' : tx.type === 'OUT';
       if (reportType !== 'STOCK' && !isType) return false;
 
-      // Date filtering based on Invoice Date as accounting anchor
-      if (selectedMonth !== 'ALL') {
+      // Date filtering
+      if (startDate || endDate) {
+        const itemTime = parseItemDate(tx.invoiceDate || tx.date);
+        if (startDate) {
+          const start = new Date(startDate).setHours(0,0,0,0);
+          if (itemTime < start) return false;
+        }
+        if (endDate) {
+          const end = new Date(endDate).setHours(23,59,59,999);
+          if (itemTime > end) return false;
+        }
+      } else if (selectedMonth !== 'ALL') {
         const { month, year } = getYearMonth(tx.invoiceDate || tx.date);
         if (month !== selectedMonth || year !== selectedYear) return false;
       }
@@ -46,7 +68,7 @@ export default function Reports({ mode }: ReportsProps) {
 
       return matchesSearch && matchesCustomer;
     });
-  }, [sourceFilteredTransactions, reportType, searchTerm, customerFilter, selectedMonth, selectedYear]);
+  }, [sourceFilteredTransactions, reportType, searchTerm, customerFilter, selectedMonth, selectedYear, startDate, endDate]);
 
   // Specialized Revenue Grouping
   const revenueRows = useMemo(() => {
@@ -140,7 +162,11 @@ export default function Reports({ mode }: ReportsProps) {
 
   const handleExport = () => {
     let exportData: any[] = [];
-    let filename = `Bao_Cao_${mode}_${reportType}_${selectedMonth !== 'ALL' ? (selectedMonth + 1) : 'Ca_nam'}_${selectedYear}.xlsx`;
+    let dateRangeStr = selectedMonth !== 'ALL' ? (selectedMonth + 1).toString() : 'Ca_nam';
+    if (startDate || endDate) {
+      dateRangeStr = `${startDate || 'Start'}_to_${endDate || 'End'}`;
+    }
+    let filename = `Bao_Cao_${mode}_${reportType}_${dateRangeStr}_${selectedYear}.xlsx`;
 
     if (mode === 'REVENUE' && reportType === 'SELL' && viewMode === 'TRANSACTION') {
       // Export revenue-grouped data
@@ -354,11 +380,15 @@ export default function Reports({ mode }: ReportsProps) {
 
       <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
         <div className="p-4 border-b border-slate-100 flex flex-col md:flex-row gap-4">
-          <div className="flex gap-2 min-w-fit">
+          <div className="flex flex-wrap gap-2 min-w-fit items-center">
             <select 
               className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-blue-500/20 text-sm font-medium"
               value={selectedMonth}
-              onChange={(e) => setSelectedMonth(e.target.value === 'ALL' ? 'ALL' : parseInt(e.target.value))}
+              onChange={(e) => {
+                setSelectedMonth(e.target.value === 'ALL' ? 'ALL' : parseInt(e.target.value));
+                setStartDate('');
+                setEndDate('');
+              }}
             >
               <option value="ALL">Tất cả tháng</option>
               {Array.from({ length: 12 }, (_, i) => (
@@ -368,12 +398,41 @@ export default function Reports({ mode }: ReportsProps) {
             <select 
               className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-blue-500/20 text-sm font-medium"
               value={selectedYear}
-              onChange={(e) => setSelectedYear(parseInt(e.target.value))}
+              onChange={(e) => {
+                setSelectedYear(parseInt(e.target.value));
+                setStartDate('');
+                setEndDate('');
+              }}
             >
               {[2024, 2025, 2026].map(y => (
                 <option key={y} value={y}>Năm {y}</option>
               ))}
             </select>
+
+            <div className="h-6 w-px bg-slate-200 mx-1 hidden md:block"></div>
+
+            <div className="flex items-center gap-2 text-sm text-slate-600 border border-slate-200 rounded-lg px-3 py-1.5 bg-slate-50">
+              <span className="text-[10px] uppercase font-bold text-slate-400">Từ</span>
+              <input 
+                type="date"
+                className="focus:outline-none bg-transparent"
+                value={startDate}
+                onChange={(e) => {
+                  setStartDate(e.target.value);
+                  setSelectedMonth('ALL');
+                }}
+              />
+              <span className="text-[10px] uppercase font-bold text-slate-400">Đến</span>
+              <input 
+                type="date"
+                className="focus:outline-none bg-transparent"
+                value={endDate}
+                onChange={(e) => {
+                  setEndDate(e.target.value);
+                  setSelectedMonth('ALL');
+                }}
+              />
+            </div>
           </div>
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
