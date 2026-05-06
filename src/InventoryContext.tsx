@@ -144,7 +144,8 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       return;
     }
 
-    const source = txToDelete[0].source || 'PNJ'; // Default to PNJ if undefined
+    // Determine target table from the transactions being deleted
+    const source = txToDelete[0].source || 'PNJ';
 
     try {
       const res = await fetch(`/api/invoices/${invNum}?source=${source}`, { method: 'DELETE' });

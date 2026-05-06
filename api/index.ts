@@ -28,39 +28,43 @@ async function initDb() {
   try {
     console.log("[Database] Initializing tables and checking columns...");
     
-    // Create primary transactions table
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS transactions (
-        id TEXT PRIMARY KEY,
-        type TEXT,
-        date TEXT
-      );
-    `);
+    // Create source-specific tables
+    const tables = ['pnj_transactions', 'revenue_transactions'];
+    
+    for (const table of tables) {
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS ${table} (
+          id TEXT PRIMARY KEY,
+          type TEXT,
+          date TEXT
+        );
+      `);
 
-    // List of all expected columns for a unified schema
-    const columns = [
-      ['item_code', 'TEXT'],
-      ['item_name', 'TEXT'],
-      ['unit', 'TEXT'],
-      ['quantity', 'FLOAT'],
-      ['price', 'FLOAT'],
-      ['discount', 'FLOAT'],
-      ['total', 'FLOAT'],
-      ['invoice_number', 'TEXT'],
-      ['invoice_date', 'TEXT'],
-      ['customer', 'TEXT'],
-      ['customer_card', 'TEXT'],
-      ['address', 'TEXT'],
-      ['note', 'TEXT'],
-      ['cogs', 'FLOAT'],
-      ['source', 'TEXT']
-    ];
+      // List of all expected columns for consistent schema
+      const columns = [
+        ['item_code', 'TEXT'],
+        ['item_name', 'TEXT'],
+        ['unit', 'TEXT'],
+        ['quantity', 'FLOAT'],
+        ['price', 'FLOAT'],
+        ['discount', 'FLOAT'],
+        ['total', 'FLOAT'],
+        ['invoice_number', 'TEXT'],
+        ['invoice_date', 'TEXT'],
+        ['customer', 'TEXT'],
+        ['customer_card', 'TEXT'],
+        ['address', 'TEXT'],
+        ['note', 'TEXT'],
+        ['cogs', 'FLOAT'],
+        ['source', 'TEXT']
+      ];
 
-    for (const [col, type] of columns) {
-      try {
-        await client.query(`ALTER TABLE transactions ADD COLUMN IF NOT EXISTS ${col} ${type}`);
-      } catch (err) {
-        // Ignore errors
+      for (const [col, type] of columns) {
+        try {
+          await client.query(`ALTER TABLE ${table} ADD COLUMN IF NOT EXISTS ${col} ${type}`);
+        } catch (err) {
+          // Ignore errors
+        }
       }
     }
 
@@ -82,6 +86,12 @@ async function initDb() {
     client.release();
   }
 }
+
+// Helper to get table name from source
+const getTableName = (source: string | undefined): string => {
+  if (source === 'REVENUE') return 'revenue_transactions';
+  return 'pnj_transactions';
+};
 
 // Run init in background
 initDb();
@@ -106,18 +116,20 @@ router.get("/db-status", async (req, res) => {
   try {
     const timeResult = await client.query('SELECT NOW()');
     
-    const cols = await client.query(`
-      SELECT column_name 
-      FROM information_schema.columns 
-      WHERE table_name = 'transactions'
-    `);
+    const tableInfo = await Promise.all(['pnj_transactions', 'revenue_transactions'].map(async (table) => {
+      const cols = await client.query(`
+        SELECT column_name 
+        FROM information_schema.columns 
+        WHERE table_name = '${table}'
+      `);
+      return { table, columns: cols.rows.map(r => r.column_name) };
+    }));
 
     client.release();
     res.json({ 
       status: "connected", 
       time: timeResult.rows[0].now,
-      table: 'transactions',
-      columns: cols.rows.map(r => r.column_name)
+      tables: tableInfo
     });
   } catch (err: any) {
     console.error("[API] DB Status Check Error:", err.message);
@@ -129,11 +141,18 @@ router.get("/db-status", async (req, res) => {
   }
 });
 
-// 1. Get all transactions
+// 1. Get all transactions from both tables
 router.get("/transactions", async (req, res) => {
   try {
-    const result = await pool.query('SELECT * FROM transactions ORDER BY date DESC');
-    res.json(result.rows);
+    const pnj = await pool.query('SELECT * FROM pnj_transactions ORDER BY date DESC');
+    const rev = await pool.query('SELECT * FROM revenue_transactions ORDER BY date DESC');
+    
+    const combined = [
+      ...pnj.rows.map(r => ({ ...r, source: 'PNJ' })),
+      ...rev.rows.map(r => ({ ...r, source: 'REVENUE' }))
+    ];
+    
+    res.json(combined);
   } catch (err: any) {
     console.error("[API] Get Transactions Error:", err.message);
     res.status(500).json({ error: "Failed to fetch transactions" });
@@ -143,19 +162,17 @@ router.get("/transactions", async (req, res) => {
 // 2. Bulk Transactions
 router.post("/transactions/bulk", async (req, res) => {
   const { items } = req.body;
-  if (!Array.isArray(items)) {
-    console.warn("[API] Bulk update failed: items is not an array");
-    return res.status(400).json({ error: "Invalid data: items must be an array" });
+  if (!Array.isArray(items) || items.length === 0) {
+    return res.json({ success: true, count: 0 });
   }
-  
-  console.log(`[API] Bulk inserting/updating ${items.length} transactions...`);
   
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
     for (const item of items) {
+      const tableName = getTableName(item.source);
       await client.query(
-        `INSERT INTO transactions (id, type, date, item_code, item_name, unit, quantity, price, discount, total, invoice_number, invoice_date, customer, customer_card, address, note, cogs, source)
+        `INSERT INTO ${tableName} (id, type, date, item_code, item_name, unit, quantity, price, discount, total, invoice_number, invoice_date, customer, customer_card, address, note, cogs, source)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
          ON CONFLICT (id) DO UPDATE SET
            type = EXCLUDED.type, date = EXCLUDED.date, item_code = EXCLUDED.item_code, item_name = EXCLUDED.item_name,
@@ -186,7 +203,6 @@ router.post("/transactions/bulk", async (req, res) => {
       );
     }
     await client.query('COMMIT');
-    console.log("[API] Bulk write successful.");
     res.json({ success: true, count: items.length });
   } catch (err: any) {
     await client.query('ROLLBACK');
@@ -199,8 +215,10 @@ router.post("/transactions/bulk", async (req, res) => {
 
 // 3. Delete Single
 router.delete("/transactions/:id", async (req, res) => {
+  const { source } = req.query;
+  const tableName = getTableName(source as string);
   try {
-    await pool.query('DELETE FROM transactions WHERE id = $1', [req.params.id]);
+    await pool.query(`DELETE FROM ${tableName} WHERE id = $1`, [req.params.id]);
     res.json({ success: true });
   } catch (err: any) {
     console.error("[API] Delete Transaction Error:", err.message);
@@ -210,8 +228,10 @@ router.delete("/transactions/:id", async (req, res) => {
 
 // 4. Delete Invoice
 router.delete("/invoices/:number", async (req, res) => {
+  const { source } = req.query;
+  const tableName = getTableName(source as string);
   try {
-    await pool.query('DELETE FROM transactions WHERE invoice_number = $1', [req.params.number]);
+    await pool.query(`DELETE FROM ${tableName} WHERE invoice_number = $1`, [req.params.number]);
     res.json({ success: true });
   } catch (err: any) {
     console.error("[API] Delete Invoice Error:", err.message);
@@ -250,7 +270,7 @@ router.post("/opening-balances", async (req, res) => {
 // 7. Reset
 router.post("/reset", async (req, res) => {
   try {
-    await pool.query('TRUNCATE transactions, opening_balances');
+    await pool.query('TRUNCATE pnj_transactions, revenue_transactions, opening_balances');
     res.json({ success: true });
   } catch (err: any) {
     console.error("[API] Reset Error:", err.message);
@@ -258,18 +278,61 @@ router.post("/reset", async (req, res) => {
   }
 });
 
-// 8. Fix Metadata (Migration)
+// 8. Fix Metadata (Migration to new tables)
 router.post("/migrate-source", async (req, res) => {
   const { from, to } = req.body;
+  const client = await pool.connect();
   try {
-    const result = await pool.query(
-      'UPDATE transactions SET source = $1 WHERE source = $2 OR source IS NULL',
-      [to, from]
-    );
-    res.json({ success: true, count: result.rowCount });
+    await client.query('BEGIN');
+    
+    // Check if legacy 'transactions' table exists
+    const checkLegacy = await client.query(`
+      SELECT EXISTS (
+        SELECT FROM information_schema.tables 
+        WHERE table_name = 'transactions'
+      );
+    `);
+
+    if (checkLegacy.rows[0].exists) {
+      // Migrate from legacy table to specific tables
+      const legacyData = await client.query('SELECT * FROM transactions');
+      for (const row of legacyData.rows) {
+        const source = row.source || (row.id.startsWith('rev') ? 'REVENUE' : 'PNJ');
+        const targetTable = getTableName(source);
+        
+        await client.query(
+          `INSERT INTO ${targetTable} (id, type, date, item_code, item_name, unit, quantity, price, discount, total, invoice_number, invoice_date, customer, customer_card, address, note, cogs, source)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
+           ON CONFLICT (id) DO NOTHING`,
+          [row.id, row.type, row.date, row.item_code, row.item_name, row.unit, row.quantity, row.price, row.discount, row.total, row.invoice_number, row.invoice_date, row.customer, row.customer_card, row.address, row.note, row.cogs, source]
+        );
+      }
+      // Optional: DROP TABLE transactions;
+    }
+
+    // Also support intra-table move if needed (though now we have separate tables)
+    // For now just migrate from PNJ table to REVENUE table if 'from' and 'to' are specified
+    if (from === 'PNJ' && to === 'REVENUE') {
+      const data = await client.query('SELECT * FROM pnj_transactions');
+      for (const row of data.rows) {
+        await client.query(
+          `INSERT INTO revenue_transactions (id, type, date, item_code, item_name, unit, quantity, price, discount, total, invoice_number, invoice_date, customer, customer_card, address, note, cogs, source)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
+           ON CONFLICT (id) DO NOTHING`,
+          [row.id, row.type, row.date, row.item_code, row.item_name, row.unit, row.quantity, row.price, row.discount, row.total, row.invoice_number, row.invoice_date, row.customer, row.customer_card, row.address, row.note, row.cogs, 'REVENUE']
+        );
+        await client.query('DELETE FROM pnj_transactions WHERE id = $1', [row.id]);
+      }
+    }
+
+    await client.query('COMMIT');
+    res.json({ success: true });
   } catch (err: any) {
+    await client.query('ROLLBACK');
     console.error("[API] Migration Error:", err.message);
     res.status(500).json({ error: "Failed to migrate" });
+  } finally {
+    client.release();
   }
 });
 
