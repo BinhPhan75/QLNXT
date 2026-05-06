@@ -302,6 +302,16 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   };
 
   const calculateMonthlyCOGS = async (targetMonth: number, targetYear: number, sourceFilter?: TransactionSource) => {
+    const ALLOWED_CATEGORIES = [
+      'VÀNG 970', 'VÀNG 97', 'VÀNG 9999', 'VÀNG 610', 
+      'BẠC MÓN', 'VÀNG TRANG SỨC', 'VÀNG KHÁC'
+    ];
+
+    const isAllowedItem = (name: string) => {
+      const upperName = name.toUpperCase();
+      return ALLOWED_CATEGORIES.some(cat => upperName.includes(cat));
+    };
+
     try {
       const txsWithDates = transactions.map(tx => ({
         ...tx,
@@ -310,7 +320,8 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
       const targetMonthTxs = txsWithDates.filter(tx => 
         tx.dateInfo.month === targetMonth && tx.dateInfo.year === targetYear &&
-        (!sourceFilter || tx.source === sourceFilter)
+        (!sourceFilter || tx.source === sourceFilter) &&
+        isAllowedItem(tx.itemName)
       );
 
       if (targetMonthTxs.length === 0) {
