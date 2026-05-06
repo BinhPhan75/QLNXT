@@ -139,9 +139,17 @@ async function initDb() {
 
     // Ensure 'value' column exists (for older table versions)
     try {
-      await client.query(`ALTER TABLE opening_balances ADD COLUMN IF NOT EXISTS value FLOAT`);
+      const colCheck = await client.query(`
+        SELECT column_name 
+        FROM information_schema.columns 
+        WHERE table_name = 'opening_balances' AND column_name = 'value'
+      `);
+      if (colCheck.rowCount === 0) {
+        console.log("[Database] Adding missing 'value' column to opening_balances...");
+        await client.query(`ALTER TABLE opening_balances ADD COLUMN value FLOAT DEFAULT 0`);
+      }
     } catch (err) {
-      // Ignore
+      console.error("[Database] Failed to add 'value' column:", err);
     }
 
     // Ensure Primary Key

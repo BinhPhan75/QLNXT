@@ -425,7 +425,7 @@ export default function ImportExport({ mode }: ImportExportProps) {
     <div className="max-w-4xl mx-auto space-y-6">
       <header className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">{isRevenue ? 'Quản lý Doanh thu & Tiền công' : 'Quản lý Hàng hóa (Vàng, Bạc...)'}</h1>
+          <h1 className="text-2xl font-bold text-slate-900">{isRevenue ? 'Quản lý Doanh thu & Tiền công' : 'Quản lý hàng hóa'}</h1>
           <p className="text-slate-500">
             {isRevenue 
                ? 'Import dữ liệu từ Báo cáo bán hàng chi tiết (.xlsx)' 
