@@ -115,7 +115,7 @@ export default function Layout() {
           <div className="flex items-center justify-between mb-10">
             <div className="flex items-center gap-3">
               <img 
-                src="https://raw.githubusercontent.com/BinhPhan75/nghiatingold/refs/heads/main/icon.png?token=GHSAT0AAAAAAD25RX776RC6POKEGUFVRBRE2P27VAQ" 
+                src="https://raw.githubusercontent.com/BinhPhan75/nghiatingold/refs/heads/main/icon.png?token=GHSAT0AAAAAAD25RX77ORG34E5M34ZDNDQO2P3AJ5Q" 
                 alt="NGHIATINGOLD Logo" 
                 className="w-10 h-10 object-contain rounded-lg"
                 referrerPolicy="no-referrer"
