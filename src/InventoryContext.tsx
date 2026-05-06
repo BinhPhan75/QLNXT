@@ -99,10 +99,9 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
           const code = item.itemCode.trim().toUpperCase();
           const name = item.itemName.trim();
           
-          // Skip brand name or placeholders that aren't actual products
+          // Loại bỏ dòng chứa tên thương hiệu
           if (name.toUpperCase() === 'NGHIATINGOLD' || code === 'NGHIATINGOLD') return;
 
-          // If code is missing, use name as the key
           const key = (code && code !== 'KHONG-MA') ? code : `NAME_${name.toLowerCase()}`;
           
           const existing = productMap.get(key);
@@ -127,22 +126,16 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
     fetchData();
 
-    // Persistent User and Closed Months can stay in localStorage for now
     const savedClosed = localStorage.getItem('inv_closed_months');
     const savedUser = localStorage.getItem('inv_user');
-
     if (savedClosed) setClosedMonths(JSON.parse(savedClosed));
     if (savedUser) setUser(JSON.parse(savedUser));
   }, []);
 
-  // Save meta to LocalStorage
   useEffect(() => {
     localStorage.setItem('inv_closed_months', JSON.stringify(closedMonths));
-    if (user) {
-      localStorage.setItem('inv_user', JSON.stringify(user));
-    } else {
-      localStorage.removeItem('inv_user');
-    }
+    if (user) localStorage.setItem('inv_user', JSON.stringify(user));
+    else localStorage.removeItem('inv_user');
   }, [user, closedMonths]);
 
   const login = (username: string, pass: string) => {
@@ -153,9 +146,7 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     return false;
   };
 
-  const logout = () => {
-    setUser(null);
-  };
+  const logout = () => setUser(null);
 
   const isMonthClosed = (txDate: string | Date, invoiceDate?: string) => {
     const { month, year } = getYearMonth(invoiceDate || txDate);
@@ -173,23 +164,22 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       return;
     }
 
-    // Determine target table from the transactions being deleted
     const source = txToDelete[0].source || 'INVENTORY';
-
     try {
+      // Logic backend vẫn nhận "NGHIATINGOLD" làm tên bảng cho hàng hóa
       const res = await fetch(`/api/invoices/${invNum}?source=${source === 'REVENUE' ? 'REVENUE' : 'NGHIATINGOLD'}`, { method: 'DELETE' });
       if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
       
       const remainingTxs = transactions.filter(t => t.invoiceNumber !== invNum);
       setTransactions(remainingTxs);
 
-      // Recalculate stock
       const productMap = new Map<string, Product>();
       remainingTxs.forEach(item => {
         const code = item.itemCode.trim().toUpperCase();
         const name = item.itemName.trim();
+        if (name.toUpperCase() === 'NGHIATINGOLD' || code === 'NGHIATINGOLD') return;
+
         const key = (code && code !== 'KHONG-MA') ? code : `NAME_${name.toLowerCase()}`;
-        
         const existing = productMap.get(key);
         if (existing) {
           if (item.type === 'IN') existing.currentStock += item.quantity;
@@ -213,16 +203,12 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   };
 
   const importTransactions = async (newItems: Omit<Transaction, 'id'>[]) => {
-    const keyedItems = newItems.map(item => {
-      let source = (item.source === 'REVENUE' ? 'REVENUE' : 'INVENTORY') as TransactionSource;
-      
-      return { 
-        ...item, 
-        source,
-        itemCode: item.itemCode.trim().toUpperCase(),
-        id: Math.random().toString(36).substr(2, 9) 
-      };
-    });
+    const keyedItems = newItems.map(item => ({ 
+      ...item, 
+      source: (item.source === 'REVENUE' ? 'REVENUE' : 'INVENTORY') as TransactionSource,
+      itemCode: item.itemCode.trim().toUpperCase(),
+      id: Math.random().toString(36).substr(2, 9) 
+    }));
     
     try {
       const res = await fetch('/api/transactions/bulk', {
@@ -236,13 +222,13 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       const updatedTransactions = [...transactions, ...keyedItems];
       setTransactions(updatedTransactions);
 
-      // Update products list
       const productMap = new Map<string, Product>();
       updatedTransactions.forEach(item => {
         const code = item.itemCode.trim().toUpperCase();
         const name = item.itemName.trim();
+        if (name.toUpperCase() === 'NGHIATINGOLD' || code === 'NGHIATINGOLD') return;
+
         const key = (code && code !== 'KHONG-MA') ? code : `NAME_${name.toLowerCase()}`;
-        
         const existing = productMap.get(key);
         if (existing) {
           if (item.type === 'IN') existing.currentStock += item.quantity;
@@ -260,98 +246,24 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       setProducts(Array.from(productMap.values()));
     } catch (err) {
       console.error(err);
-      alert("Lỗi khi lưu dữ liệu lên server. Vui lòng kiểm tra kết nối Database.");
+      alert("Lỗi khi lưu dữ liệu lên server.");
     }
-  };
-
-  const importBankStatements = async (newItems: Omit<BankStatement, 'id'>[]) => {
-    const keyedItems = newItems.map(item => ({ 
-      ...item, 
-      id: Math.random().toString(36).substr(2, 9) 
-    }));
-    
-    try {
-      const res = await fetch('/api/bank-statements/bulk', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ items: keyedItems })
-      });
-      
-      if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
-
-      setBankStatements(prev => [...prev, ...keyedItems]);
-    } catch (err) {
-      console.error(err);
-      alert("Lỗi khi lưu sao kê ngân hàng lên server.");
-    }
-  };
-
-  const setManualOpeningBalance = async (balance: OpeningBalance): Promise<{ success: boolean; message?: string }> => {
-    try {
-      const res = await fetch('/api/opening-balances', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          item_code: balance.itemCode,
-          month: balance.month,
-          year: balance.year,
-          quantity: balance.quantity,
-          value: balance.totalValue
-        })
-      });
-
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || `HTTP error! status: ${res.status}`);
-
-      setManualOpeningBalances(prev => {
-        const filtered = prev.filter(b => !(b.itemCode === balance.itemCode && b.month === balance.month && b.year === balance.year));
-        return [...filtered, balance];
-      });
-      return { success: true };
-    } catch (err: any) {
-      console.error(err);
-      return { success: false, message: err.message || "Lỗi khi lưu số dư đầu kỳ." };
-    }
-  };
-
-
-  const lockMonth = (month: number, year: number) => {
-    const key = `${month + 1}-${year}`;
-    if (!closedMonths.includes(key)) {
-      setClosedMonths([...closedMonths, key]);
-    }
-  };
-
-  const unlockMonth = (month: number, year: number) => {
-    const key = `${month + 1}-${year}`;
-    setClosedMonths(closedMonths.filter(m => m !== key));
   };
 
   const calculateMonthlyCOGS = async (targetMonth: number, targetYear: number, sourceFilter?: TransactionSource) => {
-    // 1. Build a name-to-code mapping to handle items missing codes in some transactions
     const nameToCodeMap: Record<string, string> = {};
     transactions.forEach(t => {
       if (t.itemName && t.itemCode && t.itemCode !== 'KHONG-MA') {
-        const normalizedName = t.itemName.trim().toLowerCase();
-        // Prefer the most frequent code if name has multiple? For now just take the first valid one
-        if (!nameToCodeMap[normalizedName]) {
-          nameToCodeMap[normalizedName] = t.itemCode;
-        }
+        nameToCodeMap[t.itemName.trim().toLowerCase()] = t.itemCode;
       }
     });
 
     const getItemKey = (t: any) => {
       const code = (t.itemCode || '').toString().trim().toUpperCase();
       const name = (t.itemName || '').toString().trim();
-      
-      // Filter out brand name placeholders
       if (name.toUpperCase() === 'NGHIATINGOLD' || code === 'NGHIATINGOLD') return 'UNKNOWN';
-
       if (code && code !== 'KHONG-MA') return code;
-      if (name) {
-        const normalizedName = name.toLowerCase();
-        return nameToCodeMap[normalizedName] || name;
-      }
+      if (name) return nameToCodeMap[name.toLowerCase()] || name;
       return 'UNKNOWN';
     };
 
@@ -361,47 +273,29 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         dateInfo: getYearMonth(tx.invoiceDate || tx.date)
       }));
 
-      // Define which source provides the "Source of Truth" for unit prices
-      // Usually prices come from INVENTORY (Purchases)
       const priceHistorySource = sourceFilter === 'REVENUE' ? 'INVENTORY' : (sourceFilter || 'INVENTORY');
-
       const allSourceTxs = txsWithDates.filter(tx => !sourceFilter || tx.source === sourceFilter);
       const targetMonthTxs = allSourceTxs.filter(tx => 
         tx.dateInfo.month === targetMonth && tx.dateInfo.year === targetYear
       );
 
       if (targetMonthTxs.length === 0) {
-        const totalInCategory = allSourceTxs.length;
-        const totalInMonthAnyCategory = txsWithDates.filter(tx => tx.dateInfo.month === targetMonth && tx.dateInfo.year === targetYear).length;
-        
         let label = sourceFilter === 'REVENUE' ? 'Doanh thu & Tiền công' : 'Quản lý hàng hóa';
-        let detail = `Tháng ${targetMonth + 1}/${targetYear} không có dữ liệu giao dịch ${label}.`;
-        if (totalInMonthAnyCategory > 0 && totalInCategory > 0) {
-          detail += `\n(Tìm thấy ${totalInMonthAnyCategory} giao dịch trong tháng này nhưng thuộc loại khác.`;
-          detail += `\nHãy kiểm tra xem bạn đã chọn đúng "Loại mặt hàng" cần tính giá vốn chưa?)`;
-        } else if (totalInMonthAnyCategory === 0) {
-          detail += `\n(Không tìm thấy bất kỳ giao dịch nào trong tháng ${targetMonth + 1}/${targetYear} trên toàn hệ thống)`;
-        }
-        return { success: false, message: detail };
+        return { success: false, message: `Tháng ${targetMonth + 1}/${targetYear} không có dữ liệu giao dịch ${label}.` };
       }
 
       const itemKeysInMonth = Array.from(new Set(targetMonthTxs.map(t => getItemKey(t)))).filter(k => k !== 'UNKNOWN') as string[];
       const priceAssignmentMap: Record<string, number> = {};
       let warnNoPurchases = false;
 
-      // For every item in the target month, trace history using the priceSource
       itemKeysInMonth.forEach(key => {
-        // We look for price history in the source that contains IN (Purchases)
-        // If sourceFilter is REVENUE, we MUST look in INVENTORY for the prices
         const itemHistory = txsWithDates.filter(t => getItemKey(t) === key && (
           t.dateInfo.year < targetYear || (t.dateInfo.year === targetYear && t.dateInfo.month <= targetMonth)
         ) && (t.source === priceHistorySource || t.source === 'INVENTORY'));
         
         const itemOBs = manualOpeningBalances.filter(b => {
           const obKey = (b.itemCode && b.itemCode !== 'KHONG-MA') ? b.itemCode : (b.itemName ? (nameToCodeMap[b.itemName.trim().toLowerCase()] || b.itemName) : '');
-          return obKey === key && (
-            b.year < targetYear || (b.year === targetYear && b.month <= targetMonth)
-          );
+          return obKey === key && (b.year < targetYear || (b.year === targetYear && b.month <= targetMonth));
         });
 
         if (itemHistory.length === 0 && itemOBs.length === 0) {
@@ -409,79 +303,50 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
           return;
         }
 
-        // 2. Identify the range of months to process
-        let startYear = targetYear;
-        let startMonth = targetMonth;
-        
+        let startYear = targetYear, startMonth = targetMonth;
         itemHistory.forEach(t => {
           if (t.dateInfo.year < startYear || (t.dateInfo.year === startYear && t.dateInfo.month < startMonth)) {
-            startYear = t.dateInfo.year;
-            startMonth = t.dateInfo.month;
+            startYear = t.dateInfo.year; startMonth = t.dateInfo.month;
           }
         });
         itemOBs.forEach(b => {
           if (b.year < startYear || (b.year === startYear && b.month < startMonth)) {
-            startYear = b.year;
-            startMonth = b.month;
+            startYear = b.year; startMonth = b.month;
           }
         });
 
-        // 3. Generate sequential month list
         const periods: { month: number, year: number }[] = [];
-        let currY = startYear;
-        let currM = startMonth;
+        let currY = startYear, currM = startMonth;
         while (currY < targetYear || (currY === targetYear && currM <= targetMonth)) {
           periods.push({ month: currM, year: currY });
-          currM++;
-          if (currM > 11) {
-            currM = 0;
-            currY++;
-          }
+          currM++; if (currM > 11) { currM = 0; currY++; }
         }
 
-        // 4. Sequential computation
-        let currentQty = 0;
-        let currentValue = 0;
-        let lastAvgPrice = 0;
-
+        let currentQty = 0, currentValue = 0, lastAvgPrice = 0;
         periods.forEach(p => {
-          // Check for manual OB override for THIS specific period
           const manualOB = itemOBs.find(b => b.month === p.month && b.year === p.year);
-          if (manualOB) {
-            currentQty = manualOB.quantity;
-            currentValue = manualOB.totalValue;
-          }
+          if (manualOB) { currentQty = manualOB.quantity; currentValue = manualOB.totalValue; }
 
           const inTxs = itemHistory.filter(t => t.dateInfo.month === p.month && t.dateInfo.year === p.year && t.type === 'IN');
           const outTxs = itemHistory.filter(t => t.dateInfo.month === p.month && t.dateInfo.year === p.year && t.type === 'OUT');
-          
           const inTotalQty = inTxs.reduce((sum, t) => sum + t.quantity, 0);
           const inTotalValue = inTxs.reduce((sum, t) => sum + (t.quantity * t.price), 0);
           const outTotalQty = outTxs.reduce((sum, t) => sum + t.quantity, 0);
 
-          if (currentQty + inTotalQty > 0) {
-            lastAvgPrice = (currentValue + inTotalValue) / (currentQty + inTotalQty);
-          } 
-          
+          if (currentQty + inTotalQty > 0) lastAvgPrice = (currentValue + inTotalValue) / (currentQty + inTotalQty);
           if (p.year === targetYear && p.month === targetMonth) {
             priceAssignmentMap[key] = lastAvgPrice;
-            if (inTotalQty === 0 && outTotalQty > 0 && currentQty > 0) {
-              warnNoPurchases = true;
-            }
+            if (inTotalQty === 0 && outTotalQty > 0 && currentQty > 0) warnNoPurchases = true;
           }
-
-          // Update state for next period
           currentQty = Math.max(0, currentQty + inTotalQty - outTotalQty);
           currentValue = currentQty * lastAvgPrice;
         });
       });
 
-      // 5. Apply results and Save
       const itemsToUpdate: Transaction[] = [];
       const newTransactions = transactions.map(tx => {
         const { month: m, year: y } = getYearMonth(tx.invoiceDate || tx.date);
-        const matchesSource = !sourceFilter || tx.source === sourceFilter;
-        if (tx.type === 'OUT' && m === targetMonth && y === targetYear && matchesSource) {
+        if (tx.type === 'OUT' && m === targetMonth && y === targetYear && (!sourceFilter || tx.source === sourceFilter)) {
           const key = getItemKey(tx);
           const cost = priceAssignmentMap[key] || 0;
           const updatedTx = { ...tx, cogs: cost * tx.quantity };
@@ -491,66 +356,50 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         return tx;
       });
 
-      if (itemsToUpdate.length === 0) {
-        return { success: true, message: `Tháng ${targetMonth + 1}/${targetYear} không có hóa đơn bán ra để gán giá vốn.` };
-      }
+      if (itemsToUpdate.length === 0) return { success: true, message: `Tháng ${targetMonth + 1}/${targetYear} không có hóa đơn bán ra để gán giá vốn.` };
 
       const res = await fetch('/api/transactions/bulk', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ items: itemsToUpdate })
       });
-      
       if (!res.ok) throw new Error(`Server returned ${res.status}`);
 
       setTransactions(newTransactions);
       let label = sourceFilter === 'REVENUE' ? 'Doanh thu & Tiền công' : 'Quản lý hàng hóa';
-      let message = `Đã tính toán và gán giá vốn cho ${itemsToUpdate.length} dòng hàng trong tháng ${targetMonth + 1}/${targetYear}${sourceFilter ? ` (${label})` : ''}.`;
-      if (warnNoPurchases) {
-        message += " Lưu ý: Một số mặt hàng không có giao dịch Nhập trong tháng, hệ thống đã áp dụng đơn giá từ kỳ trước.";
-      }
-      return { success: true, message };
-
+      return { success: true, message: `Đã tính toán xong cho ${itemsToUpdate.length} dòng hàng (${label}).` };
     } catch (err) {
-      console.error("Calculation Error:", err);
-      return { success: false, message: `Lỗi trong quá trình tính toán: ${err instanceof Error ? err.message : String(err)}` };
+      return { success: false, message: `Lỗi: ${err instanceof Error ? err.message : String(err)}` };
     }
   };
 
-  const resetData = async () => {
-    if (!confirm("Bạn có chắc chắn muốn xóa TOÀN BỘ dữ liệu trên server?")) return;
+  const setManualOpeningBalance = async (balance: OpeningBalance) => {
     try {
-      await fetch('/api/reset', { method: 'POST' });
-      setProducts([]);
-      setTransactions([]);
-      setManualOpeningBalances([]);
-      setClosedMonths([]);
-      localStorage.removeItem('inv_closed_months');
-    } catch (err) {
-      console.error(err);
-      alert("Lỗi khi reset dữ liệu.");
-    }
+      const res = await fetch('/api/opening-balances', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ item_code: balance.itemCode, month: balance.month, year: balance.year, quantity: balance.quantity, value: balance.totalValue })
+      });
+      if (!res.ok) throw new Error("Lỗi API");
+      setManualOpeningBalances(prev => [...prev.filter(b => !(b.itemCode === balance.itemCode && b.month === balance.month && b.year === balance.year)), balance]);
+      return { success: true };
+    } catch (err) { return { success: false, message: "Lỗi kết nối." }; }
+  };
+
+  const lockMonth = (month: number, year: number) => setClosedMonths(prev => [...new Set([...prev, `${month + 1}-${year}`])]);
+  const unlockMonth = (month: number, year: number) => setClosedMonths(prev => prev.filter(m => m !== `${month + 1}-${year}`));
+
+  const resetData = async () => {
+    if (!confirm("Xóa TOÀN BỘ dữ liệu?")) return;
+    await fetch('/api/reset', { method: 'POST' });
+    setProducts([]); setTransactions([]); setManualOpeningBalances([]); setClosedMonths([]);
+    localStorage.removeItem('inv_closed_months');
   };
 
   return (
     <InventoryContext.Provider value={{ 
-      products, 
-      transactions, 
-      bankStatements,
-      manualOpeningBalances, 
-      closedMonths,
-      user, 
-      login, 
-      logout, 
-      importTransactions, 
-      importBankStatements,
-      calculateMonthlyCOGS, 
-      setManualOpeningBalance,
-      lockMonth,
-      unlockMonth,
-      isMonthClosed,
-      deleteInvoice,
-      resetData 
+      products, transactions, bankStatements, manualOpeningBalances, closedMonths, user, login, logout, 
+      importTransactions, importBankStatements, calculateMonthlyCOGS, setManualOpeningBalance, lockMonth, unlockMonth, isMonthClosed, deleteInvoice, resetData 
     }}>
       {children}
     </InventoryContext.Provider>
