@@ -36,7 +36,7 @@ export default function Login() {
         <div className="text-center mb-8">
           <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-white text-white mb-4 border border-slate-100 p-2">
             <img 
-               src="https://raw.githubusercontent.com/BinhPhan75/nghiatingold/refs/heads/main/icon.png?token=GHSAT0AAAAAAD25RX77QHTW7T7XXUNMKPV42P26QCA" 
+               src="https://raw.githubusercontent.com/BinhPhan75/nghiatingold/refs/heads/main/icon.png?token=GHSAT0AAAAAAD25RX776RC6POKEGUFVRBRE2P27VAQ" 
                alt="NGHIATINGOLD Logo" 
                className="w-full h-full object-contain"
                referrerPolicy="no-referrer"

@@ -137,6 +137,13 @@ async function initDb() {
       );
     `);
 
+    // Ensure 'value' column exists (for older table versions)
+    try {
+      await client.query(`ALTER TABLE opening_balances ADD COLUMN IF NOT EXISTS value FLOAT`);
+    } catch (err) {
+      // Ignore
+    }
+
     // Ensure Primary Key
     try {
       await client.query(`ALTER TABLE opening_balances ADD PRIMARY KEY (item_code, month, year)`);
