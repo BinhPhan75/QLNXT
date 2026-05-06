@@ -330,7 +330,7 @@ export default function Reports({ mode }: ReportsProps) {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
           <p className="text-slate-500 text-sm mb-1">Tổng số lượng {reportType === 'STOCK' ? 'tồn' : ''}</p>
-          <p className="text-2xl font-bold text-slate-900">{totals.qty} <span className="text-sm font-normal text-slate-400">sản phẩm</span></p>
+          <p className="text-2xl font-bold text-slate-900">{Number(totals.qty).toFixed(3)} <span className="text-sm font-normal text-slate-400">sản phẩm</span></p>
         </div>
         <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
           <p className="text-slate-500 text-sm mb-1">
@@ -437,7 +437,7 @@ export default function Reports({ mode }: ReportsProps) {
                           <td className="px-6 py-4 text-sm text-slate-700">{p.name}</td>
                           <td className="px-6 py-4 text-sm text-slate-600">{p.unit}</td>
                           <td className={`px-6 py-4 text-sm font-bold ${p.currentStock > 0 ? 'text-slate-900' : 'text-red-500'}`}>
-                            {p.currentStock}
+                            {Number(p.currentStock).toFixed(3)}
                           </td>
                           <td className="px-6 py-4 text-sm text-slate-600 font-medium">{formatCurrency(p.averageCost)}</td>
                           <td className="px-6 py-4 text-sm text-right font-bold text-blue-600">
@@ -487,7 +487,7 @@ export default function Reports({ mode }: ReportsProps) {
                                         </td>
                                         <td className="px-4 py-2 text-slate-500 font-medium">{tx.invoiceNumber || (tx as any).invoice_number}</td>
                                         <td className="px-4 py-2 text-slate-600 truncate max-w-[150px]" title={tx.customer}>{tx.customer}</td>
-                                        <td className="px-4 py-2 text-center font-bold text-slate-900">{tx.quantity}</td>
+                                        <td className="px-4 py-2 text-center font-bold text-slate-900">{Number(tx.quantity).toFixed(3)}</td>
                                         <td className="px-4 py-2 text-left text-slate-500 font-mono text-[10px]">{tx.itemCode}</td>
                                         <td className="px-4 py-2 text-left text-slate-600 text-[10px] italic">{tx.itemName}</td>
                                         <td className="px-4 py-2 text-right text-slate-500">{formatCurrency(tx.price)}</td>
@@ -651,7 +651,7 @@ export default function Reports({ mode }: ReportsProps) {
                               <td className="px-2 py-3 text-slate-500 text-[10px]">{row.customerCard || '-'}</td>
                               <td className="px-2 py-3 text-slate-400 text-[10px] truncate max-w-[120px]" title={row.address}>{row.address || '-'}</td>
                               <td className="px-3 py-3 text-slate-700 font-bold leading-tight">{row.displayName}</td>
-                              <td className="px-2 py-3 text-center text-slate-900 whitespace-nowrap">{row.quantity}</td>
+                              <td className="px-2 py-3 text-center text-slate-900 whitespace-nowrap">{Number(row.quantity).toFixed(3)}</td>
                               <td className="px-2 py-3 text-right text-slate-600 whitespace-nowrap">{formatCurrency(row.avgPrice)}</td>
                               <td className="px-2 py-3 text-right text-slate-900 whitespace-nowrap">{formatCurrency(row.itemTotal)}</td>
                               <td className="px-2 py-3 text-right text-green-600 font-bold whitespace-nowrap">{row.laborTotal > 0 ? formatCurrency(row.laborTotal) : '-'}</td>
@@ -677,7 +677,7 @@ export default function Reports({ mode }: ReportsProps) {
                                           <tr key={idx} className="hover:bg-slate-50/50">
                                             <td className="px-4 py-2 font-mono text-slate-400">{item.itemCode || '-'}</td>
                                             <td className="px-4 py-2 font-medium text-slate-700">{item.itemName}</td>
-                                            <td className="px-4 py-2 text-center text-slate-600">{item.quantity} {item.unit}</td>
+                                            <td className="px-4 py-2 text-center text-slate-600">{Number(item.quantity).toFixed(3)} {item.unit}</td>
                                             <td className="px-4 py-2 text-right text-slate-500">{formatCurrency(item.price)}</td>
                                             <td className="px-4 py-2 text-right font-bold text-slate-900">{formatCurrency(item.total)}</td>
                                           </tr>
@@ -707,7 +707,7 @@ export default function Reports({ mode }: ReportsProps) {
                             <div className="font-bold text-slate-900 leading-tight">{tx.itemName}</div>
                             <div className="text-[9px] text-slate-400 font-mono">CODE: {tx.itemCode}</div>
                           </td>
-                          <td className="px-2 py-3 text-center text-slate-900 font-bold whitespace-nowrap">{tx.quantity} {tx.unit}</td>
+                          <td className="px-2 py-3 text-center text-slate-900 font-bold whitespace-nowrap">{Number(tx.quantity).toFixed(3)} {tx.unit}</td>
                           <td className="px-2 py-3 text-right text-slate-600 whitespace-nowrap">{formatCurrency(tx.price)}</td>
                           <td className="px-2 py-3 text-right font-bold text-slate-900 whitespace-nowrap">{formatCurrency(tx.total)}</td>
                           {reportType === 'SELL' && (
@@ -735,7 +735,7 @@ export default function Reports({ mode }: ReportsProps) {
                       <tr className="bg-slate-50 font-bold text-[11px] text-slate-900 border-t border-slate-300">
                         <td colSpan={6} className="px-2 py-4 text-right uppercase text-slate-500">Tổng cộng:</td>
                         <td className="px-2 py-4 text-center">
-                          {filteredDataDisplay.reduce((sum: number, r: any) => sum + (Number(r.quantity) || 0), 0).toFixed(1)}
+                          {filteredDataDisplay.reduce((sum: number, r: any) => sum + (Number(r.quantity) || 0), 0).toFixed(3)}
                         </td>
                         <td className="px-2 py-4"></td>
                         <td className="px-2 py-4 text-right text-slate-900 whitespace-nowrap">
@@ -756,7 +756,7 @@ export default function Reports({ mode }: ReportsProps) {
                         <td colSpan={5} className="px-2 py-4 text-right uppercase text-slate-500">Tổng cộng:</td>
                         <td></td>
                         <td className="px-2 py-4 text-center">
-                          {filteredDataDisplay.reduce((sum: number, r: any) => sum + (Number(r.quantity) || 0), 0).toFixed(1)}
+                          {filteredDataDisplay.reduce((sum: number, r: any) => sum + (Number(r.quantity) || 0), 0).toFixed(3)}
                         </td>
                         <td className="px-2 py-4"></td>
                         <td className="px-2 py-4 text-right font-bold whitespace-nowrap">
