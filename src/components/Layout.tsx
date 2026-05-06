@@ -230,7 +230,7 @@ export default function Layout() {
               >
                 <div className="flex items-center gap-3">
                   <FileUp size={20} />
-                  <span>Tồn kho</span>
+                  <span>Hàng hóa (970, 9999...)</span>
                 </div>
                 {isInventoryMenuOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
               </button>

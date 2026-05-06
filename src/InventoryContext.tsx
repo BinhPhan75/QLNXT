@@ -202,11 +202,17 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   };
 
   const importTransactions = async (newItems: Omit<Transaction, 'id'>[]) => {
-    const keyedItems = newItems.map(item => ({ 
-      ...item, 
-      itemCode: item.itemCode.trim().toUpperCase(),
-      id: Math.random().toString(36).substr(2, 9) 
-    }));
+    const keyedItems = newItems.map(item => {
+      let source = (item.source || 'NGHIATINGOLD') as TransactionSource;
+      if (source === 'PNJ' as any) source = 'NGHIATINGOLD';
+      
+      return { 
+        ...item, 
+        source,
+        itemCode: item.itemCode.trim().toUpperCase(),
+        id: Math.random().toString(36).substr(2, 9) 
+      };
+    });
     
     try {
       const res = await fetch('/api/transactions/bulk', {
@@ -311,7 +317,7 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const calculateMonthlyCOGS = async (targetMonth: number, targetYear: number, sourceFilter?: TransactionSource) => {
     const ALLOWED_CATEGORIES = [
       'VÀNG 970', 'VÀNG 97', 'VÀNG 9999', 'VÀNG 610', 
-      'BẠC MÓN', 'VÀNG TRANG SỨC', 'VÀNG KHÁC'
+      'BẠC MÓN', 'VÀNG TRANG SỨC', 'VÀNG KHÁC', 'TIỀN CÔNG'
     ];
 
     const isAllowedItem = (name: string) => {

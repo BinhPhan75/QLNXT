@@ -124,10 +124,7 @@ export default function ImportExport({ mode }: ImportExportProps) {
       const itemName = row[15]?.toString().trim() || 'Hàng hóa';
       const unit = row[17]?.toString().trim() || 'Chỉ';
       
-      const parseVal = (v: any) => {
-        if (!v) return 0;
-        return parseFloat(v.toString().replace(/,/g, '')) || 0;
-      };
+      const parseVal = (v: any) => parseVnNumber(v);
 
       const quantity = parseVal(row[18]);
       const price = parseVal(row[19]);
@@ -268,20 +265,59 @@ export default function ImportExport({ mode }: ImportExportProps) {
       if (val === undefined || val === null) return 0;
       let str = val.toString().trim();
       if (!str) return 0;
+      
+      // Clean characters
       str = str.replace(/[₫\s]/g, '');
-      if ((str.match(/\./g) || []).length > 1) {
-        str = str.replace(/\./g, '');
-      }
-      if ((str.match(/,/g) || []).length > 1) {
-        str = str.replace(/,/g, '');
-      }
+
+      // Case 1: Both . and , are present
       if (str.includes('.') && str.includes(',')) {
-        str = str.replace(/\./g, '').replace(/,/g, '.');
-      } else if (str.includes(',')) {
-        str = str.replace(/,/g, '.');
+        const lastDot = str.lastIndexOf('.');
+        const lastComma = str.lastIndexOf(',');
+        if (lastComma > lastDot) {
+          // VN Style: 1.234.567,89 -> 1234567.89
+          return parseFloat(str.replace(/\./g, '').replace(/,/g, '.')) || 0;
+        } else {
+          // US Style: 1,234,567.89 -> 1234567.89
+          return parseFloat(str.replace(/,/g, '')) || 0;
+        }
       }
-      const res = parseFloat(str);
-      return isNaN(res) ? 0 : res;
+
+      // Case 2: Only comma ,
+      if (str.includes(',')) {
+        const commas = (str.match(/,/g) || []).length;
+        if (commas > 1) {
+          // Multiple commas: 1,234,567 -> 1234567
+          return parseFloat(str.replace(/,/g, '')) || 0;
+        }
+        // Single comma: assume decimal in VN or separator in US?
+        // Gold quantity 1,234 is almost certainly decimal 1.234
+        // Price 5,000 is almost certainly 5000.
+        // We'll treat single comma as decimal for consistency with VN
+        return parseFloat(str.replace(/,/g, '.')) || 0;
+      }
+
+      // Case 3: Only dot .
+      if (str.includes('.')) {
+        const dots = (str.match(/\./g) || []).length;
+        if (dots > 1) {
+          // Multiple dots: User says dots for both thousands and decimal
+          // 1.234.567.89 (VN/Hybrid) -> 1234567.89
+          const parts = str.split('.');
+          const last = parts.pop();
+          return parseFloat(parts.join('') + '.' + last) || 0;
+        }
+        // One dot: 1.234
+        // Could be decimal (1.234) or thousands (1234)
+        // Default parseFloat handles dot as decimal, which covers weights.
+        // If it's a price like 5.000, it becomes 5. This is the risk.
+        // But for jewelry weight, 1.234 is very common.
+        const res = parseFloat(str);
+        // Heuristic: If it's something like 5.000, 10.000, maybe it's 5000? 
+        // No, let's trust the user knows 1.234 is decimal or that they'll use dots for both if they want.
+        return isNaN(res) ? 0 : res;
+      }
+
+      return parseFloat(str) || 0;
     };
 
     for (let i = dataStartIndex; i < data.length; i++) {
@@ -389,11 +425,11 @@ export default function ImportExport({ mode }: ImportExportProps) {
     <div className="max-w-4xl mx-auto space-y-6">
       <header className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">{isRevenue ? 'Quản lý Doanh thu' : 'Quản lý Kho'}</h1>
+          <h1 className="text-2xl font-bold text-slate-900">{isRevenue ? 'Quản lý Doanh thu & Tiền công' : 'Quản lý Hàng hóa (Vàng, Bạc...)'}</h1>
           <p className="text-slate-500">
             {isRevenue 
                ? 'Import dữ liệu từ Báo cáo bán hàng chi tiết (.xlsx)' 
-               : 'Import dữ liệu từ file CSV mẫu hoặc PDF hóa đơn AI'}
+               : 'Import dữ liệu Nhập/Xuất kho (Vàng 970, 9999, 610, Bạc...)'}
           </p>
         </div>
       </header>

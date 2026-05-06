@@ -146,9 +146,9 @@ export default function SystemSettings() {
                   onChange={(e) => setCalcCategory(e.target.value as any)}
                   className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500/20 font-bold"
                 >
-                  <option value="NGHIATINGOLD">Mặt hàng tồn kho</option>
-                  <option value="REVENUE">Dữ liệu Doanh thu</option>
-                  <option value="ALL">Tất cả (Kho + Khác)</option>
+                  <option value="NGHIATINGOLD">Hàng hóa trong kho (Vàng 970, 9999, ...)</option>
+                  <option value="REVENUE">Dữ liệu Doanh thu & Tiền công</option>
+                  <option value="ALL">Tất cả (Hàng hóa + Khác)</option>
                 </select>
               </div>
               <div>

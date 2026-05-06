@@ -303,10 +303,10 @@ export default function Reports({ mode }: ReportsProps) {
       <header className="flex flex-col md:flex-row md:items-end justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">
-            {reportType === 'BUY' ? 'Báo Cáo Mua Hàng' : reportType === 'SELL' ? (mode === 'REVENUE' ? 'Báo Cáo Doanh Thu' : 'Báo Cáo Bán Hàng') : 'Báo Cáo Tồn Kho'}
+            {reportType === 'BUY' ? 'Báo Cáo Mua Hàng' : reportType === 'SELL' ? (mode === 'REVENUE' ? 'Báo Cáo Doanh Thu & Tiền công' : 'Báo Cáo Bán Hàng') : 'Báo Cáo Hàng hóa (970, 9999...)'}
           </h1>
           <p className="text-slate-500">
-            {mode === 'REVENUE' ? 'Theo dõi doanh thu bán hàng chi tiết' : 'Tổng hợp dữ liệu giao dịch theo thời gian'}
+            {mode === 'REVENUE' ? 'Theo dõi doanh thu bán hàng & tiền công chi tiết' : 'Báo cáo hàng hóa (970, 9999, 610, Bạc, Công...)'}
           </p>
         </div>
         <div className="flex flex-col gap-2 md:items-end">
@@ -599,16 +599,38 @@ export default function Reports({ mode }: ReportsProps) {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 font-medium">
-                  {filteredDataDisplay.length === 0 ? (
+                  {transactions.length === 0 ? (
                     <tr>
                       <td colSpan={mode === 'REVENUE' ? 12 : 9} className="px-6 py-12 text-center">
-                        <div className="max-w-md mx-auto space-y-4">
-                          <p className="text-slate-400 italic">Không tìm thấy dữ liệu phù hợp với bộ lọc hiện tại</p>
+                        <div className="bg-amber-50 border border-amber-200 p-6 rounded-2xl text-center">
+                          <p className="text-amber-800 font-medium italic">Hệ thống chưa có bất kỳ dữ liệu nào. Vui lòng nhập dữ liệu từ menu Import.</p>
+                          <div className="mt-4 text-xs text-amber-600 font-mono">
+                            Debug: total={debugStats.totalCount} pnj={debugStats.pnjCount} rev={debugStats.revCount} cur_mode={mode}
+                          </div>
                         </div>
                       </td>
                     </tr>
-                  ) : (
-                    filteredDataDisplay.map((row: any) => {
+                  ) : filteredDataDisplay.length === 0 && (
+                    <tr>
+                      <td colSpan={mode === 'REVENUE' ? 12 : 9} className="px-6 py-12 text-center">
+                        <div className="bg-slate-50 border border-slate-200 p-6 rounded-2xl text-center">
+                          <p className="text-slate-500 italic">Không tìm thấy dữ liệu phù hợp với bộ lọc hiện tại.</p>
+                          <div className="mt-4 text-[10px] text-slate-400 font-mono text-left max-w-sm mx-auto space-y-1">
+                            <p>Thông tin chẩn đoán:</p>
+                            <p>- Chế độ xem: {mode}</p>
+                            <p>- Loại báo cáo đang chọn: {reportType}</p>
+                            <p>- Tổng số giao dịch trong HT: {debugStats.totalCount}</p>
+                            <p>- Giao dịch thuộc {mode}: {mode === 'REVENUE' ? debugStats.revCount : debugStats.pnjCount}</p>
+                            <p>- Giao dịch NHẬP ({mode}): {debugStats.inCount}</p>
+                            <p>- Giao dịch XUẤT ({mode}): {debugStats.outCount}</p>
+                            <p>- Tháng đang chọn: {selectedMonth === 'ALL' ? 'Tất cả' : selectedMonth + 1}/{selectedYear}</p>
+                            <p>- Dữ liệu phân bố theo tháng: {JSON.stringify(Object.fromEntries(debugStats.dateCounts))}</p>
+                          </div>
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                  {filteredDataDisplay.length > 0 && filteredDataDisplay.map((row: any) => {
                       if (mode === 'REVENUE' && reportType === 'SELL') {
                         const isExpanded = expandedRevenueKey === row.key;
                         return (
@@ -698,8 +720,7 @@ export default function Reports({ mode }: ReportsProps) {
                           )}
                         </tr>
                       );
-                    })
-                  )}
+                    })}
                 </tbody>
                 {filteredDataDisplay.length > 0 && (
                   <tfoot className="border-t-2 border-slate-200">
