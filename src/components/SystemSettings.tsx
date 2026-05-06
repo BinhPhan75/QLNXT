@@ -13,8 +13,11 @@ export default function SystemSettings() {
 
   // Manual OB Form State
   const [obItemCode, setObItemCode] = useState('');
+  const [obItemName, setObItemName] = useState('');
   const [obQty, setObQty] = useState(0);
   const [obValue, setObValue] = useState(0);
+  const [isSavingOB, setIsSavingOB] = useState(false);
+  const [useCustomCode, setUseCustomCode] = useState(false);
 
   const months = [
     'Tháng 1', 'Tháng 2', 'Tháng 3', 'Tháng 4', 'Tháng 5', 'Tháng 6',
@@ -40,19 +43,34 @@ export default function SystemSettings() {
     }
   };
 
-  const handleAddOB = (e: React.FormEvent) => {
+  const handleAddOB = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!obItemCode) return;
-    setManualOpeningBalance({
-      itemCode: obItemCode,
-      month: selectedMonth,
-      year: selectedYear,
-      quantity: obQty,
-      totalValue: obValue
-    });
-    setObItemCode('');
-    setObQty(0);
-    setObValue(0);
+    
+    setIsSavingOB(true);
+    try {
+      const result = await setManualOpeningBalance({
+        itemCode: obItemCode.trim().toUpperCase(),
+        month: selectedMonth,
+        year: selectedYear,
+        quantity: obQty,
+        totalValue: obValue
+      });
+      
+      if (result.success) {
+        setObItemCode('');
+        setObItemName('');
+        setObQty(0);
+        setObValue(0);
+        setShowOBModal(false);
+      } else {
+        alert(result.message || "Lỗi khi lưu số dư đầu kỳ.");
+      }
+    } catch (err) {
+      alert("Lỗi hệ thống khi lưu số dư đầu kỳ.");
+    } finally {
+      setIsSavingOB(false);
+    }
   };
 
   const currentMonthManualOBs = manualOpeningBalances.filter(b => b.month === selectedMonth && b.year === selectedYear);
@@ -304,16 +322,39 @@ export default function SystemSettings() {
               <h2 className="text-xl font-bold mb-4">Nhập số dư đầu kỳ tháng {selectedMonth+1}</h2>
               <form onSubmit={handleAddOB} className="space-y-4">
                 <div>
-                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Mã hàng hóa</label>
-                  <select 
-                    value={obItemCode}
-                    onChange={(e) => setObItemCode(e.target.value)}
-                    required
-                    className="w-full px-4 py-2.5 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-blue-500/20"
-                  >
-                    <option value="">Chọn mặt hàng...</option>
-                    {products.map(p => <option key={p.code} value={p.code}>{p.code} - {p.name}</option>)}
-                  </select>
+                  <div className="flex justify-between items-center mb-1">
+                    <label className="block text-xs font-bold text-slate-500 uppercase">Mã hàng hóa</label>
+                    <button 
+                      type="button"
+                      onClick={() => {
+                        setUseCustomCode(!useCustomCode);
+                        setObItemCode('');
+                      }}
+                      className="text-[10px] font-bold text-blue-600 hover:underline"
+                    >
+                      {useCustomCode ? 'Chọn từ danh sách' : 'Nhập mã mới'}
+                    </button>
+                  </div>
+                  {useCustomCode ? (
+                    <input 
+                      type="text"
+                      value={obItemCode}
+                      onChange={(e) => setObItemCode(e.target.value)}
+                      placeholder="VD: VANG9999"
+                      required
+                      className="w-full px-4 py-2.5 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-blue-500/20"
+                    />
+                  ) : (
+                    <select 
+                      value={obItemCode}
+                      onChange={(e) => setObItemCode(e.target.value)}
+                      required
+                      className="w-full px-4 py-2.5 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-blue-500/20"
+                    >
+                      <option value="">Chọn mặt hàng...</option>
+                      {products.map(p => <option key={p.code} value={p.code}>{p.code} - {p.name}</option>)}
+                    </select>
+                  )}
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
@@ -347,9 +388,10 @@ export default function SystemSettings() {
                   </button>
                   <button 
                     type="submit"
-                    className="flex-1 py-2.5 bg-blue-600 text-white font-bold rounded-lg shadow-lg shadow-blue-500/20"
+                    disabled={isSavingOB}
+                    className="flex-1 py-2.5 bg-blue-600 text-white font-bold rounded-lg shadow-lg shadow-blue-500/20 disabled:opacity-50"
                   >
-                    Lưu số dư
+                    {isSavingOB ? 'Đang lưu...' : 'Lưu số dư'}
                   </button>
                 </div>
               </form>

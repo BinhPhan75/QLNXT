@@ -262,7 +262,7 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     }
   };
 
-  const setManualOpeningBalance = async (balance: OpeningBalance) => {
+  const setManualOpeningBalance = async (balance: OpeningBalance): Promise<{ success: boolean; message?: string }> => {
     try {
       const res = await fetch('/api/opening-balances', {
         method: 'POST',
@@ -276,15 +276,17 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         })
       });
 
-      if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || `HTTP error! status: ${res.status}`);
 
       setManualOpeningBalances(prev => {
         const filtered = prev.filter(b => !(b.itemCode === balance.itemCode && b.month === balance.month && b.year === balance.year));
         return [...filtered, balance];
       });
-    } catch (err) {
+      return { success: true };
+    } catch (err: any) {
       console.error(err);
-      alert("Lỗi khi lưu số dư đầu kỳ.");
+      return { success: false, message: err.message || "Lỗi khi lưu số dư đầu kỳ." };
     }
   };
 

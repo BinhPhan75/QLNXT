@@ -74,10 +74,16 @@ async function initDb() {
         month INTEGER,
         year INTEGER,
         quantity FLOAT,
-        value FLOAT,
-        PRIMARY KEY (item_code, month, year)
+        value FLOAT
       );
     `);
+
+    // Ensure Primary Key
+    try {
+      await client.query(`ALTER TABLE opening_balances ADD PRIMARY KEY (item_code, month, year)`);
+    } catch (err) {
+      // PK likely already exists
+    }
 
     await client.query(`
       CREATE TABLE IF NOT EXISTS bank_statements (
@@ -132,13 +138,13 @@ router.get("/db-status", async (req, res) => {
   try {
     const timeResult = await client.query('SELECT NOW()');
     
-    const tableInfo = await Promise.all(['nghiatingold_transactions', 'revenue_transactions'].map(async (table) => {
+    const tableInfo = await Promise.all(['nghiatingold_transactions', 'revenue_transactions', 'opening_balances', 'bank_statements'].map(async (table) => {
       const cols = await client.query(`
-        SELECT column_name 
+        SELECT column_name, data_type 
         FROM information_schema.columns 
         WHERE table_name = '${table}'
       `);
-      return { table, columns: cols.rows.map(r => r.column_name) };
+      return { table, columns: cols.rows };
     }));
 
     client.release();
@@ -269,17 +275,22 @@ router.get("/opening-balances", async (req, res) => {
 // 6. Save OB
 router.post("/opening-balances", async (req, res) => {
   const { item_code, month, year, quantity, value } = req.body;
+  
+  if (!item_code || month === undefined || year === undefined) {
+    return res.status(400).json({ error: "Thiếu thông tin bắt buộc (mã hàng, tháng, năm)" });
+  }
+
   try {
     await pool.query(
       `INSERT INTO opening_balances (item_code, month, year, quantity, value)
        VALUES ($1, $2, $3, $4, $5)
        ON CONFLICT (item_code, month, year) DO UPDATE SET quantity = EXCLUDED.quantity, value = EXCLUDED.value`,
-      [item_code, month, year, quantity, value]
+      [item_code, month, year, parseFloat(quantity || 0), parseFloat(value || 0)]
     );
     res.json({ success: true });
   } catch (err: any) {
     console.error("[API] Save OB Error:", err.message);
-    res.status(500).json({ error: "Failed to save OB" });
+    res.status(500).json({ error: `Lỗi Database: ${err.message}` });
   }
 });
 
