@@ -1,11 +1,11 @@
 import React, { useState } from 'react';
 import { useInventory } from '../InventoryContext';
-import { Calculator, RotateCcw, ShieldCheck, Lock as LockIcon, Unlock, Plus, Trash2 } from 'lucide-react';
+import { Calculator, RotateCcw, ShieldCheck, CheckSquare, Lock as LockIcon, Unlock, Plus, Trash2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { formatCurrency, formatQuantity } from '../lib/utils';
 
 export default function SystemSettings() {
-  const { calculateMonthlyCOGS, resetData, products, setManualOpeningBalance, manualOpeningBalances, lockMonth, unlockMonth, closedMonths } = useInventory();
+  const { calculateMonthlyCOGS, resetData, products, transactions, setManualOpeningBalance, manualOpeningBalances, lockMonth, unlockMonth, closedMonths } = useInventory();
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth());
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
   const [calcCategory, setCalcCategory] = useState<'ALL' | 'INVENTORY' | 'REVENUE'>('INVENTORY');
@@ -19,126 +19,401 @@ export default function SystemSettings() {
   const [isSavingOB, setIsSavingOB] = useState(false);
   const [useCustomCode, setUseCustomCode] = useState(false);
 
-  const months = ['Tháng 1', 'Tháng 2', 'Tháng 3', 'Tháng 4', 'Tháng 5', 'Tháng 6', 'Tháng 7', 'Tháng 8', 'Tháng 9', 'Tháng 10', 'Tháng 11', 'Tháng 12'];
+  const months = [
+    'Tháng 1', 'Tháng 2', 'Tháng 3', 'Tháng 4', 'Tháng 5', 'Tháng 6',
+    'Tháng 7', 'Tháng 8', 'Tháng 9', 'Tháng 10', 'Tháng 11', 'Tháng 12'
+  ];
+
   const years = Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - 2 + i);
+
   const isCurrentMonthClosed = closedMonths.includes(`${selectedMonth + 1}-${selectedYear}`);
 
   const handleCalculate = async () => {
-    const sourceFilter = calcCategory === 'ALL' ? undefined : calcCategory;
-    const result = await calculateMonthlyCOGS(selectedMonth, selectedYear, sourceFilter);
-    alert(result.message);
+    try {
+      const sourceFilter = calcCategory === 'ALL' ? undefined : calcCategory as any;
+      const result = await calculateMonthlyCOGS(selectedMonth, selectedYear, sourceFilter);
+      if (result && result.message) {
+        alert(result.message);
+      } else {
+        alert("Có lỗi xảy ra trong quá trình tính toán. Phản hồi từ hệ thống không xác định.");
+      }
+    } catch (error) {
+      console.error("handleCalculate error:", error);
+      alert("Đã xảy ra lỗi khi gọi hàm tính toán giá vốn.");
+    }
   };
 
   const handleAddOB = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!obItemCode) return;
+    
     setIsSavingOB(true);
-    const result = await setManualOpeningBalance({
-      itemCode: (obItemCode || 'KHONG-MA').trim().toUpperCase(),
-      itemName: obItemName.trim(), month: selectedMonth, year: selectedYear, quantity: obQty, totalValue: obValue
-    });
-    if (result.success) { setShowOBModal(false); setObItemCode(''); setObQty(0); setObValue(0); }
-    setIsSavingOB(false);
+    try {
+      const result = await setManualOpeningBalance({
+        itemCode: (obItemCode || 'KHONG-MA').trim().toUpperCase(),
+        itemName: obItemName.trim(),
+        month: selectedMonth,
+        year: selectedYear,
+        quantity: obQty,
+        totalValue: obValue
+      });
+      
+      if (result.success) {
+        setObItemCode('');
+        setObItemName('');
+        setObQty(0);
+        setObValue(0);
+        setShowOBModal(false);
+      } else {
+        alert(result.message || "Lỗi khi lưu số dư đầu kỳ.");
+      }
+    } catch (err) {
+      alert("Lỗi hệ thống khi lưu số dư đầu kỳ.");
+    } finally {
+      setIsSavingOB(false);
+    }
+  };
+
+  const currentMonthManualOBs = manualOpeningBalances.filter(b => b.month === selectedMonth && b.year === selectedYear);
+
+  const [dbStatus, setDbStatus] = useState<any>(null);
+  const [loadingDb, setLoadingDb] = useState(false);
+
+  const checkDbStatus = async () => {
+    setLoadingDb(true);
+    try {
+      const res = await fetch('/api/db-status');
+      const data = await res.json();
+      setDbStatus(data);
+    } catch (err) {
+      setDbStatus({ status: 'error', message: 'Không thể kết nối API' });
+    } finally {
+      setLoadingDb(false);
+    }
   };
 
   return (
     <div className="max-w-5xl mx-auto space-y-6 pb-20">
-      <header>
-        <h1 className="text-2xl font-bold text-slate-900">Module Hệ Thống</h1>
-        <p className="text-slate-500">Quản lý tính toán giá vốn cho từng loại mặt hàng</p>
+      <header className="flex justify-between items-end">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900">Module Hệ Thống</h1>
+          <p className="text-slate-500">Quản lý tính toán giá vốn và tham số hệ thống</p>
+        </div>
+        <button 
+          onClick={checkDbStatus}
+          disabled={loadingDb}
+          className="flex items-center gap-2 px-4 py-2 bg-slate-100 text-slate-700 rounded-lg text-sm font-semibold hover:bg-slate-200"
+        >
+          {loadingDb ? 'Đang kiểm tra...' : 'Kiểm tra Database'}
+        </button>
       </header>
 
+      {dbStatus && (
+        <motion.div 
+          initial={{ opacity: 0, height: 0 }}
+          animate={{ opacity: 1, height: 'auto' }}
+          className={`p-4 rounded-xl border text-sm ${dbStatus.status === 'connected' ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`}
+        >
+          <p className="font-bold mb-2">Kết quả kiểm tra:</p>
+          <pre className="text-[10px] overflow-auto max-h-40 bg-white/50 p-2 rounded">
+            {JSON.stringify(dbStatus, null, 2)}
+          </pre>
+        </motion.div>
+      )}
+
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 space-y-6">
+        {/* Main Controls */}
+        <motion.div 
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="lg:col-span-2 space-y-6"
+        >
           <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
             <div className="flex items-center gap-4 mb-6">
-              <div className="w-12 h-12 rounded-xl bg-blue-100 text-blue-600 flex items-center justify-center"><Calculator size={24} /></div>
+              <div className="w-12 h-12 rounded-xl bg-blue-100 text-blue-600 flex items-center justify-center">
+                <Calculator size={24} />
+              </div>
               <div>
                 <h2 className="text-lg font-bold text-slate-900">Tính giá vốn tháng {selectedMonth + 1}/{selectedYear}</h2>
-                <p className="text-sm text-slate-500">Hệ thống sẽ quét từng mã hàng riêng biệt để áp giá.</p>
+                <p className="text-sm text-slate-500">Phương pháp bình quân gia quyền cuối kỳ</p>
               </div>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
               <div>
-                <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Loại mặt hàng</label>
-                <select value={calcCategory} onChange={(e) => setCalcCategory(e.target.value as any)} className="w-full px-4 py-2 bg-slate-50 border rounded-lg font-bold">
-                  <option value="INVENTORY">Quản lý hàng hóa (Vàng 970, 9999, ...)</option>
-                  <option value="REVENUE">Dữ liệu Doanh thu & Tiền công</option>
-                  <option value="ALL">Tất cả dữ liệu</option>
+                <label className="block text-xs font-semibold text-slate-400 uppercase mb-1">Loại mặt hàng</label>
+                <select 
+                  value={calcCategory}
+                  onChange={(e) => setCalcCategory(e.target.value as any)}
+                  className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500/20 font-bold"
+                >
+                  <option value="INVENTORY">Tính giá vốn cho: Dữ liệu Kho (Vàng 970, 9999, ...)</option>
+                  <option value="REVENUE">Tính giá vốn cho: Dữ liệu Doanh thu (HĐ bán lẻ)</option>
+                  <option value="ALL">Tính cho tất cả các nguồn dữ liệu</option>
                 </select>
               </div>
               <div>
-                <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Tháng</label>
-                <select value={selectedMonth} onChange={(e) => setSelectedMonth(parseInt(e.target.value))} className="w-full px-4 py-2 border rounded-lg">
+                <label className="block text-xs font-semibold text-slate-400 uppercase mb-1">Kỳ kế toán (Tháng)</label>
+                <select 
+                  value={selectedMonth}
+                  onChange={(e) => setSelectedMonth(parseInt(e.target.value))}
+                  className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500/20"
+                >
                   {months.map((m, i) => <option key={i} value={i}>{m}</option>)}
                 </select>
               </div>
               <div>
-                <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Năm</label>
-                <select value={selectedYear} onChange={(e) => setSelectedYear(parseInt(e.target.value))} className="w-full px-4 py-2 border rounded-lg">
+                <label className="block text-xs font-semibold text-slate-400 uppercase mb-1">Năm tài chính</label>
+                <select 
+                  value={selectedYear}
+                  onChange={(e) => setSelectedYear(parseInt(e.target.value))}
+                  className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500/20"
+                >
                   {years.map(y => <option key={y} value={y}>{y}</option>)}
                 </select>
               </div>
             </div>
 
             <div className="space-y-4">
-              <div className={`p-4 rounded-xl border flex items-center gap-4 ${isCurrentMonthClosed ? 'bg-green-50 text-green-700' : 'bg-amber-50 text-amber-700'}`}>
+              <div className={`p-4 rounded-xl border flex items-center gap-4 ${isCurrentMonthClosed ? 'bg-green-50 border-green-100 text-green-700' : 'bg-amber-50 border-amber-100 text-amber-700'}`}>
                 {isCurrentMonthClosed ? <CheckSquare size={24} /> : <LockIcon size={24} />}
                 <div className="flex-1">
-                  <p className="font-bold">{isCurrentMonthClosed ? 'Tháng này đã chốt' : 'Trạng thái: Đang mở'}</p>
+                  <p className="font-bold text-sm">{isCurrentMonthClosed ? 'Tháng này đã chốt số liệu' : 'Trạng thái: Đang mở'}</p>
+                  <p className="text-xs opacity-80">{isCurrentMonthClosed ? 'Mọi thay đổi hóa đơn trong tháng này đã bị khóa' : 'Vui lòng kiểm tra kỹ số liệu nhập xuất trước khi chốt.'}</p>
                 </div>
-                {!isCurrentMonthClosed ? (
-                  <button onClick={() => lockMonth(selectedMonth, selectedYear)} className="px-4 py-2 bg-slate-900 text-white rounded-lg text-xs font-bold">Chốt sổ</button>
+                {isCurrentMonthClosed ? (
+                  <button 
+                    onClick={() => {
+                      if (confirm(`Bạn có chắc chắn muốn MỞ LẠI sổ tháng ${selectedMonth+1}/${selectedYear}?`)) {
+                        unlockMonth(selectedMonth, selectedYear);
+                      }
+                    }}
+                    className="px-4 py-2 bg-amber-600 text-white rounded-lg text-xs font-bold hover:bg-amber-700 transition-colors flex items-center gap-2"
+                  >
+                    <Unlock size={14} />
+                    Mở lại sổ
+                  </button>
                 ) : (
-                  <button onClick={() => unlockMonth(selectedMonth, selectedYear)} className="px-4 py-2 bg-amber-600 text-white rounded-lg text-xs font-bold">Mở sổ</button>
+                  <button 
+                    onClick={() => {
+                      if (confirm(`Bạn có chắc chắn muốn CHỐT sổ tháng ${selectedMonth+1}/${selectedYear}? Sau khi chốt sẽ không thể chỉnh sửa hóa đơn.`)) {
+                        lockMonth(selectedMonth, selectedYear);
+                      }
+                    }}
+                    className="px-4 py-2 bg-slate-900 text-white rounded-lg text-xs font-bold hover:bg-slate-800 transition-colors flex items-center gap-2"
+                  >
+                    <LockIcon size={14} />
+                    Chốt sổ ngay
+                  </button>
                 )}
               </div>
-              <button onClick={handleCalculate} className="w-full py-4 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl shadow-lg">Tính & Gán giá vốn toàn hệ thống</button>
+
+              <button 
+                onClick={handleCalculate}
+                className="w-full py-4 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl shadow-lg shadow-blue-500/20 transition-all flex items-center justify-center gap-2"
+              >
+                <Calculator size={20} />
+                Tính & Gán giá vốn toàn hệ thống
+              </button>
             </div>
           </div>
 
+          {/* Manual Opening Balance Management */}
           <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
             <div className="flex items-center justify-between mb-6">
-              <h2 className="text-lg font-bold">Số dư đầu kỳ thủ công</h2>
-              <button onClick={() => setShowOBModal(true)} className="flex items-center gap-2 text-blue-600 font-bold"><Plus size={18} /> Thêm số dư</button>
+              <div>
+                <h2 className="text-lg font-bold text-slate-900">Số dư đầu kỳ thủ công</h2>
+                <p className="text-sm text-slate-500">Chỉ dùng khi bắt đầu sử dụng phần mềm</p>
+              </div>
+              <button 
+                onClick={() => setShowOBModal(true)}
+                disabled={isCurrentMonthClosed}
+                className="flex items-center gap-2 text-sm font-bold text-blue-600 hover:text-blue-700 disabled:opacity-50"
+              >
+                <Plus size={18} /> Thêm số dư
+              </button>
             </div>
-            <table className="w-full">
-              <thead className="bg-slate-50 text-xs font-bold">
-                <tr><th className="p-3">Mã hàng</th><th className="p-3">Số lượng</th><th className="p-3">Giá trị</th></tr>
-              </thead>
-              <tbody>
-                {manualOpeningBalances.filter(b => b.month === selectedMonth && b.year === selectedYear).map((ob, i) => (
-                  <tr key={i} className="border-t text-sm"><td className="p-3">{ob.itemCode}</td><td className="p-3">{formatQuantity(ob.quantity)}</td><td className="p-3">{formatCurrency(ob.totalValue)}</td></tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
 
-        <div className="space-y-6">
-          <div className="bg-slate-900 p-6 rounded-2xl text-white">
-            <h3 className="font-bold mb-4 flex items-center gap-2"><ShieldCheck size={18} /> Lưu ý</h3>
-            <p className="text-sm text-slate-300">Hệ thống tính giá bình quân gia quyền cho từng mặt hàng dựa trên mã hàng hoặc tên hàng (nếu không có mã).</p>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left">
+                <thead className="bg-slate-50 text-slate-400 text-xs font-bold uppercase">
+                  <tr>
+                    <th className="px-4 py-3">Mã hàng</th>
+                    <th className="px-4 py-3">Tên hàng</th>
+                    <th className="px-4 py-3">Số lượng</th>
+                    <th className="px-4 py-3">Giá trị tồn</th>
+                    <th className="px-4 py-3">Đơn giá đầu</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 text-sm">
+                  {currentMonthManualOBs.length === 0 ? (
+                    <tr>
+                      <td colSpan={5} className="px-4 py-8 text-center text-slate-400 italic">Chưa có số dư thủ công cho tháng này</td>
+                    </tr>
+                  ) : (
+                    currentMonthManualOBs.map((ob, idx) => (
+                      <tr key={idx}>
+                        <td className="px-4 py-3 font-semibold">{ob.itemCode}</td>
+                        <td className="px-4 py-3 text-slate-600">{ob.itemName || '-'}</td>
+                        <td className="px-4 py-3 font-medium text-slate-900">{formatQuantity(ob.quantity)}</td>
+                        <td className="px-4 py-3 font-bold">{formatCurrency(ob.totalValue)}</td>
+                        <td className="px-4 py-3 text-slate-500">{formatCurrency(ob.totalValue / (ob.quantity || 1))}</td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
-          <button onClick={resetData} className="w-full py-3 border border-red-200 text-red-600 font-bold rounded-xl hover:bg-red-50 flex items-center justify-center gap-2">
-            <Trash2 size={18} /> Reset toàn bộ data
-          </button>
+        </motion.div>
+
+        {/* Sidebar Sidebar */}
+        <div className="space-y-6">
+          <div className="bg-slate-900 p-6 rounded-2xl text-white shadow-xl">
+            <h3 className="font-bold mb-4 flex items-center gap-2">
+              <ShieldCheck size={18} className="text-blue-400" /> Nguyên tắc kế toán
+            </h3>
+            <ul className="space-y-4 text-sm text-slate-300">
+              <li className="flex gap-3">
+                <div className="w-5 h-5 rounded-full bg-blue-500/20 text-blue-400 flex items-center justify-center shrink-0 mt-0.5 font-bold text-xs">1</div>
+                <p>Giá vốn chỉ được tính sau khi đã nhập đủ tất cả hóa đơn trong tháng.</p>
+              </li>
+              <li className="flex gap-3">
+                <div className="w-5 h-5 rounded-full bg-blue-500/20 text-blue-400 flex items-center justify-center shrink-0 mt-0.5 font-bold text-xs">2</div>
+                <p>Số dư đầu kỳ được tự động kết chuyển từ tồn cuối tháng trước.</p>
+              </li>
+              <li className="flex gap-3">
+                <div className="w-5 h-5 rounded-full bg-blue-500/20 text-blue-400 flex items-center justify-center shrink-0 mt-0.5 font-bold text-xs">3</div>
+                <p>Đơn giá sẽ được áp đồng nhất cho tất cả các giao dịch bán trong kỳ.</p>
+              </li>
+            </ul>
+          </div>
+
+          <div className="bg-white p-6 rounded-2xl border border-red-100 shadow-sm">
+            <div className="flex items-center gap-3 mb-4 text-red-600">
+              <RotateCcw size={20} />
+              <h3 className="font-bold">Khu vực nguy hiểm</h3>
+            </div>
+            <p className="text-xs text-slate-500 mb-6 leading-relaxed">
+              Xóa dữ liệu sẽ dọn sạch Local Storage trên trình duyệt của bạn. Hãy cân nhắc kỹ.
+            </p>
+            <button 
+              onClick={() => {
+                if (confirm('Bạn có thực sự muốn XÓA TOÀN BỘ dữ liệu bao gồm cả các tháng đã chốt?')) {
+                  resetData();
+                }
+              }}
+              className="w-full py-3 border border-red-200 text-red-600 font-bold rounded-xl hover:bg-red-50 transition-colors flex items-center justify-center gap-2"
+            >
+              <Trash2 size={18} />
+              Reset toàn bộ data
+            </button>
+          </div>
         </div>
       </div>
 
+      {/* Manual OB Modal */}
       <AnimatePresence>
         {showOBModal && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
-            <div className="bg-white w-full max-w-md rounded-2xl p-6 shadow-2xl">
+            <motion.div 
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-white w-full max-w-md rounded-2xl p-6 shadow-2xl"
+            >
               <h2 className="text-xl font-bold mb-4">Nhập số dư đầu kỳ tháng {selectedMonth+1}</h2>
               <form onSubmit={handleAddOB} className="space-y-4">
-                <input type="text" placeholder="Mã hàng" value={obItemCode} onChange={e => setObItemCode(e.target.value)} className="w-full p-2 border rounded" required />
-                <input type="number" placeholder="Số lượng" value={obQty} onChange={e => setObQty(parseFloat(e.target.value))} className="w-full p-2 border rounded" required />
-                <input type="number" placeholder="Tổng giá trị" value={obValue} onChange={e => setObValue(parseFloat(e.target.value))} className="w-full p-2 border rounded" required />
-                <div className="flex gap-2"><button type="submit" className="flex-1 bg-blue-600 text-white p-2 rounded">Lưu</button><button onClick={() => setShowOBModal(false)} className="flex-1 bg-slate-100 p-2 rounded">Đóng</button></div>
+                <div>
+                  <div className="flex justify-between items-center mb-1">
+                    <label className="block text-xs font-bold text-slate-500 uppercase">Mặt hàng</label>
+                    <button 
+                      type="button"
+                      onClick={() => {
+                        setUseCustomCode(!useCustomCode);
+                        setObItemCode('');
+                        setObItemName('');
+                      }}
+                      className="text-[10px] font-bold text-blue-600 hover:underline"
+                    >
+                      {useCustomCode ? 'Chọn từ danh sách' : 'Nhập tự do'}
+                    </button>
+                  </div>
+                  {useCustomCode ? (
+                    <div className="space-y-3">
+                      <input 
+                        type="text"
+                        value={obItemCode}
+                        onChange={(e) => setObItemCode(e.target.value)}
+                        placeholder="Mã (VD: VANG9999)"
+                        className="w-full px-4 py-2.5 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-blue-500/20"
+                      />
+                      <input 
+                        type="text"
+                        value={obItemName}
+                        onChange={(e) => setObItemName(e.target.value)}
+                        placeholder="Tên mặt hàng"
+                        required
+                        className="w-full px-4 py-2.5 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-blue-500/20"
+                      />
+                    </div>
+                  ) : (
+                    <select 
+                      value={obItemCode}
+                      onChange={(e) => {
+                        const code = e.target.value;
+                        setObItemCode(code);
+                        const p = products.find(prod => prod.code === code);
+                        if (p) setObItemName(p.name);
+                      }}
+                      required
+                      className="w-full px-4 py-2.5 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-blue-500/20"
+                    >
+                      <option value="">Chọn mặt hàng...</option>
+                      {products.map(p => <option key={p.code} value={p.code}>{p.code} - {p.name}</option>)}
+                    </select>
+                  )}
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Số lượng tồn</label>
+                    <input 
+                      type="number" 
+                      value={obQty}
+                      onChange={(e) => setObQty(parseFloat(e.target.value))}
+                      required
+                      className="w-full px-4 py-2.5 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-blue-500/20"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Giá trị tồn (VNĐ)</label>
+                    <input 
+                      type="number" 
+                      value={obValue}
+                      onChange={(e) => setObValue(parseFloat(e.target.value))}
+                      required
+                      className="w-full px-4 py-2.5 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-blue-500/20"
+                    />
+                  </div>
+                </div>
+                <div className="pt-4 flex gap-3">
+                  <button 
+                    type="button"
+                    onClick={() => setShowOBModal(false)}
+                    className="flex-1 py-2.5 bg-slate-100 text-slate-600 font-bold rounded-lg"
+                  >
+                    Hủy
+                  </button>
+                  <button 
+                    type="submit"
+                    disabled={isSavingOB}
+                    className="flex-1 py-2.5 bg-blue-600 text-white font-bold rounded-lg shadow-lg shadow-blue-500/20 disabled:opacity-50"
+                  >
+                    {isSavingOB ? 'Đang lưu...' : 'Lưu số dư'}
+                  </button>
+                </div>
               </form>
-            </div>
+            </motion.div>
           </div>
         )}
       </AnimatePresence>
