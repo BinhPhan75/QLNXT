@@ -22,6 +22,7 @@ export default function Reports({ mode }: ReportsProps) {
   const [selectedMonth, setSelectedMonth] = useState<number | 'ALL'>(new Date().getMonth());
   const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear());
   
+  const [expandedRevenueKey, setExpandedRevenueKey] = useState<string | null>(null);
   const [expandedInvoice, setExpandedInvoice] = useState<string | null>(null);
   const [expandedProduct, setExpandedProduct] = useState<string | null>(null);
 
@@ -446,21 +447,57 @@ export default function Reports({ mode }: ReportsProps) {
                   ) : (
                     filteredDataDisplay.map((row: any) => {
                       if (mode === 'REVENUE' && reportType === 'SELL') {
+                        const isExpanded = expandedRevenueKey === row.key;
                         return (
-                          <tr key={row.key} className="hover:bg-slate-50/50 transition-colors text-xs">
-                            <td className="px-3 py-4 whitespace-nowrap text-slate-500">{formatDate(row.invoiceDate)}</td>
-                            <td className="px-3 py-4 font-bold text-blue-600">{row.invoiceNumber}</td>
-                            <td className="px-4 py-4 text-slate-900">{row.customer}</td>
-                            <td className="px-3 py-4 text-slate-500 text-[10px]">{row.customerCard || '-'}</td>
-                            <td className="px-4 py-4 text-slate-400 text-[10px] truncate max-w-[150px]" title={row.address}>{row.address || '-'}</td>
-                            <td className="px-4 py-4 text-slate-700 font-bold">{row.displayName}</td>
-                            <td className="px-3 py-4 text-center text-slate-900">{row.quantity}</td>
-                            <td className="px-3 py-4 text-right text-slate-600">{formatCurrency(row.avgPrice)}</td>
-                            <td className="px-3 py-4 text-right text-slate-900">{formatCurrency(row.itemTotal)}</td>
-                            <td className="px-3 py-4 text-right text-green-600 font-bold">{row.laborTotal > 0 ? formatCurrency(row.laborTotal) : '-'}</td>
-                            <td className="px-3 py-4 text-right text-red-500 font-bold">{row.discountTotal > 0 ? formatCurrency(row.discountTotal) : '-'}</td>
-                            <td className="px-3 py-4 text-right font-bold text-blue-700 text-sm">{formatCurrency(row.finalTotal)}</td>
-                          </tr>
+                          <React.Fragment key={row.key}>
+                            <tr 
+                              onClick={() => setExpandedRevenueKey(isExpanded ? null : row.key)}
+                              className={`hover:bg-blue-50/30 transition-colors cursor-pointer text-xs ${isExpanded ? 'bg-blue-50/50' : ''}`}
+                            >
+                              <td className="px-3 py-4 whitespace-nowrap text-slate-500">{formatDate(row.invoiceDate)}</td>
+                              <td className="px-3 py-4 font-bold text-blue-600">{row.invoiceNumber}</td>
+                              <td className="px-4 py-4 text-slate-900">{row.customer}</td>
+                              <td className="px-3 py-4 text-slate-500 text-[10px]">{row.customerCard || '-'}</td>
+                              <td className="px-4 py-4 text-slate-400 text-[10px] truncate max-w-[150px]" title={row.address}>{row.address || '-'}</td>
+                              <td className="px-4 py-4 text-slate-700 font-bold">{row.displayName}</td>
+                              <td className="px-3 py-4 text-center text-slate-900">{row.quantity}</td>
+                              <td className="px-3 py-4 text-right text-slate-600">{formatCurrency(row.avgPrice)}</td>
+                              <td className="px-3 py-4 text-right text-slate-900">{formatCurrency(row.itemTotal)}</td>
+                              <td className="px-3 py-4 text-right text-green-600 font-bold">{row.laborTotal > 0 ? formatCurrency(row.laborTotal) : '-'}</td>
+                              <td className="px-3 py-4 text-right text-red-500 font-bold">{row.discountTotal > 0 ? formatCurrency(row.discountTotal) : '-'}</td>
+                              <td className="px-3 py-4 text-right font-bold text-blue-700 text-sm">{formatCurrency(row.finalTotal)}</td>
+                            </tr>
+                            {isExpanded && (
+                              <tr>
+                                <td colSpan={12} className="px-6 py-4 bg-slate-50/80">
+                                  <div className="rounded-lg border border-slate-200 overflow-hidden bg-white shadow-inner">
+                                    <table className="w-full text-xs">
+                                      <thead className="bg-slate-100 text-slate-500 font-bold">
+                                        <tr>
+                                          <th className="px-4 py-2 text-left">Mã hàng</th>
+                                          <th className="px-4 py-2 text-left">Tên hàng</th>
+                                          <th className="px-4 py-2 text-center">SL</th>
+                                          <th className="px-4 py-2 text-right">Đơn giá</th>
+                                          <th className="px-4 py-2 text-right">Thành tiền</th>
+                                        </tr>
+                                      </thead>
+                                      <tbody className="divide-y divide-slate-100">
+                                        {row.details.map((item: any, idx: number) => (
+                                          <tr key={idx} className="hover:bg-slate-50/50">
+                                            <td className="px-4 py-2 font-mono text-slate-400">{item.itemCode || '-'}</td>
+                                            <td className="px-4 py-2 font-medium text-slate-700">{item.itemName}</td>
+                                            <td className="px-4 py-2 text-center text-slate-600">{item.quantity} {item.unit}</td>
+                                            <td className="px-4 py-2 text-right text-slate-500">{formatCurrency(item.price)}</td>
+                                            <td className="px-4 py-2 text-right font-bold text-slate-900">{formatCurrency(item.total)}</td>
+                                          </tr>
+                                        ))}
+                                      </tbody>
+                                    </table>
+                                  </div>
+                                </td>
+                              </tr>
+                            )}
+                          </React.Fragment>
                         );
                       }
 
