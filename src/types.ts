@@ -14,9 +14,13 @@ export interface Product {
   averageCost: number;
 }
 
+export type TransactionType = 'IN' | 'OUT';
+export type TransactionSource = 'PNJ' | 'REVENUE' | 'OTHER';
+
 export interface Transaction {
   id: string;
-  type: 'IN' | 'OUT';
+  type: TransactionType;
+  source?: TransactionSource;
   date: string;
   itemCode: string;
   itemName: string;
@@ -26,6 +30,8 @@ export interface Transaction {
   discount: number;
   total: number;
   customer: string; 
+  customerCard?: string;
+  address?: string;
   invoiceNumber?: string;
   invoiceDate?: string;
   cogs?: number; 

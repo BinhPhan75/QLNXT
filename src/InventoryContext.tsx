@@ -12,7 +12,7 @@ interface InventoryContextType {
   logout: () => void;
   importTransactions: (newTransactions: Omit<Transaction, 'id'>[]) => void;
   deleteInvoice: (invoiceNumber: string) => void;
-  calculateMonthlyCOGS: (month: number, year: number) => Promise<{ success: boolean; message: string }>;
+  calculateMonthlyCOGS: (month: number, year: number, sourceFilter?: TransactionSource) => Promise<{ success: boolean; message: string }>;
   setManualOpeningBalance: (balance: OpeningBalance) => void;
   lockMonth: (month: number, year: number) => void;
   unlockMonth: (month: number, year: number) => void;
@@ -257,7 +257,7 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     setClosedMonths(closedMonths.filter(m => m !== key));
   };
 
-  const calculateMonthlyCOGS = async (targetMonth: number, targetYear: number) => {
+  const calculateMonthlyCOGS = async (targetMonth: number, targetYear: number, sourceFilter?: TransactionSource) => {
     try {
       const txsWithDates = transactions.map(tx => ({
         ...tx,
@@ -265,11 +265,12 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       }));
 
       const targetMonthTxs = txsWithDates.filter(tx => 
-        tx.dateInfo.month === targetMonth && tx.dateInfo.year === targetYear
+        tx.dateInfo.month === targetMonth && tx.dateInfo.year === targetYear &&
+        (!sourceFilter || tx.source === sourceFilter)
       );
 
       if (targetMonthTxs.length === 0) {
-        return { success: false, message: `Tháng ${targetMonth + 1}/${targetYear} không có dữ liệu giao dịch.` };
+        return { success: false, message: `Tháng ${targetMonth + 1}/${targetYear} không có dữ liệu giao dịch${sourceFilter ? ` loại ${sourceFilter}` : ''}.` };
       }
 
       const itemCodesInMonth = Array.from(new Set(targetMonthTxs.map(t => t.itemCode))).filter(Boolean) as string[];
@@ -281,7 +282,7 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         // 1. Collect all history for this item
         const itemHistory = txsWithDates.filter(t => t.itemCode === code && (
           t.dateInfo.year < targetYear || (t.dateInfo.year === targetYear && t.dateInfo.month <= targetMonth)
-        ));
+        ) && (!sourceFilter || t.source === sourceFilter));
         const itemOBs = manualOpeningBalances.filter(b => b.itemCode === code && (
           b.year < targetYear || (b.year === targetYear && b.month <= targetMonth)
         ));
@@ -292,7 +293,6 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         }
 
         // 2. Identify the range of months to process
-        // Find earliest year/month from transactions or manual OBs
         let startYear = targetYear;
         let startMonth = targetMonth;
         
@@ -344,9 +344,7 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
           if (currentQty + inTotalQty > 0) {
             lastAvgPrice = (currentValue + inTotalValue) / (currentQty + inTotalQty);
-          } else {
-            // Price remains same as before if no stock/purchases
-          }
+          } 
           
           if (p.year === targetYear && p.month === targetMonth) {
             priceAssignmentMap[code] = lastAvgPrice;
@@ -365,7 +363,8 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       const itemsToUpdate: Transaction[] = [];
       const newTransactions = transactions.map(tx => {
         const { month: m, year: y } = getYearMonth(tx.invoiceDate || tx.date);
-        if (tx.type === 'OUT' && m === targetMonth && y === targetYear) {
+        const matchesSource = !sourceFilter || tx.source === sourceFilter;
+        if (tx.type === 'OUT' && m === targetMonth && y === targetYear && matchesSource) {
           const cost = priceAssignmentMap[tx.itemCode] || 0;
           const updatedTx = { ...tx, cogs: cost * tx.quantity };
           itemsToUpdate.push(updatedTx);
@@ -387,7 +386,7 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       if (!res.ok) throw new Error(`Server returned ${res.status}`);
 
       setTransactions(newTransactions);
-      let message = `Đã tính toán và gán giá vốn cho ${itemsToUpdate.length} dòng hàng trong tháng ${targetMonth + 1}/${targetYear}.`;
+      let message = `Đã tính toán và gán giá vốn cho ${itemsToUpdate.length} dòng hàng trong tháng ${targetMonth + 1}/${targetYear}${sourceFilter ? ` (loại ${sourceFilter})` : ''}.`;
       if (warnNoPurchases) {
         message += " Lưu ý: Một số mặt hàng không có giao dịch Nhập trong tháng, hệ thống đã áp dụng đơn giá từ kỳ trước.";
       }

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useInventory } from '../InventoryContext';
-import { LayoutDashboard, FileUp, BarChart3, Settings, LogOut, Menu, X } from 'lucide-react';
+import { LayoutDashboard, FileUp, BarChart3, Settings, LogOut, Menu, X, DollarSign, ChevronDown, ChevronUp } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
 // Subcomponents
@@ -11,8 +11,10 @@ import { formatCurrency } from '../lib/utils';
 
 export default function Layout() {
   const { user, logout, products } = useInventory();
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'import' | 'reports' | 'system'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'rev_import' | 'rev_report' | 'inv_pnj_import' | 'inv_pnj_report' | 'inv_other' | 'system'>('dashboard');
   const [isSidebarOpen, setSidebarOpen] = useState(false);
+  const [isRevenueMenuOpen, setRevenueMenuOpen] = useState(true);
+  const [isInventoryMenuOpen, setInventoryMenuOpen] = useState(true);
 
   const [dbStatus, setDbStatus] = useState<'checking' | 'connected' | 'error' | 'missing'>('checking');
   const [dbError, setDbError] = useState<string>('');
@@ -47,21 +49,25 @@ export default function Layout() {
     return () => clearInterval(interval);
   }, []);
 
-  const navItems = [
-    { id: 'dashboard', label: 'Tổng quan', icon: LayoutDashboard },
-    { id: 'import', label: 'Nhập/Xuất kho', icon: FileUp },
-    { id: 'reports', label: 'Báo cáo', icon: BarChart3 },
-    { id: 'system', label: 'Hệ thống', icon: Settings },
-  ] as const;
-
   const renderContent = () => {
     switch (activeTab) {
       case 'dashboard':
         return <DashboardView setActiveTab={setActiveTab} />;
-      case 'import':
-        return <ImportExport />;
-      case 'reports':
-        return <Reports />;
+      case 'rev_import':
+        return <ImportExport mode="REVENUE" />;
+      case 'rev_report':
+        return <Reports mode="REVENUE" />;
+      case 'inv_pnj_import':
+        return <ImportExport mode="PNJ" />;
+      case 'inv_pnj_report':
+        return <Reports mode="PNJ" />;
+      case 'inv_other':
+        return (
+          <div className="flex flex-col items-center justify-center h-96 text-slate-400">
+            <Settings size={48} className="mb-4 opacity-20" />
+            <p className="text-xl font-medium">Tính năng Vàng Khác đang được phát triển</p>
+          </div>
+        );
       case 'system':
         return <SystemSettings />;
       default:
@@ -127,16 +133,6 @@ export default function Layout() {
                          dbStatus === 'missing' ? 'Thiếu Config' : 'DB Offline'}
                       </span>
                     </div>
-                    {(dbStatus === 'missing' || dbStatus === 'error') && (
-                      <div className="mt-1 flex flex-col gap-0.5">
-                        <span className="text-[9px] text-slate-500 leading-tight">
-                          {dbStatus === 'missing' ? 'Vui lòng nhấn ⚙️ Settings -> Env Vars' : 'Sai thông tin Database'}
-                        </span>
-                        <span className="text-[8px] text-rose-400 italic font-medium">
-                          {dbError}
-                        </span>
-                      </div>
-                    )}
                   </div>
               </div>
             </div>
@@ -148,24 +144,148 @@ export default function Layout() {
             </button>
           </div>
 
-          <nav className="flex-1 space-y-1">
-            {navItems.map((item) => {
-              const Icon = item.icon;
-              return (
-                <button
-                  key={item.id}
-                  onClick={() => handleTabChange(item.id)}
-                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${
-                    activeTab === item.id 
-                    ? 'bg-blue-50 text-blue-600 font-semibold' 
-                    : 'text-slate-500 hover:bg-slate-50 hover:text-slate-700'
-                  }`}
-                >
-                  <Icon size={20} />
-                  {item.label}
-                </button>
-              );
-            })}
+          <nav className="flex-1 space-y-1 overflow-y-auto no-scrollbar">
+            <button
+              onClick={() => handleTabChange('dashboard')}
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${
+                activeTab === 'dashboard' 
+                ? 'bg-blue-50 text-blue-600 font-semibold' 
+                : 'text-slate-500 hover:bg-slate-50 hover:text-slate-700'
+              }`}
+            >
+              <LayoutDashboard size={20} />
+              Tổng quan
+            </button>
+
+            {/* REVENUE MENU */}
+            <div className="space-y-1">
+              <button
+                onClick={() => setRevenueMenuOpen(!isRevenueMenuOpen)}
+                className={`w-full flex items-center justify-between px-4 py-3 rounded-xl transition-all ${
+                  (activeTab === 'rev_import' || activeTab === 'rev_report')
+                  ? 'text-blue-600 font-semibold' 
+                  : 'text-slate-500 hover:bg-slate-50 hover:text-slate-700'
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  <DollarSign size={20} />
+                  <span>Doanh thu</span>
+                </div>
+                {isRevenueMenuOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+              </button>
+
+              <AnimatePresence>
+                {isRevenueMenuOpen && (
+                  <motion.div
+                    initial={{ height: 0, opacity: 0 }}
+                    animate={{ height: 'auto', opacity: 1 }}
+                    exit={{ height: 0, opacity: 0 }}
+                    className="overflow-hidden pl-4"
+                  >
+                    <button
+                      onClick={() => handleTabChange('rev_import')}
+                      className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl transition-all text-sm ${
+                        activeTab === 'rev_import' 
+                        ? 'text-blue-600 bg-blue-50 font-medium' 
+                        : 'text-slate-500 hover:text-slate-700'
+                      }`}
+                    >
+                      <FileUp size={18} />
+                      Import dữ liệu
+                    </button>
+                    <button
+                      onClick={() => handleTabChange('rev_report')}
+                      className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl transition-all text-sm ${
+                        activeTab === 'rev_report' 
+                        ? 'text-blue-600 bg-blue-50 font-medium' 
+                        : 'text-slate-500 hover:text-slate-700'
+                      }`}
+                    >
+                      <BarChart3 size={18} />
+                      Báo cáo doanh thu
+                    </button>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+
+            {/* INVENTORY MENU */}
+            <div className="space-y-1">
+              <button
+                onClick={() => setInventoryMenuOpen(!isInventoryMenuOpen)}
+                className={`w-full flex items-center justify-between px-4 py-3 rounded-xl transition-all ${
+                  (activeTab === 'inv_pnj_import' || activeTab === 'inv_pnj_report' || activeTab === 'inv_other')
+                  ? 'text-blue-600 font-semibold' 
+                  : 'text-slate-500 hover:bg-slate-50 hover:text-slate-700'
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  <FileUp size={20} />
+                  <span>Tồn kho</span>
+                </div>
+                {isInventoryMenuOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+              </button>
+
+              <AnimatePresence>
+                {isInventoryMenuOpen && (
+                  <motion.div
+                    initial={{ height: 0, opacity: 0 }}
+                    animate={{ height: 'auto', opacity: 1 }}
+                    exit={{ height: 0, opacity: 0 }}
+                    className="overflow-hidden pl-4"
+                  >
+                    <div className="py-1 px-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">PNJ</div>
+                    <button
+                      onClick={() => handleTabChange('inv_pnj_import')}
+                      className={`w-full flex items-center gap-3 px-4 py-2 rounded-xl transition-all text-sm ${
+                        activeTab === 'inv_pnj_import' 
+                        ? 'text-blue-600 bg-blue-50 font-medium' 
+                        : 'text-slate-500 hover:text-slate-700'
+                      }`}
+                    >
+                      <FileUp size={18} />
+                      Import dữ liệu
+                    </button>
+                    <button
+                      onClick={() => handleTabChange('inv_pnj_report')}
+                      className={`w-full flex items-center gap-3 px-4 py-2 rounded-xl transition-all text-sm ${
+                        activeTab === 'inv_pnj_report' 
+                        ? 'text-blue-600 bg-blue-50 font-medium' 
+                        : 'text-slate-500 hover:text-slate-700'
+                      }`}
+                    >
+                      <BarChart3 size={18} />
+                      Báo cáo PNJ
+                    </button>
+
+                    <div className="py-1 mt-2 px-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Vàng khác</div>
+                    <button
+                      onClick={() => handleTabChange('inv_other')}
+                      className={`w-full flex items-center gap-3 px-4 py-2 rounded-xl transition-all text-sm ${
+                        activeTab === 'inv_other' 
+                        ? 'text-blue-600 bg-blue-50 font-medium' 
+                        : 'text-slate-500 hover:text-slate-700'
+                      }`}
+                    >
+                      <Settings size={18} />
+                      Quản lý vàng khác
+                    </button>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+
+            <button
+              onClick={() => handleTabChange('system')}
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${
+                activeTab === 'system' 
+                ? 'bg-blue-50 text-blue-600 font-semibold' 
+                : 'text-slate-500 hover:bg-slate-50 hover:text-slate-700'
+              }`}
+            >
+              <Settings size={20} />
+              Hệ thống
+            </button>
           </nav>
 
           <button 

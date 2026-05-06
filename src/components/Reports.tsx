@@ -3,9 +3,19 @@ import { useInventory } from '../InventoryContext';
 import { formatCurrency, formatDate, getYearMonth } from '../lib/utils';
 import { Search, Filter, Download, Calendar, Trash2, FileText } from 'lucide-react';
 
-export default function Reports() {
+interface ReportsProps {
+  mode: 'REVENUE' | 'PNJ';
+}
+
+export default function Reports({ mode }: ReportsProps) {
   const { transactions, deleteInvoice, user, products } = useInventory();
-  const [reportType, setReportType] = useState<'BUY' | 'SELL' | 'STOCK'>('BUY');
+  
+  // Filter transactions based on source
+  const sourceFilteredTransactions = useMemo(() => {
+    return transactions.filter(t => t.source === mode);
+  }, [transactions, mode]);
+
+  const [reportType, setReportType] = useState<'BUY' | 'SELL' | 'STOCK'>(mode === 'REVENUE' ? 'SELL' : 'STOCK');
   const [viewMode, setViewMode] = useState<'TRANSACTION' | 'INVOICE'>('TRANSACTION');
   const [searchTerm, setSearchTerm] = useState('');
   const [customerFilter, setCustomerFilter] = useState('');
@@ -16,7 +26,7 @@ export default function Reports() {
   const [expandedProduct, setExpandedProduct] = useState<string | null>(null);
 
   const filteredData = useMemo(() => {
-    return transactions.filter(tx => {
+    return sourceFilteredTransactions.filter(tx => {
       const isType = reportType === 'BUY' ? tx.type === 'IN' : tx.type === 'OUT';
       if (reportType !== 'STOCK' && !isType) return false;
 
@@ -33,7 +43,7 @@ export default function Reports() {
 
       return matchesSearch && matchesCustomer;
     });
-  }, [transactions, reportType, searchTerm, customerFilter, selectedMonth, selectedYear]);
+  }, [sourceFilteredTransactions, reportType, searchTerm, customerFilter, selectedMonth, selectedYear]);
 
   const filteredProducts = useMemo(() => {
     return products.filter(p => 
@@ -69,13 +79,13 @@ export default function Reports() {
 
   const customers = useMemo(() => {
     const set = new Set<string>();
-    transactions.forEach(tx => {
+    sourceFilteredTransactions.forEach(tx => {
       if ((reportType === 'BUY' && tx.type === 'IN') || (reportType === 'SELL' && tx.type === 'OUT')) {
         set.add(tx.customer);
       }
     });
     return Array.from(set);
-  }, [transactions, reportType]);
+  }, [sourceFilteredTransactions, reportType]);
 
   const totals = useMemo(() => {
     if (reportType === 'STOCK') {
@@ -103,30 +113,36 @@ export default function Reports() {
       <header className="flex flex-col md:flex-row md:items-end justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">
-            {reportType === 'BUY' ? 'Báo Cáo Mua Hàng' : reportType === 'SELL' ? 'Báo Cáo Bán Hàng' : 'Báo Cáo Tồn Kho'}
+            {reportType === 'BUY' ? 'Báo Cáo Mua Hàng' : reportType === 'SELL' ? (mode === 'REVENUE' ? 'Báo Cáo Doanh Thu' : 'Báo Cáo Bán Hàng') : 'Báo Cáo Tồn Kho'}
           </h1>
-          <p className="text-slate-500">Tổng hợp dữ liệu giao dịch theo thời gian</p>
+          <p className="text-slate-500">
+            {mode === 'REVENUE' ? 'Theo dõi doanh thu bán hàng chi tiết' : 'Tổng hợp dữ liệu giao dịch PNJ theo thời gian'}
+          </p>
         </div>
         <div className="flex flex-col gap-2 md:items-end">
           <div className="flex p-1 bg-slate-100 rounded-lg">
-            <button 
-              onClick={() => setReportType('BUY')}
-              className={`px-4 py-1.5 text-sm font-medium rounded-md transition-all ${reportType === 'BUY' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500'}`}
-            >
-              Báo cáo Mua
-            </button>
+            {mode === 'PNJ' && (
+              <button 
+                onClick={() => setReportType('BUY')}
+                className={`px-4 py-1.5 text-sm font-medium rounded-md transition-all ${reportType === 'BUY' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500'}`}
+              >
+                Báo cáo Mua
+              </button>
+            )}
             <button 
               onClick={() => setReportType('SELL')}
               className={`px-4 py-1.5 text-sm font-medium rounded-md transition-all ${reportType === 'SELL' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500'}`}
             >
-              Báo cáo Bán
+              {mode === 'REVENUE' ? 'Doanh thu' : 'Báo cáo Bán'}
             </button>
-            <button 
-              onClick={() => setReportType('STOCK')}
-              className={`px-4 py-1.5 text-sm font-medium rounded-md transition-all ${reportType === 'STOCK' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500'}`}
-            >
-              Báo cáo Tồn
-            </button>
+            {mode === 'PNJ' && (
+              <button 
+                onClick={() => setReportType('STOCK')}
+                className={`px-4 py-1.5 text-sm font-medium rounded-md transition-all ${reportType === 'STOCK' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500'}`}
+              >
+                Báo cáo Tồn
+              </button>
+            )}
           </div>
           {reportType !== 'STOCK' && (
             <div className="flex p-1 bg-slate-100 rounded-lg">
@@ -362,7 +378,11 @@ export default function Reports() {
                           <div className="text-xs text-slate-500 font-mono">CODE: {tx.itemCode}</div>
                           <div className="text-[10px] bg-slate-100 text-slate-500 px-1 inline-block rounded">Số HD: {tx.invoiceNumber || (tx as any).invoice_number}</div>
                         </td>
-                        <td className="px-6 py-4 text-sm text-slate-600">{tx.customer}</td>
+                        <td className="px-6 py-4">
+                          <div className="text-sm font-medium text-slate-900">{tx.customer}</div>
+                          {tx.customerCard && <div className="text-[10px] text-slate-400">CCCD: {tx.customerCard}</div>}
+                          {tx.address && <div className="text-[10px] text-slate-400 truncate max-w-[150px]" title={tx.address}>{tx.address}</div>}
+                        </td>
                         <td className="px-6 py-4 text-sm font-medium text-slate-900 text-center">{tx.quantity} {tx.unit}</td>
                         <td className="px-6 py-4 text-sm text-slate-600 text-right">{formatCurrency(tx.price)}</td>
                         <td className="px-6 py-4 text-sm font-bold text-slate-900 text-right">{formatCurrency(tx.total)}</td>
@@ -418,7 +438,10 @@ export default function Reports() {
                               <span className="font-bold text-slate-900">{inv.number}</span>
                             </div>
                           </td>
-                          <td className="px-6 py-4 text-sm text-slate-600">{inv.customer}</td>
+                          <td className="px-6 py-4 text-sm text-slate-600">
+                            <div>{inv.customer}</div>
+                            {inv.details[0]?.customerCard && <div className="text-[10px] text-slate-400">CCCD: {inv.details[0].customerCard}</div>}
+                          </td>
                           <td className="px-6 py-4 text-sm text-slate-600">{inv.items} mặt hàng</td>
                           <td className="px-6 py-4 text-sm font-bold text-blue-600">{formatCurrency(inv.total)}</td>
                           <td className="px-6 py-4 text-right">

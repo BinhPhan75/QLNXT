@@ -8,6 +8,7 @@ export default function SystemSettings() {
   const { calculateMonthlyCOGS, resetData, products, transactions, setManualOpeningBalance, manualOpeningBalances, lockMonth, unlockMonth, closedMonths } = useInventory();
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth());
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
+  const [calcCategory, setCalcCategory] = useState<'ALL' | 'PNJ' | 'REVENUE'>('PNJ');
   const [showOBModal, setShowOBModal] = useState(false);
 
   // Manual OB Form State
@@ -26,7 +27,8 @@ export default function SystemSettings() {
 
   const handleCalculate = async () => {
     try {
-      const result = await calculateMonthlyCOGS(selectedMonth, selectedYear);
+      const sourceFilter = calcCategory === 'ALL' ? undefined : calcCategory as any;
+      const result = await calculateMonthlyCOGS(selectedMonth, selectedYear, sourceFilter);
       if (result && result.message) {
         alert(result.message);
       } else {
@@ -80,7 +82,19 @@ export default function SystemSettings() {
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4 mb-8">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+              <div>
+                <label className="block text-xs font-semibold text-slate-400 uppercase mb-1">Loại mặt hàng</label>
+                <select 
+                  value={calcCategory}
+                  onChange={(e) => setCalcCategory(e.target.value as any)}
+                  className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500/20 font-bold"
+                >
+                  <option value="PNJ">Mặt hàng PNJ</option>
+                  <option value="REVENUE">Dữ liệu Doanh thu</option>
+                  <option value="ALL">Tất cả (PNJ + Khác)</option>
+                </select>
+              </div>
               <div>
                 <label className="block text-xs font-semibold text-slate-400 uppercase mb-1">Kỳ kế toán (Tháng)</label>
                 <select 
