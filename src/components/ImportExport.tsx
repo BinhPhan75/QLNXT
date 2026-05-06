@@ -194,14 +194,22 @@ export default function ImportExport({ mode }: ImportExportProps) {
     
     let sellerName = '';
     let buyerName = '';
+    let address = '';
+    let customerCard = '';
     
-    data.slice(0, 10).forEach(row => {
+    data.slice(0, 12).forEach(row => {
       const content = row.join(' ').toLowerCase();
       if (content.includes('đơn vị bán hàng') || content.includes('người bán')) {
         sellerName = row.find((cell, idx) => idx > 0 && cell && cell.trim())?.trim() || '';
       }
       if (content.includes('họ tên người mua') || content.includes('người mua') || content.includes('đơn vị mua')) {
         buyerName = row.find((cell, idx) => idx > 0 && cell && cell.trim())?.trim() || '';
+      }
+      if (content.includes('địa chỉ')) {
+        address = row.find((cell, idx) => idx > 0 && cell && cell.trim())?.trim() || '';
+      }
+      if (content.includes('cccd') || content.includes('số thẻ') || content.includes('passport')) {
+        customerCard = row.find((cell, idx) => idx > 0 && cell && cell.trim())?.trim() || '';
       }
     });
 
@@ -315,6 +323,8 @@ export default function ImportExport({ mode }: ImportExportProps) {
         discount: 0,
         total,
         customer: customerName,
+        customerCard,
+        address,
         invoiceNumber: invoiceNum
       });
       successCount++;

@@ -5,6 +5,8 @@ const ai = new GoogleGenAI({ apiKey: (process as any).env.GEMINI_API_KEY });
 
 export interface ExtractedInvoice {
   customer: string;
+  customerCard?: string;
+  address?: string;
   invoiceNumber: string;
   invoiceDate: string;
   items: {
@@ -33,6 +35,8 @@ export const extractInvoiceFromPdf = async (base64Data: string): Promise<Extract
             text: `Bạn là một chuyên gia kế toán. Hãy trích xuất thông tin từ hóa đơn PDF này sang định dạng JSON.
             Thông tin cần lấy:
             - Tên khách hàng/đơn vị mua hàng (customer)
+            - Số thẻ khách hàng hoặc CCCD nếu có (customerCard)
+            - Địa chỉ khách hàng nếu có (address)
             - Số hóa đơn (invoiceNumber)
             - Ngày hóa đơn (invoiceDate) định dạng YYYY-MM-DD
             - Danh sách các mặt hàng (items): tên hàng, mã hàng (nếu có, nếu không thì để trống), số lượng, đơn vị tính, đơn giá, thành tiền.
@@ -50,6 +54,8 @@ export const extractInvoiceFromPdf = async (base64Data: string): Promise<Extract
         type: Type.OBJECT,
         properties: {
           customer: { type: Type.STRING },
+          customerCard: { type: Type.STRING },
+          address: { type: Type.STRING },
           invoiceNumber: { type: Type.STRING },
           invoiceDate: { type: Type.STRING },
           items: {
@@ -94,5 +100,7 @@ export const convertExtractedToTransactions = (extracted: ExtractedInvoice, type
     discount: 0,
     total: item.total,
     customer: extracted.customer,
+    customerCard: extracted.customerCard || '',
+    address: extracted.address || '',
   }));
 };
