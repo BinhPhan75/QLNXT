@@ -24,7 +24,6 @@ export default function BankStatements() {
       'Nội dung': item.content,
       'Số tiền ghi nợ (Debit)': item.debit,
       'Số tiền ghi có (Credit)': item.credit,
-      'Số dư': item.balance,
       'Chứng từ': item.note || ''
     }));
 
@@ -193,12 +192,21 @@ export default function BankStatements() {
   };
 
   const filteredData = useMemo(() => {
-    return bankStatements.filter(item => {
+    const data = bankStatements.filter(item => {
       const matchesFilter = filterType === 'ALL' || item.classification === filterType;
       const matchesSearch = item.content.toLowerCase().includes(searchTerm.toLowerCase()) ||
                           item.customerName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
                           item.itemInfo?.toLowerCase().includes(searchTerm.toLowerCase());
       return matchesFilter && matchesSearch;
+    });
+
+    // Sort by date ascending (DD/MM/YYYY)
+    return data.sort((a, b) => {
+      const [d1, m1, y1] = a.transactionDate.split('/').map(Number);
+      const [d2, m2, y2] = b.transactionDate.split('/').map(Number);
+      const dateA = new Date(y1, m1 - 1, d1).getTime();
+      const dateB = new Date(y2, m2 - 1, d2).getTime();
+      return dateA - dateB;
     });
   }, [bankStatements, filterType, searchTerm]);
 
@@ -329,7 +337,6 @@ export default function BankStatements() {
                 <th className="px-4 py-3">Nội dung chi tiết</th>
                 <th className="px-4 py-3 text-right text-red-500">Chi ra (Debit)</th>
                 <th className="px-4 py-3 text-right text-green-600">Thu vào (Credit)</th>
-                <th className="px-4 py-3 text-right">Số dư</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -365,11 +372,8 @@ export default function BankStatements() {
                       <td className="px-4 py-3 text-right font-medium text-red-600 border-r border-slate-50">
                         {item.debit > 0 ? formatCurrency(item.debit) : '-'}
                       </td>
-                      <td className="px-4 py-3 text-right font-medium text-green-600 border-r border-slate-50">
+                      <td className="px-4 py-3 text-right font-medium text-green-600">
                         {item.credit > 0 ? formatCurrency(item.credit) : '-'}
-                      </td>
-                      <td className="px-4 py-3 text-right font-bold text-slate-700 bg-slate-50/30">
-                        {formatCurrency(item.balance)}
                       </td>
                     </tr>
                   );
@@ -382,7 +386,6 @@ export default function BankStatements() {
                   <td colSpan={4} className="px-4 py-4 text-right uppercase text-slate-500">Tổng cộng lọc:</td>
                   <td className="px-4 py-4 text-right text-red-600">{formatCurrency(summary.debit)}</td>
                   <td className="px-4 py-4 text-right text-green-600">{formatCurrency(summary.credit)}</td>
-                  <td></td>
                 </tr>
               </tfoot>
             )}
