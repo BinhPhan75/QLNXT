@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useInventory } from '../InventoryContext';
 import { Calculator, RotateCcw, ShieldCheck, CheckSquare, Lock as LockIcon, Unlock, Plus, Trash2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { formatCurrency } from '../lib/utils';
+import { formatCurrency, formatQuantity } from '../lib/utils';
 
 export default function SystemSettings() {
   const { calculateMonthlyCOGS, resetData, products, transactions, setManualOpeningBalance, manualOpeningBalances, lockMonth, unlockMonth, closedMonths } = useInventory();
@@ -50,7 +50,8 @@ export default function SystemSettings() {
     setIsSavingOB(true);
     try {
       const result = await setManualOpeningBalance({
-        itemCode: obItemCode.trim().toUpperCase(),
+        itemCode: (obItemCode || 'KHONG-MA').trim().toUpperCase(),
+        itemName: obItemName.trim(),
         month: selectedMonth,
         year: selectedYear,
         quantity: obQty,
@@ -146,7 +147,7 @@ export default function SystemSettings() {
                   onChange={(e) => setCalcCategory(e.target.value as any)}
                   className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500/20 font-bold"
                 >
-                  <option value="NGHIATINGOLD">Hàng hóa trong kho (Vàng 970, 9999, ...)</option>
+                  <option value="NGHIATINGOLD">Quản lý hàng hóa (Vàng 970, 9999, ...)</option>
                   <option value="REVENUE">Dữ liệu Doanh thu & Tiền công</option>
                   <option value="ALL">Tất cả (Hàng hóa + Khác)</option>
                 </select>
@@ -238,6 +239,7 @@ export default function SystemSettings() {
                 <thead className="bg-slate-50 text-slate-400 text-xs font-bold uppercase">
                   <tr>
                     <th className="px-4 py-3">Mã hàng</th>
+                    <th className="px-4 py-3">Tên hàng</th>
                     <th className="px-4 py-3">Số lượng</th>
                     <th className="px-4 py-3">Giá trị tồn</th>
                     <th className="px-4 py-3">Đơn giá đầu</th>
@@ -246,15 +248,16 @@ export default function SystemSettings() {
                 <tbody className="divide-y divide-slate-100 text-sm">
                   {currentMonthManualOBs.length === 0 ? (
                     <tr>
-                      <td colSpan={4} className="px-4 py-8 text-center text-slate-400 italic">Chưa có số dư thủ công cho tháng này</td>
+                      <td colSpan={5} className="px-4 py-8 text-center text-slate-400 italic">Chưa có số dư thủ công cho tháng này</td>
                     </tr>
                   ) : (
-                    currentMonthManualOBs.map(ob => (
-                      <tr key={ob.itemCode}>
+                    currentMonthManualOBs.map((ob, idx) => (
+                      <tr key={idx}>
                         <td className="px-4 py-3 font-semibold">{ob.itemCode}</td>
-                        <td className="px-4 py-3">{ob.quantity}</td>
-                        <td className="px-4 py-3">{formatCurrency(ob.totalValue)}</td>
-                        <td className="px-4 py-3 text-slate-500">{formatCurrency(ob.totalValue / ob.quantity)}</td>
+                        <td className="px-4 py-3 text-slate-600">{ob.itemName || '-'}</td>
+                        <td className="px-4 py-3 font-medium text-slate-900">{formatQuantity(ob.quantity)}</td>
+                        <td className="px-4 py-3 font-bold">{formatCurrency(ob.totalValue)}</td>
+                        <td className="px-4 py-3 text-slate-500">{formatCurrency(ob.totalValue / (ob.quantity || 1))}</td>
                       </tr>
                     ))
                   )}
@@ -323,31 +326,46 @@ export default function SystemSettings() {
               <form onSubmit={handleAddOB} className="space-y-4">
                 <div>
                   <div className="flex justify-between items-center mb-1">
-                    <label className="block text-xs font-bold text-slate-500 uppercase">Mã hàng hóa</label>
+                    <label className="block text-xs font-bold text-slate-500 uppercase">Mặt hàng</label>
                     <button 
                       type="button"
                       onClick={() => {
                         setUseCustomCode(!useCustomCode);
                         setObItemCode('');
+                        setObItemName('');
                       }}
                       className="text-[10px] font-bold text-blue-600 hover:underline"
                     >
-                      {useCustomCode ? 'Chọn từ danh sách' : 'Nhập mã mới'}
+                      {useCustomCode ? 'Chọn từ danh sách' : 'Nhập tự do'}
                     </button>
                   </div>
                   {useCustomCode ? (
-                    <input 
-                      type="text"
-                      value={obItemCode}
-                      onChange={(e) => setObItemCode(e.target.value)}
-                      placeholder="VD: VANG9999"
-                      required
-                      className="w-full px-4 py-2.5 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-blue-500/20"
-                    />
+                    <div className="space-y-3">
+                      <input 
+                        type="text"
+                        value={obItemCode}
+                        onChange={(e) => setObItemCode(e.target.value)}
+                        placeholder="Mã (VD: VANG9999)"
+                        className="w-full px-4 py-2.5 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-blue-500/20"
+                      />
+                      <input 
+                        type="text"
+                        value={obItemName}
+                        onChange={(e) => setObItemName(e.target.value)}
+                        placeholder="Tên mặt hàng"
+                        required
+                        className="w-full px-4 py-2.5 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-blue-500/20"
+                      />
+                    </div>
                   ) : (
                     <select 
                       value={obItemCode}
-                      onChange={(e) => setObItemCode(e.target.value)}
+                      onChange={(e) => {
+                        const code = e.target.value;
+                        setObItemCode(code);
+                        const p = products.find(prod => prod.code === code);
+                        if (p) setObItemName(p.name);
+                      }}
                       required
                       className="w-full px-4 py-2.5 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-blue-500/20"
                     >

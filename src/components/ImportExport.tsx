@@ -444,7 +444,7 @@ export default function ImportExport({ mode }: ImportExportProps) {
           <p className="text-slate-500">
             {isRevenue 
                ? 'Import dữ liệu từ Báo cáo bán hàng chi tiết (.xlsx)' 
-               : 'Import dữ liệu Nhập/Xuất kho (Vàng 970, 9999, 610, Bạc...)'}
+               : 'Quản lý hàng hóa (Vàng 970, 9999, 610, Bạc...)'}
           </p>
         </div>
       </header>

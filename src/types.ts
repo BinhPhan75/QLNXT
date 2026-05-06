@@ -1,5 +1,6 @@
 export interface OpeningBalance {
   itemCode: string;
+  itemName?: string;
   month: number; // 0-11
   year: number;
   quantity: number;

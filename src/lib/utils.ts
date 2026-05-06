@@ -15,10 +15,25 @@ export function formatCurrency(value: number) {
 
 export function formatQuantity(value: number, decimals: number = 3) {
   if (value === undefined || value === null || isNaN(value)) return "0";
-  return new Intl.NumberFormat("vi-VN", {
+  
+  // Use vi-VN to get basic formatting
+  const formatted = new Intl.NumberFormat("vi-VN", {
     minimumFractionDigits: 0,
     maximumFractionDigits: decimals,
   }).format(value);
+
+  // If the browser/env doesn't support vi-VN properly and uses dot for decimals (US style),
+  // we perform a manual fix to ensure dot for thousands and comma for decimals as per user's request.
+  // We check if "1.1" formatted as vi-VN still contains a dot.
+  const testFormat = new Intl.NumberFormat("vi-VN").format(1.1);
+  if (testFormat.includes('.')) {
+    // US Style detected (1.1). We need to swap dots and commas.
+    // Example: 1,234.567 -> 1.234,567
+    let result = formatted.replace(/,/g, 'THOUSANDS').replace(/\./g, 'DECIMAL');
+    return result.replace(/THOUSANDS/g, '.').replace(/DECIMAL/g, ',');
+  }
+  
+  return formatted;
 }
 
 export function formatDate(date: string | Date) {

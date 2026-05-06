@@ -306,7 +306,7 @@ export default function Reports({ mode }: ReportsProps) {
             {reportType === 'BUY' ? 'Báo Cáo Mua Hàng' : reportType === 'SELL' ? (mode === 'REVENUE' ? 'Báo Cáo Doanh Thu & Tiền công' : 'Báo Cáo Bán Hàng') : 'Báo Cáo Quản lý hàng hóa'}
           </h1>
           <p className="text-slate-500">
-            {mode === 'REVENUE' ? 'Theo dõi doanh thu bán hàng & tiền công chi tiết' : 'Báo cáo hàng hóa (970, 9999, 610, Bạc, Công...)'}
+            {mode === 'REVENUE' ? 'Theo dõi doanh thu bán hàng & tiền công chi tiết' : 'Quản lý hàng hóa (970, 9999, 610, Bạc, Công...)'}
           </p>
         </div>
         <div className="flex flex-col gap-2 md:items-end">

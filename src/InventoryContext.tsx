@@ -55,7 +55,7 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
           return {
             ...t,
             itemCode: (t.item_code || t.itemCode || '').toString(),
-            itemName: (t.item_name || t.itemCode || '').toString(), // Fallback to code if name missing
+            itemName: (t.item_name || t.itemName || t.item_code || t.itemCode || '').toString(),
             invoiceNumber: (t.invoice_number || t.invoiceNumber || '').toString(),
             invoiceDate: (t.invoice_date || t.invoiceDate || '').toString(),
             customer: (t.customer || '').toString(),
@@ -72,6 +72,7 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
         const mappedOBs = obRes.map((ob: any) => ({
           itemCode: (ob.item_code || ob.itemCode || '').toString(),
+          itemName: (ob.item_name || ob.itemName || '').toString(),
           month: parseInt(ob.month || 0),
           year: parseInt(ob.year || 0),
           quantity: parseFloat(ob.quantity || 0),
@@ -315,15 +316,7 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   };
 
   const calculateMonthlyCOGS = async (targetMonth: number, targetYear: number, sourceFilter?: TransactionSource) => {
-    const ALLOWED_CATEGORIES = [
-      'VÀNG 970', 'VÀNG 97', 'VÀNG 9999', 'VÀNG 610', 
-      'BẠC MÓN', 'VÀNG TRANG SỨC', 'VÀNG KHÁC', 'TIỀN CÔNG'
-    ];
-
-    const isAllowedItem = (name: string) => {
-      const upperName = name.toUpperCase();
-      return ALLOWED_CATEGORIES.some(cat => upperName.includes(cat));
-    };
+    const getItemKey = (t: any) => t.itemCode && t.itemCode !== 'KHONG-MA' ? t.itemCode : t.itemName;
 
     try {
       const txsWithDates = transactions.map(tx => ({
@@ -333,30 +326,29 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
       const targetMonthTxs = txsWithDates.filter(tx => 
         tx.dateInfo.month === targetMonth && tx.dateInfo.year === targetYear &&
-        (!sourceFilter || tx.source === sourceFilter) &&
-        isAllowedItem(tx.itemName)
+        (!sourceFilter || tx.source === sourceFilter)
       );
 
       if (targetMonthTxs.length === 0) {
         return { success: false, message: `Tháng ${targetMonth + 1}/${targetYear} không có dữ liệu giao dịch${sourceFilter ? ` loại ${sourceFilter}` : ''}.` };
       }
 
-      const itemCodesInMonth = Array.from(new Set(targetMonthTxs.map(t => t.itemCode))).filter(Boolean) as string[];
+      const itemKeysInMonth = Array.from(new Set(targetMonthTxs.map(t => getItemKey(t)))).filter(Boolean) as string[];
       const priceAssignmentMap: Record<string, number> = {};
       let warnNoPurchases = false;
 
       // For every item in the target month, we need to trace history month-by-month
-      itemCodesInMonth.forEach(code => {
-        // 1. Collect all history for this item
-        const itemHistory = txsWithDates.filter(t => t.itemCode === code && (
+      itemKeysInMonth.forEach(key => {
+        const itemHistory = txsWithDates.filter(t => getItemKey(t) === key && (
           t.dateInfo.year < targetYear || (t.dateInfo.year === targetYear && t.dateInfo.month <= targetMonth)
         ) && (!sourceFilter || t.source === sourceFilter));
-        const itemOBs = manualOpeningBalances.filter(b => b.itemCode === code && (
+        
+        const itemOBs = manualOpeningBalances.filter(b => (b.itemCode === key || b.itemName === key) && (
           b.year < targetYear || (b.year === targetYear && b.month <= targetMonth)
         ));
 
         if (itemHistory.length === 0 && itemOBs.length === 0) {
-          priceAssignmentMap[code] = 0;
+          priceAssignmentMap[key] = 0;
           return;
         }
 
@@ -415,7 +407,7 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
           } 
           
           if (p.year === targetYear && p.month === targetMonth) {
-            priceAssignmentMap[code] = lastAvgPrice;
+            priceAssignmentMap[key] = lastAvgPrice;
             if (inTotalQty === 0 && outTotalQty > 0 && currentQty > 0) {
               warnNoPurchases = true;
             }
@@ -433,7 +425,8 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         const { month: m, year: y } = getYearMonth(tx.invoiceDate || tx.date);
         const matchesSource = !sourceFilter || tx.source === sourceFilter;
         if (tx.type === 'OUT' && m === targetMonth && y === targetYear && matchesSource) {
-          const cost = priceAssignmentMap[tx.itemCode] || 0;
+          const key = getItemKey(tx);
+          const cost = priceAssignmentMap[key] || 0;
           const updatedTx = { ...tx, cogs: cost * tx.quantity };
           itemsToUpdate.push(updatedTx);
           return updatedTx;

@@ -130,6 +130,7 @@ async function initDb() {
     await client.query(`
       CREATE TABLE IF NOT EXISTS opening_balances (
         item_code TEXT,
+        item_name TEXT,
         month INTEGER,
         year INTEGER,
         quantity FLOAT,
@@ -137,19 +138,25 @@ async function initDb() {
       );
     `);
 
-    // Ensure 'value' column exists (for older table versions)
+    // Ensure 'item_name' and 'value' columns exist (for older table versions)
     try {
       const colCheck = await client.query(`
         SELECT column_name 
         FROM information_schema.columns 
-        WHERE table_name = 'opening_balances' AND column_name = 'value'
+        WHERE table_name = 'opening_balances'
       `);
-      if (colCheck.rowCount === 0) {
+      const existingCols = colCheck.rows.map(r => r.column_name);
+      
+      if (!existingCols.includes('value')) {
         console.log("[Database] Adding missing 'value' column to opening_balances...");
         await client.query(`ALTER TABLE opening_balances ADD COLUMN value FLOAT DEFAULT 0`);
       }
+      if (!existingCols.includes('item_name')) {
+        console.log("[Database] Adding missing 'item_name' column to opening_balances...");
+        await client.query(`ALTER TABLE opening_balances ADD COLUMN item_name TEXT`);
+      }
     } catch (err) {
-      console.error("[Database] Failed to add 'value' column:", err);
+      console.error("[Database] Failed to update opening_balances columns:", err);
     }
 
     // Ensure Primary Key
@@ -348,7 +355,7 @@ router.get("/opening-balances", async (req, res) => {
 
 // 6. Save OB
 router.post("/opening-balances", async (req, res) => {
-  const { item_code, month, year, quantity, value } = req.body;
+  const { item_code, item_name, month, year, quantity, value } = req.body;
   
   if (!item_code || month === undefined || year === undefined) {
     return res.status(400).json({ error: "Thiếu thông tin bắt buộc (mã hàng, tháng, năm)" });
@@ -356,10 +363,13 @@ router.post("/opening-balances", async (req, res) => {
 
   try {
     await pool.query(
-      `INSERT INTO opening_balances (item_code, month, year, quantity, value)
-       VALUES ($1, $2, $3, $4, $5)
-       ON CONFLICT (item_code, month, year) DO UPDATE SET quantity = EXCLUDED.quantity, value = EXCLUDED.value`,
-      [item_code, month, year, parseFloat(quantity || 0), parseFloat(value || 0)]
+      `INSERT INTO opening_balances (item_code, item_name, month, year, quantity, value)
+       VALUES ($1, $2, $3, $4, $5, $6)
+       ON CONFLICT (item_code, month, year) DO UPDATE SET 
+         item_name = EXCLUDED.item_name,
+         quantity = EXCLUDED.quantity, 
+         value = EXCLUDED.value`,
+      [item_code, item_name, month, year, parseFloat(quantity || 0), parseFloat(value || 0)]
     );
     res.json({ success: true });
   } catch (err: any) {
