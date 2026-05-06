@@ -34,11 +34,16 @@ export default function Login() {
         className="w-full max-w-md bg-white rounded-2xl shadow-xl p-8 border border-slate-200"
       >
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-blue-600 text-white mb-4">
-            <Lock size={32} />
+          <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-white text-white mb-4 border border-slate-100 p-2">
+            <img 
+               src="https://raw.githubusercontent.com/BinhPhan75/nghiatingold/refs/heads/main/icon.png?token=GHSAT0AAAAAAD25RX77QHTW7T7XXUNMKPV42P26QCA" 
+               alt="NGHIATINGOLD Logo" 
+               className="w-full h-full object-contain"
+               referrerPolicy="no-referrer"
+            />
           </div>
-          <h1 className="text-2xl font-bold text-slate-900">Inventory Manager</h1>
-          <p className="text-slate-500 mt-2">Đăng nhập để quản lý kho hàng</p>
+          <h1 className="text-2xl font-bold text-slate-900 uppercase">NGHIATINGOLD</h1>
+          <p className="text-slate-500 mt-2">Quản lý kho hàng chuyên nghiệp</p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-6">
@@ -97,7 +102,7 @@ export default function Login() {
 
         <div className="mt-8 pt-6 border-t border-slate-100 text-center">
           <p className="text-xs text-slate-400">
-            Hãng Chế Tác và Kinh Doanh Trang Sức PNJ
+            Hãng Chế Tác và Kinh Doanh Trang Sức NGHIATINGOLD
           </p>
         </div>
       </motion.div>

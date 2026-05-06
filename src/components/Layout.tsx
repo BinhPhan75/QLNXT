@@ -12,7 +12,7 @@ import { formatCurrency } from '../lib/utils';
 
 export default function Layout() {
   const { user, logout, products, bankStatements } = useInventory();
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'rev_import' | 'rev_report' | 'inv_pnj_import' | 'inv_pnj_report' | 'inv_other' | 'bank' | 'system'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'rev_import' | 'rev_report' | 'inv_nghiatingold_import' | 'inv_nghiatingold_report' | 'inv_other' | 'bank' | 'system'>('dashboard');
   const [isSidebarOpen, setSidebarOpen] = useState(false);
   const [isRevenueMenuOpen, setRevenueMenuOpen] = useState(true);
   const [isInventoryMenuOpen, setInventoryMenuOpen] = useState(true);
@@ -59,10 +59,10 @@ export default function Layout() {
         return <ImportExport mode="REVENUE" />;
       case 'rev_report':
         return <Reports mode="REVENUE" />;
-      case 'inv_pnj_import':
-        return <ImportExport mode="PNJ" />;
-      case 'inv_pnj_report':
-        return <Reports mode="PNJ" />;
+      case 'inv_nghiatingold_import':
+        return <ImportExport mode="NGHIATINGOLD" />;
+      case 'inv_nghiatingold_report':
+        return <Reports mode="NGHIATINGOLD" />;
       case 'inv_other':
         return (
           <div className="flex flex-col items-center justify-center h-96 text-slate-400">
@@ -114,9 +114,14 @@ export default function Layout() {
         <div className="p-6 h-full flex flex-col min-w-[280px]">
           <div className="flex items-center justify-between mb-10">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center text-white font-bold text-xl">P</div>
+              <img 
+                src="https://raw.githubusercontent.com/BinhPhan75/nghiatingold/refs/heads/main/icon.png?token=GHSAT0AAAAAAD25RX77QHTW7T7XXUNMKPV42P26QCA" 
+                alt="NGHIATINGOLD Logo" 
+                className="w-10 h-10 object-contain rounded-lg"
+                referrerPolicy="no-referrer"
+              />
               <div>
-                <h1 className="font-bold text-lg text-slate-900 tracking-tight leading-tight">PNJ Inv</h1>
+                <h1 className="font-bold text-lg text-slate-900 tracking-tight leading-tight uppercase">NGHIATINGOLD</h1>
                   <div 
                     title={dbError || (dbStatus === 'error' ? 'Vui lòng kiểm tra DATABASE_URL trong phần Settings' : undefined)}
                     className={`flex flex-col mt-0.5 cursor-help`}
@@ -218,7 +223,7 @@ export default function Layout() {
               <button
                 onClick={() => setInventoryMenuOpen(!isInventoryMenuOpen)}
                 className={`w-full flex items-center justify-between px-4 py-3 rounded-xl transition-all ${
-                  (activeTab === 'inv_pnj_import' || activeTab === 'inv_pnj_report' || activeTab === 'inv_other')
+                  (activeTab === 'inv_nghiatingold_import' || activeTab === 'inv_nghiatingold_report' || activeTab === 'inv_other')
                   ? 'text-blue-600 font-semibold' 
                   : 'text-slate-500 hover:bg-slate-50 hover:text-slate-700'
                 }`}
@@ -238,11 +243,11 @@ export default function Layout() {
                     exit={{ height: 0, opacity: 0 }}
                     className="overflow-hidden pl-4"
                   >
-                    <div className="py-1 px-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">PNJ</div>
+                    <div className="py-1 px-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">NGHIATINGOLD</div>
                     <button
-                      onClick={() => handleTabChange('inv_pnj_import')}
+                      onClick={() => handleTabChange('inv_nghiatingold_import')}
                       className={`w-full flex items-center gap-3 px-4 py-2 rounded-xl transition-all text-sm ${
-                        activeTab === 'inv_pnj_import' 
+                        activeTab === 'inv_nghiatingold_import' 
                         ? 'text-blue-600 bg-blue-50 font-medium' 
                         : 'text-slate-500 hover:text-slate-700'
                       }`}
@@ -251,15 +256,15 @@ export default function Layout() {
                       Import dữ liệu
                     </button>
                     <button
-                      onClick={() => handleTabChange('inv_pnj_report')}
+                      onClick={() => handleTabChange('inv_nghiatingold_report')}
                       className={`w-full flex items-center gap-3 px-4 py-2 rounded-xl transition-all text-sm ${
-                        activeTab === 'inv_pnj_report' 
+                        activeTab === 'inv_nghiatingold_report' 
                         ? 'text-blue-600 bg-blue-50 font-medium' 
                         : 'text-slate-500 hover:text-slate-700'
                       }`}
                     >
                       <BarChart3 size={18} />
-                      Báo cáo PNJ
+                      Báo cáo NGHIATINGOLD
                     </button>
 
                     <div className="py-1 mt-2 px-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Vàng khác</div>

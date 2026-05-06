@@ -1,6 +1,6 @@
 {
-  "name": "Nghia Tin Inventory & Finance",
-  "description": "Phần mềm quản lý kho, tính giá vốn và sao kê ngân hàng tích hợp AI để phân loại nghiệp vụ.",
+  "name": "NGHIATINGOLD Inventory Manager",
+  "description": "Quản lý kho hàng, tính giá vốn và theo dõi sao kê ngân hàng cho NGHIATINGOLD.",
   "requestFramePermissions": [],
   "majorCapabilities": []
 }

@@ -29,7 +29,7 @@ async function initDb() {
     console.log("[Database] Initializing tables and checking columns...");
     
     // Create source-specific tables
-    const tables = ['pnj_transactions', 'revenue_transactions'];
+    const tables = ['nghiatingold_transactions', 'revenue_transactions'];
     
     for (const table of tables) {
       await client.query(`
@@ -106,7 +106,7 @@ async function initDb() {
 // Helper to get table name from source
 const getTableName = (source: string | undefined): string => {
   if (source === 'REVENUE') return 'revenue_transactions';
-  return 'pnj_transactions';
+  return 'nghiatingold_transactions';
 };
 
 // Run init in background
@@ -132,7 +132,7 @@ router.get("/db-status", async (req, res) => {
   try {
     const timeResult = await client.query('SELECT NOW()');
     
-    const tableInfo = await Promise.all(['pnj_transactions', 'revenue_transactions'].map(async (table) => {
+    const tableInfo = await Promise.all(['nghiatingold_transactions', 'revenue_transactions'].map(async (table) => {
       const cols = await client.query(`
         SELECT column_name 
         FROM information_schema.columns 
@@ -160,11 +160,11 @@ router.get("/db-status", async (req, res) => {
 // 1. Get all transactions from both tables
 router.get("/transactions", async (req, res) => {
   try {
-    const pnj = await pool.query('SELECT * FROM pnj_transactions ORDER BY date DESC');
+    const pnj = await pool.query('SELECT * FROM nghiatingold_transactions ORDER BY date DESC');
     const rev = await pool.query('SELECT * FROM revenue_transactions ORDER BY date DESC');
     
     const combined = [
-      ...pnj.rows.map(r => ({ ...r, source: 'PNJ' })),
+      ...pnj.rows.map(r => ({ ...r, source: 'NGHIATINGOLD' })),
       ...rev.rows.map(r => ({ ...r, source: 'REVENUE' }))
     ];
     
@@ -286,7 +286,7 @@ router.post("/opening-balances", async (req, res) => {
 // 7. Reset
 router.post("/reset", async (req, res) => {
   try {
-    await pool.query('TRUNCATE pnj_transactions, revenue_transactions, opening_balances, bank_statements');
+    await pool.query('TRUNCATE nghiatingold_transactions, revenue_transactions, opening_balances, bank_statements');
     res.json({ success: true });
   } catch (err: any) {
     console.error("[API] Reset Error:", err.message);
@@ -374,7 +374,7 @@ router.post("/migrate-source", async (req, res) => {
       // Migrate from legacy table to specific tables
       const legacyData = await client.query('SELECT * FROM transactions');
       for (const row of legacyData.rows) {
-        const source = row.source || (row.id.startsWith('rev') ? 'REVENUE' : 'PNJ');
+        const source = row.source || (row.id.startsWith('rev') ? 'REVENUE' : 'NGHIATINGOLD');
         const targetTable = getTableName(source);
         
         await client.query(
@@ -388,9 +388,9 @@ router.post("/migrate-source", async (req, res) => {
     }
 
     // Also support intra-table move if needed (though now we have separate tables)
-    // For now just migrate from PNJ table to REVENUE table if 'from' and 'to' are specified
-    if (from === 'PNJ' && to === 'REVENUE') {
-      const data = await client.query('SELECT * FROM pnj_transactions');
+    // For now just migrate from NGHIATINGOLD table to REVENUE table if 'from' and 'to' are specified
+    if (from === 'NGHIATINGOLD' && to === 'REVENUE') {
+      const data = await client.query('SELECT * FROM nghiatingold_transactions');
       for (const row of data.rows) {
         await client.query(
           `INSERT INTO revenue_transactions (id, type, date, item_code, item_name, unit, quantity, price, discount, total, invoice_number, invoice_date, customer, customer_card, address, note, cogs, source)
@@ -398,7 +398,7 @@ router.post("/migrate-source", async (req, res) => {
            ON CONFLICT (id) DO NOTHING`,
           [row.id, row.type, row.date, row.item_code, row.item_name, row.unit, row.quantity, row.price, row.discount, row.total, row.invoice_number, row.invoice_date, row.customer, row.customer_card, row.address, row.note, row.cogs, 'REVENUE']
         );
-        await client.query('DELETE FROM pnj_transactions WHERE id = $1', [row.id]);
+        await client.query('DELETE FROM nghiatingold_transactions WHERE id = $1', [row.id]);
       }
     }
 

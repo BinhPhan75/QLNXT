@@ -15,7 +15,7 @@ export interface Product {
 }
 
 export type TransactionType = 'IN' | 'OUT';
-export type TransactionSource = 'PNJ' | 'REVENUE' | 'OTHER';
+export type TransactionSource = 'NGHIATINGOLD' | 'REVENUE' | 'OTHER';
 
 export interface Transaction {
   id: string;

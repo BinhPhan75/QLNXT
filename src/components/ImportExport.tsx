@@ -8,7 +8,7 @@ import { Transaction, TransactionSource } from '../types';
 import { extractInvoiceFromPdf, convertExtractedToTransactions } from '../services/geminiService';
 
 interface ImportExportProps {
-  mode: 'REVENUE' | 'PNJ';
+  mode: 'REVENUE' | 'NGHIATINGOLD';
 }
 
 export default function ImportExport({ mode }: ImportExportProps) {
@@ -23,7 +23,7 @@ export default function ImportExport({ mode }: ImportExportProps) {
 
     if (file.type === 'application/pdf') {
       if (mode === 'REVENUE') {
-        setLogs([{ msg: 'Chức năng nhập PDF chỉ hỗ trợ cho hóa đơn PNJ (Tồn kho).', type: 'error' }]);
+        setLogs([{ msg: 'Chức năng nhập PDF chỉ hỗ trợ cho hóa đơn NGHIATINGOLD (Tồn kho).', type: 'error' }]);
         return;
       }
       handlePdfUpload(file);
@@ -32,8 +32,8 @@ export default function ImportExport({ mode }: ImportExportProps) {
 
     const isExcel = file.name.endsWith('.xlsx') || file.name.endsWith('.xls');
     
-    if (isExcel && mode === 'PNJ') {
-       setLogs([{ msg: 'Dữ liệu PNJ hiện tại chỉ hỗ trợ file CSV hoặc PDF AI.', type: 'error' }]);
+    if (isExcel && mode === 'NGHIATINGOLD') {
+       setLogs([{ msg: 'Dữ liệu NGHIATINGOLD hiện tại chỉ hỗ trợ file CSV hoặc PDF AI.', type: 'error' }]);
        return;
     }
 
@@ -84,7 +84,7 @@ export default function ImportExport({ mode }: ImportExportProps) {
     }
 
     if (isDetailedReport) {
-      if (mode === 'PNJ') {
+      if (mode === 'NGHIATINGOLD') {
          setLogs(prev => [...prev, { msg: 'File này là Báo cáo chi tiết (Doanh thu). Vui lòng chuyển sang menu Doanh thu để nhập.', type: 'error' }]);
          return;
       }
@@ -223,11 +223,11 @@ export default function ImportExport({ mode }: ImportExportProps) {
       (t.invoiceDate === formattedInvoiceDate || t.date === formattedInvoiceDate) && 
       t.customer === customerName &&
       t.type === importType &&
-      t.source === 'PNJ'
+      t.source === 'NGHIATINGOLD'
     );
 
     if (isDuplicate) {
-      setLogs(prev => [...prev, { msg: `CẢNH BÁO: Hóa đơn PNJ số ${invoiceNum} từ ${customerName} đã tồn tại.`, type: 'error' }]);
+      setLogs(prev => [...prev, { msg: `CẢNH BÁO: Hóa đơn NGHIATINGOLD số ${invoiceNum} từ ${customerName} đã tồn tại.`, type: 'error' }]);
       return;
     }
 
@@ -312,7 +312,7 @@ export default function ImportExport({ mode }: ImportExportProps) {
 
       items.push({
         type: importType,
-        source: 'PNJ',
+        source: 'NGHIATINGOLD',
         date: importDate,
         invoiceDate: formattedInvoiceDate,
         itemCode,
@@ -332,7 +332,7 @@ export default function ImportExport({ mode }: ImportExportProps) {
 
     if (items.length > 0) {
       importTransactions(items);
-      setLogs(prev => [...prev, { msg: `Đã nhập thành công ${successCount} dòng từ hóa đơn PNJ ${invoiceNum}.`, type: 'success' }]);
+      setLogs(prev => [...prev, { msg: `Đã nhập thành công ${successCount} dòng từ hóa đơn NGHIATINGOLD ${invoiceNum}.`, type: 'success' }]);
     } else {
       setLogs(prev => [...prev, { msg: 'Không tìm thấy dữ liệu hợp lệ để nhập.', type: 'error' }]);
     }
@@ -353,7 +353,7 @@ export default function ImportExport({ mode }: ImportExportProps) {
       const extracted = await extractInvoiceFromPdf(base64);
       const newTransactions = convertExtractedToTransactions(extracted, importType).map(t => ({
           ...t,
-          source: 'PNJ' as TransactionSource
+          source: 'NGHIATINGOLD' as TransactionSource
       }));
 
       // Check Duplicates
@@ -362,7 +362,7 @@ export default function ImportExport({ mode }: ImportExportProps) {
         t.invoiceDate === extracted.invoiceDate && 
         t.customer === extracted.customer &&
         t.type === importType &&
-        t.source === 'PNJ'
+        t.source === 'NGHIATINGOLD'
       );
 
       if (isDuplicate) {
@@ -389,7 +389,7 @@ export default function ImportExport({ mode }: ImportExportProps) {
     <div className="max-w-4xl mx-auto space-y-6">
       <header className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">{isRevenue ? 'Quản lý Doanh thu' : 'Quản lý Kho PNJ'}</h1>
+          <h1 className="text-2xl font-bold text-slate-900">{isRevenue ? 'Quản lý Doanh thu' : 'Quản lý Kho NGHIATINGOLD'}</h1>
           <p className="text-slate-500">
             {isRevenue 
                ? 'Import dữ liệu từ Báo cáo bán hàng chi tiết (.xlsx)' 
@@ -435,7 +435,7 @@ export default function ImportExport({ mode }: ImportExportProps) {
                 )}
                 <p className="text-sm text-slate-600">Click để chọn hoặc kéo thả file</p>
                 <p className="text-xs text-slate-400 mt-1">
-                   Dạng file: {isRevenue ? 'XLSX (Báo cáo chi tiết)' : 'CSV, PDF (PNJ)'}
+                   Dạng file: {isRevenue ? 'XLSX (Báo cáo chi tiết)' : 'CSV, PDF (NGHIATINGOLD)'}
                 </p>
                 <div className="flex gap-2 mt-2">
                    {!isRevenue && <span className="px-2 py-0.5 bg-blue-100 text-blue-600 text-[10px] font-bold rounded">CSV</span>}

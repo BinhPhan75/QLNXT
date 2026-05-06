@@ -5,7 +5,7 @@ import { Search, Filter, Download, Calendar, Trash2, FileText } from 'lucide-rea
 import * as XLSX from 'xlsx';
 
 interface ReportsProps {
-  mode: 'REVENUE' | 'PNJ';
+  mode: 'REVENUE' | 'NGHIATINGOLD';
 }
 
 export default function Reports({ mode }: ReportsProps) {
@@ -276,7 +276,7 @@ export default function Reports({ mode }: ReportsProps) {
 
   const debugStats = useMemo(() => {
     const totalCount = transactions.length;
-    const pnjCount = transactions.filter(t => t.source === 'PNJ').length;
+    const pnjCount = transactions.filter(t => t.source === 'NGHIATINGOLD').length;
     const revCount = transactions.filter(t => t.source === 'REVENUE').length;
     const inCount = sourceFilteredTransactions.filter(t => t.type === 'IN').length;
     const outCount = sourceFilteredTransactions.filter(t => t.type === 'OUT').length;
@@ -306,12 +306,12 @@ export default function Reports({ mode }: ReportsProps) {
             {reportType === 'BUY' ? 'Báo Cáo Mua Hàng' : reportType === 'SELL' ? (mode === 'REVENUE' ? 'Báo Cáo Doanh Thu' : 'Báo Cáo Bán Hàng') : 'Báo Cáo Tồn Kho'}
           </h1>
           <p className="text-slate-500">
-            {mode === 'REVENUE' ? 'Theo dõi doanh thu bán hàng chi tiết' : 'Tổng hợp dữ liệu giao dịch PNJ theo thời gian'}
+            {mode === 'REVENUE' ? 'Theo dõi doanh thu bán hàng chi tiết' : 'Tổng hợp dữ liệu giao dịch NGHIATINGOLD theo thời gian'}
           </p>
         </div>
         <div className="flex flex-col gap-2 md:items-end">
           <div className="flex p-1 bg-slate-100 rounded-lg">
-            {mode === 'PNJ' && (
+            {mode === 'NGHIATINGOLD' && (
               <button 
                 onClick={() => setReportType('BUY')}
                 className={`px-4 py-1.5 text-sm font-medium rounded-md transition-all ${reportType === 'BUY' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500'}`}
@@ -325,7 +325,7 @@ export default function Reports({ mode }: ReportsProps) {
             >
               {mode === 'REVENUE' ? 'Doanh thu' : 'Báo cáo Bán'}
             </button>
-            {mode === 'PNJ' && (
+            {mode === 'NGHIATINGOLD' && (
               <button 
                 onClick={() => setReportType('STOCK')}
                 className={`px-4 py-1.5 text-sm font-medium rounded-md transition-all ${reportType === 'STOCK' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500'}`}
@@ -608,7 +608,7 @@ export default function Reports({ mode }: ReportsProps) {
                           <div className="bg-slate-50 p-4 rounded-lg text-left text-xs space-y-2 border border-slate-200">
                             <p className="font-bold text-slate-700 underline mb-2">Thông tin chẩn đoán:</p>
                             <p>• Tổng số giao dịch trong hệ thống: <span className="font-bold">{debugStats.totalCount}</span></p>
-                            <p>• Phân loại Nguồn: <span className="text-blue-600 font-bold">REVENUE ({debugStats.revCount})</span> / <span className="text-orange-600 font-bold">PNJ ({debugStats.pnjCount})</span></p>
+                            <p>• Phân loại Nguồn: <span className="text-blue-600 font-bold">REVENUE ({debugStats.revCount})</span> / <span className="text-orange-600 font-bold">NGHIATINGOLD ({debugStats.pnjCount})</span></p>
                             <p>• Trong bộ lọc <span className="font-bold">{mode}</span>: 
                               Hóa đơn mua (IN): <span className="font-bold">{debugStats.inCount}</span> | 
                               Hóa đơn bán (OUT): <span className="font-bold">{debugStats.outCount}</span>
@@ -631,7 +631,7 @@ export default function Reports({ mode }: ReportsProps) {
                               <p className="font-bold text-red-500 uppercase">💡 Lời khuyên:</p>
                               {mode === 'REVENUE' && debugStats.revCount === 0 && debugStats.pnjCount > 0 && (
                                 <div className="mt-2 p-2 bg-amber-50 border border-amber-200 rounded text-slate-800">
-                                  <p className="mb-2 font-medium">⚠️ Có vẻ dữ liệu của bạn đang bị đánh dấu sai nguồn (PNJ thay vì {mode}).</p>
+                                  <p className="mb-2 font-medium">⚠️ Có vẻ dữ liệu của bạn đang bị đánh dấu sai nguồn (NGHIATINGOLD thay vì {mode}).</p>
                                   <button 
                                     onClick={async () => {
                                       if (confirm(`Bạn có muốn chuyển toàn bộ ${debugStats.pnjCount} giao dịch sang bộ lọc ${mode} không?`)) {
@@ -639,7 +639,7 @@ export default function Reports({ mode }: ReportsProps) {
                                           const res = await fetch('/api/migrate-source', {
                                             method: 'POST',
                                             headers: { 'Content-Type': 'application/json' },
-                                            body: JSON.stringify({ from: 'PNJ', to: mode })
+                                            body: JSON.stringify({ from: 'NGHIATINGOLD', to: mode })
                                           });
                                           if (res.ok) {
                                             alert('Đã chuyển đổi thành công. Trang sẽ tải lại dữ liệu.');
@@ -652,11 +652,11 @@ export default function Reports({ mode }: ReportsProps) {
                                     }}
                                     className="px-3 py-1 bg-amber-500 text-white font-bold rounded hover:bg-amber-600 transition-colors"
                                   >
-                                    Khắc phục ngay: Chuyển PNJ → {mode}
+                                    Khắc phục ngay: Chuyển NGHIATINGOLD → {mode}
                                   </button>
                                 </div>
                               )}
-                              {mode === 'PNJ' && debugStats.pnjCount === 0 && debugStats.revCount > 0 && (
+                              {mode === 'NGHIATINGOLD' && debugStats.pnjCount === 0 && debugStats.revCount > 0 && (
                                 <div className="mt-2 p-2 bg-amber-50 border border-amber-200 rounded text-slate-800">
                                   <p className="mb-2 font-medium">⚠️ Có vẻ dữ liệu của bạn đang bị đánh dấu là REVENUE.</p>
                                   <button 
@@ -751,7 +751,7 @@ export default function Reports({ mode }: ReportsProps) {
                         );
                       }
 
-                      // Original Row Rendering for PNJ
+                      // Original Row Rendering for NGHIATINGOLD
                       const tx = row;
                       return (
                         <tr key={tx.id} className="hover:bg-slate-50/50 transition-colors text-[11px]">

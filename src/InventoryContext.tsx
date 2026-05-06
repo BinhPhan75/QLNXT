@@ -57,7 +57,7 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
           customer: (t.customer || '').toString(),
           customerCard: (t.customer_card || t.customerCard || '').toString(),
           address: (t.address || '').toString(),
-          source: (t.source || 'PNJ') as TransactionSource,
+          source: (t.source || 'NGHIATINGOLD') as TransactionSource,
           quantity: parseFloat(t.quantity || 0),
           price: parseFloat(t.price || 0),
           discount: parseFloat(t.discount || 0),
@@ -161,7 +161,7 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     }
 
     // Determine target table from the transactions being deleted
-    const source = txToDelete[0].source || 'PNJ';
+    const source = txToDelete[0].source || 'NGHIATINGOLD';
 
     try {
       const res = await fetch(`/api/invoices/${invNum}?source=${source}`, { method: 'DELETE' });
