@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react';
 import Papa from 'papaparse';
 import * as XLSX from 'xlsx';
 import { useInventory } from '../InventoryContext';
-import { Upload, AlertCircle, CheckCircle2, Loader2, Search, Filter, BrainCircuit } from 'lucide-react';
+import { Upload, Download, AlertCircle, CheckCircle2, Loader2, Search, Filter, BrainCircuit } from 'lucide-react';
 import { motion } from 'motion/react';
 import { BankStatement, BankClassification } from '../types';
 import { classifyBankStatements } from '../services/geminiService';
@@ -13,6 +13,26 @@ export default function BankStatements() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [filterType, setFilterType] = useState<BankClassification | 'ALL'>('ALL');
   const [searchTerm, setSearchSearchTerm] = useState('');
+
+  const handleExport = () => {
+    const dataToExport = filteredData.map(item => ({
+      'Ngày GD': item.transactionDate,
+      'Ngày HL': item.effectiveDate,
+      'Nghiệp vụ': getClassificationLabel(item.classification).text,
+      'Khách hàng': item.customerName || '',
+      'Thông tin mặt hàng': item.itemInfo || '',
+      'Nội dung': item.content,
+      'Số tiền ghi nợ (Debit)': item.debit,
+      'Số tiền ghi có (Credit)': item.credit,
+      'Số dư': item.balance,
+      'Chứng từ': item.note || ''
+    }));
+
+    const ws = XLSX.utils.json_to_sheet(dataToExport);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Sao kê');
+    XLSX.writeFile(wb, `Sao_ke_ngan_hang_${Date.now()}.xlsx`);
+  };
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -81,33 +101,33 @@ export default function BankStatements() {
     };
 
     rows.forEach((row, idx) => {
-      // Row must have at least some data
+      // Row must have at least một số dữ liệu
       if (row.length < 5) return;
       
-      const stt = row[0]?.trim();
-      if (!stt || isNaN(parseInt(stt))) return; // Skip non-data rows
+      const stt = row[0]?.toString().trim();
+      if (!stt || isNaN(parseInt(stt))) return; // Bỏ qua các dòng không phải dữ liệu
 
-      const dateColB = row[1]?.trim() || '';
-      const dateColC = row[2]?.trim() || '';
+      const dateColB = row[1]?.toString().trim() || '';
+      const dateColC = row[2]?.toString().trim() || '';
       
-      // Extract date and doc number from Col B if possible
-      const datePartB = dateColB.split(' / ')[0].trim();
-      const docNo = dateColB.split(' / ')[1]?.trim() || '';
+      // Trích xuất ngày và số chứng từ từ cột B nếu có thể
+      const datePartB = dateColB.includes(' / ') ? dateColB.split(' / ')[0].trim() : dateColB;
+      const docNo = dateColB.includes(' / ') ? dateColB.split(' / ')[1]?.trim() : '';
       
-      // Primary date is Col C (Index 2) as per user request
+      // Ngày chính là Cột C theo yêu cầu người dùng
       const mainDate = dateColC || datePartB;
 
-      if (!mainDate || !row[6]) return; // Need date and content
+      if (!mainDate || !row[6]) return; // Cần ngày và nội dung
       
       rawItems.push({
         id: `bank-${Date.now()}-${idx}`,
         transactionDate: mainDate,
         effectiveDate: dateColC || mainDate,
-        debit: parseAmount(row[3]),
-        credit: parseAmount(row[4]),
-        balance: parseAmount(row[5]),
-        content: row[6]?.trim() || '',
-        classification: 'OTHER', // Default
+        debit: parseAmount(row[3]?.toString() || ''),
+        credit: parseAmount(row[4]?.toString() || ''),
+        balance: parseAmount(row[5]?.toString() || ''),
+        content: row[6]?.toString().trim() || '',
+        classification: 'OTHER',
         note: docNo
       });
     });
@@ -212,6 +232,14 @@ export default function BankStatements() {
           <p className="text-slate-500">Quản lý và phân loại giao dịch ngân hàng theo nghiệp vụ</p>
         </div>
         <div className="flex gap-3">
+          <button 
+            onClick={handleExport}
+            disabled={filteredData.length === 0}
+            className="flex items-center gap-2 px-4 py-2 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <Download size={18} />
+            <span>Xuất Excel</span>
+          </button>
           <label className={`flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg cursor-pointer hover:bg-blue-700 transition-colors ${isProcessing ? 'opacity-50 cursor-not-allowed' : ''}`}>
             <Upload size={18} />
             <span>Nhập sao kê Excel/CSV</span>
