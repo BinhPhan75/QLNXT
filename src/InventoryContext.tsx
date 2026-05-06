@@ -51,6 +51,9 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
           invoiceNumber: (t.invoice_number || t.invoiceNumber || '').toString(),
           invoiceDate: (t.invoice_date || t.invoiceDate || '').toString(),
           customer: (t.customer || '').toString(),
+          customerCard: (t.customer_card || t.customerCard || '').toString(),
+          address: (t.address || '').toString(),
+          source: (t.source || 'PNJ') as TransactionSource,
           quantity: parseFloat(t.quantity || 0),
           price: parseFloat(t.price || 0),
           discount: parseFloat(t.discount || 0),
@@ -141,8 +144,10 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       return;
     }
 
+    const source = txToDelete[0].source || 'PNJ'; // Default to PNJ if undefined
+
     try {
-      const res = await fetch(`/api/invoices/${invNum}`, { method: 'DELETE' });
+      const res = await fetch(`/api/invoices/${invNum}?source=${source}`, { method: 'DELETE' });
       if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
       
       const remainingTxs = transactions.filter(t => t.invoiceNumber !== invNum);
