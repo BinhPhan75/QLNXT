@@ -9,6 +9,7 @@ export default function SystemSettings() {
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth());
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
   const [calcCategory, setCalcCategory] = useState<'ALL' | 'INVENTORY' | 'REVENUE'>('INVENTORY');
+  const [selectedItemKey, setSelectedItemKey] = useState<string>('ALL');
   const [showOBModal, setShowOBModal] = useState(false);
 
   // Manual OB Form State
@@ -31,7 +32,8 @@ export default function SystemSettings() {
   const handleCalculate = async () => {
     try {
       const sourceFilter = calcCategory === 'ALL' ? undefined : calcCategory as any;
-      const result = await calculateMonthlyCOGS(selectedMonth, selectedYear, sourceFilter);
+      const itemFilter = selectedItemKey === 'ALL' ? undefined : selectedItemKey;
+      const result = await calculateMonthlyCOGS(selectedMonth, selectedYear, sourceFilter, itemFilter);
       if (result && result.message) {
         alert(result.message);
       } else {
@@ -139,21 +141,34 @@ export default function SystemSettings() {
               </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
               <div>
-                <label className="block text-xs font-semibold text-slate-400 uppercase mb-1">Loại mặt hàng</label>
+                <label className="block text-xs font-semibold text-slate-400 uppercase mb-1">Loại dữ liệu nguồn</label>
                 <select 
                   value={calcCategory}
                   onChange={(e) => setCalcCategory(e.target.value as any)}
                   className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500/20 font-bold"
                 >
-                  <option value="INVENTORY">Tính giá vốn cho: Dữ liệu Kho (Vàng 970, 9999, ...)</option>
-                  <option value="REVENUE">Tính giá vốn cho: Dữ liệu Doanh thu (HĐ bán lẻ)</option>
-                  <option value="ALL">Tính cho tất cả các nguồn dữ liệu</option>
+                  <option value="INVENTORY">Dữ liệu Kho (Vàng 970, 9999, ...)</option>
+                  <option value="REVENUE">Dữ liệu Doanh thu (HĐ bán lẻ)</option>
+                  <option value="ALL">Tất cả nguồn dữ liệu</option>
                 </select>
               </div>
               <div>
-                <label className="block text-xs font-semibold text-slate-400 uppercase mb-1">Kỳ kế toán (Tháng)</label>
+                <label className="block text-xs font-semibold text-slate-400 uppercase mb-1">Mặt hàng cụ thể</label>
+                <select 
+                  value={selectedItemKey}
+                  onChange={(e) => setSelectedItemKey(e.target.value)}
+                  className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500/20 font-bold text-blue-700"
+                >
+                  <option value="ALL">-- Tất cả mặt hàng --</option>
+                  {products.map(p => (
+                    <option key={p.code} value={p.code}>{p.code} - {p.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-400 uppercase mb-1">Tháng</label>
                 <select 
                   value={selectedMonth}
                   onChange={(e) => setSelectedMonth(parseInt(e.target.value))}
@@ -163,7 +178,7 @@ export default function SystemSettings() {
                 </select>
               </div>
               <div>
-                <label className="block text-xs font-semibold text-slate-400 uppercase mb-1">Năm tài chính</label>
+                <label className="block text-xs font-semibold text-slate-400 uppercase mb-1">Năm</label>
                 <select 
                   value={selectedYear}
                   onChange={(e) => setSelectedYear(parseInt(e.target.value))}

@@ -14,7 +14,7 @@ interface InventoryContextType {
   importTransactions: (newTransactions: Omit<Transaction, 'id'>[]) => void;
   importBankStatements: (newStatements: Omit<BankStatement, 'id'>[]) => void;
   deleteInvoice: (invoiceNumber: string) => void;
-  calculateMonthlyCOGS: (month: number, year: number, sourceFilter?: TransactionSource) => Promise<{ success: boolean; message: string }>;
+  calculateMonthlyCOGS: (month: number, year: number, sourceFilter?: TransactionSource, itemKeyFilter?: string) => Promise<{ success: boolean; message: string }>;
   setManualOpeningBalance: (balance: OpeningBalance) => void;
   lockMonth: (month: number, year: number) => void;
   unlockMonth: (month: number, year: number) => void;
@@ -327,7 +327,7 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     setClosedMonths(closedMonths.filter(m => m !== key));
   };
 
-  const calculateMonthlyCOGS = async (targetMonth: number, targetYear: number, sourceFilter?: TransactionSource) => {
+  const calculateMonthlyCOGS = async (targetMonth: number, targetYear: number, sourceFilter?: TransactionSource, itemKeyFilter?: string) => {
     // 1. Build a name-to-code mapping to handle items missing codes in some transactions
     const nameToCodeMap: Record<string, string> = {};
     transactions.forEach(t => {
@@ -369,16 +369,19 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       const targetMonthTxs = txsWithDates.filter(tx => 
         tx.dateInfo.month === targetMonth && 
         tx.dateInfo.year === targetYear &&
-        (!sourceFilter || tx.source === sourceFilter)
+        (!sourceFilter || tx.source === sourceFilter) &&
+        (!itemKeyFilter || getItemKey(tx) === itemKeyFilter)
       );
 
       if (targetMonthTxs.length === 0) {
         const totalInMonthAnyCategory = txsWithDates.filter(tx => tx.dateInfo.month === targetMonth && tx.dateInfo.year === targetYear).length;
         let label = sourceFilter === 'REVENUE' ? 'Dữ liệu Doanh thu & Tiền công' : 'Dữ liệu Quản lý hàng hóa';
+        if (itemKeyFilter) label += ` (mặt hàng ${itemKeyFilter})`;
+        
         let detail = `Tháng ${targetMonth + 1}/${targetYear} không có dữ liệu giao dịch ${label}.`;
         
         if (totalInMonthAnyCategory > 0) {
-          detail += `\n(GHI CHÚ: Tìm thấy ${totalInMonthAnyCategory} giao dịch trong tháng này từ nguồn khác. Hãy kiểm tra lại "Loại mặt hàng" bạn chọn).`;
+          detail += `\n(GHI CHÚ: Tìm thấy ${totalInMonthAnyCategory} giao dịch trong tháng này từ nguồn khác. Hãy kiểm tra lại "Loại mặt hàng" hoặc "Mặt hàng cụ thể" bạn chọn).`;
         } else {
           detail += `\n(Không tìm thấy bất kỳ giao dịch nào trong tháng ${targetMonth + 1}/${targetYear} trên toàn hệ thống).`;
         }
