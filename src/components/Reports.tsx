@@ -330,7 +330,7 @@ export default function Reports({ mode }: ReportsProps) {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
           <p className="text-slate-500 text-sm mb-1">Tổng số lượng {reportType === 'STOCK' ? 'tồn' : ''}</p>
-          <p className="text-2xl font-bold text-slate-900">{Number(totals.qty).toFixed(3)} <span className="text-sm font-normal text-slate-400">sản phẩm</span></p>
+          <p className="text-2xl font-bold text-slate-900">{Number(totals.qty || 0).toFixed(3)} <span className="text-sm font-normal text-slate-400">sản phẩm</span></p>
         </div>
         <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
           <p className="text-slate-500 text-sm mb-1">

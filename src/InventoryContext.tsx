@@ -1,16 +1,18 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { Product, Transaction, User, OpeningBalance, TransactionSource } from './types';
+import { Product, Transaction, User, OpeningBalance, TransactionSource, BankStatement } from './types';
 import { getYearMonth } from './lib/utils';
 
 interface InventoryContextType {
   products: Product[];
   transactions: Transaction[];
+  bankStatements: BankStatement[];
   manualOpeningBalances: OpeningBalance[];
   closedMonths: string[]; // Format: MM-YYYY
   user: User | null;
   login: (username: string, pass: string) => boolean;
   logout: () => void;
   importTransactions: (newTransactions: Omit<Transaction, 'id'>[]) => void;
+  importBankStatements: (newStatements: Omit<BankStatement, 'id'>[]) => void;
   deleteInvoice: (invoiceNumber: string) => void;
   calculateMonthlyCOGS: (month: number, year: number, sourceFilter?: TransactionSource) => Promise<{ success: boolean; message: string }>;
   setManualOpeningBalance: (balance: OpeningBalance) => void;
@@ -25,6 +27,7 @@ const InventoryContext = createContext<InventoryContextType | undefined>(undefin
 export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [products, setProducts] = useState<Product[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [bankStatements, setBankStatements] = useState<BankStatement[]>([]);
   const [manualOpeningBalances, setManualOpeningBalances] = useState<OpeningBalance[]>([]);
   const [closedMonths, setClosedMonths] = useState<string[]>([]);
   const [user, setUser] = useState<User | null>(null);
@@ -33,9 +36,10 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [txRes, obRes] = await Promise.all([
+        const [txRes, obRes, bankRes] = await Promise.all([
           fetch('/api/transactions').then(r => r.json()),
-          fetch('/api/opening-balances').then(r => r.json())
+          fetch('/api/opening-balances').then(r => r.json()),
+          fetch('/api/bank-statements').then(r => r.json())
         ]);
         
         if (!Array.isArray(txRes) || !Array.isArray(obRes)) {
@@ -69,8 +73,20 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
           totalValue: parseFloat(ob.value || ob.totalValue || 0)
         }));
 
+        const mappedBank = Array.isArray(bankRes) ? bankRes.map((b: any) => ({
+          ...b,
+          transactionDate: b.transaction_date || b.transactionDate,
+          effectiveDate: b.effective_date || b.effectiveDate,
+          customerName: b.customer_name || b.customerName,
+          itemInfo: b.item_info || b.itemInfo,
+          debit: parseFloat(b.debit || 0),
+          credit: parseFloat(b.credit || 0),
+          balance: parseFloat(b.balance || 0)
+        })) : [];
+
         setTransactions(mappedTxs);
         setManualOpeningBalances(mappedOBs);
+        setBankStatements(mappedBank);
         
         // Calculate products list from transactions
         const productMap = new Map<string, Product>();
@@ -221,6 +237,28 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     } catch (err) {
       console.error(err);
       alert("Lỗi khi lưu dữ liệu lên server. Vui lòng kiểm tra kết nối Database.");
+    }
+  };
+
+  const importBankStatements = async (newItems: Omit<BankStatement, 'id'>[]) => {
+    const keyedItems = newItems.map(item => ({ 
+      ...item, 
+      id: Math.random().toString(36).substr(2, 9) 
+    }));
+    
+    try {
+      const res = await fetch('/api/bank-statements/bulk', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ items: keyedItems })
+      });
+      
+      if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+
+      setBankStatements(prev => [...prev, ...keyedItems]);
+    } catch (err) {
+      console.error(err);
+      alert("Lỗi khi lưu sao kê ngân hàng lên server.");
     }
   };
 
@@ -423,12 +461,14 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     <InventoryContext.Provider value={{ 
       products, 
       transactions, 
+      bankStatements,
       manualOpeningBalances, 
       closedMonths,
       user, 
       login, 
       logout, 
       importTransactions, 
+      importBankStatements,
       calculateMonthlyCOGS, 
       setManualOpeningBalance,
       lockMonth,

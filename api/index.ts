@@ -79,6 +79,22 @@ async function initDb() {
       );
     `);
 
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS bank_statements (
+        id TEXT PRIMARY KEY,
+        transaction_date TEXT,
+        effective_date TEXT,
+        debit FLOAT,
+        credit FLOAT,
+        balance FLOAT,
+        content TEXT,
+        classification TEXT,
+        customer_name TEXT,
+        item_info TEXT,
+        note TEXT
+      );
+    `);
+
     console.log("[Database] Table schema verified.");
   } catch (err: any) {
     console.error("[Database] Initialization error:", err.message);
@@ -270,11 +286,72 @@ router.post("/opening-balances", async (req, res) => {
 // 7. Reset
 router.post("/reset", async (req, res) => {
   try {
-    await pool.query('TRUNCATE pnj_transactions, revenue_transactions, opening_balances');
+    await pool.query('TRUNCATE pnj_transactions, revenue_transactions, opening_balances, bank_statements');
     res.json({ success: true });
   } catch (err: any) {
     console.error("[API] Reset Error:", err.message);
     res.status(500).json({ error: "Failed to reset" });
+  }
+});
+
+// 9. Bank Statements
+router.get("/bank-statements", async (req, res) => {
+  try {
+    const result = await pool.query('SELECT * FROM bank_statements ORDER BY transaction_date DESC');
+    res.json(result.rows);
+  } catch (err: any) {
+    console.error("[API] Get Bank Statements Error:", err.message);
+    res.status(500).json({ error: "Failed to fetch bank statements" });
+  }
+});
+
+router.post("/bank-statements/bulk", async (req, res) => {
+  const { items } = req.body;
+  if (!Array.isArray(items) || items.length === 0) {
+    return res.json({ success: true, count: 0 });
+  }
+  
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    for (const item of items) {
+      await client.query(
+        `INSERT INTO bank_statements (id, transaction_date, effective_date, debit, credit, balance, content, classification, customer_name, item_info, note)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+         ON CONFLICT (id) DO UPDATE SET
+           transaction_date = EXCLUDED.transaction_date, 
+           effective_date = EXCLUDED.effective_date,
+           debit = EXCLUDED.debit,
+           credit = EXCLUDED.credit,
+           balance = EXCLUDED.balance,
+           content = EXCLUDED.content,
+           classification = EXCLUDED.classification,
+           customer_name = EXCLUDED.customer_name,
+           item_info = EXCLUDED.item_info,
+           note = EXCLUDED.note`,
+        [
+          item.id,
+          item.transaction_date || item.transactionDate,
+          item.effective_date || item.effectiveDate,
+          item.debit || 0,
+          item.credit || 0,
+          item.balance || 0,
+          item.content,
+          item.classification,
+          item.customer_name || item.customerName,
+          item.item_info || item.itemInfo,
+          item.note
+        ]
+      );
+    }
+    await client.query('COMMIT');
+    res.json({ success: true, count: items.length });
+  } catch (err: any) {
+    await client.query('ROLLBACK');
+    console.error("[API] Bank Bulk Error:", err.message);
+    res.status(500).json({ error: "Failed to save bank statements" });
+  } finally {
+    client.release();
   }
 });
 

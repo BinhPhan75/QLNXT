@@ -1,6 +1,6 @@
 {
-  "name": "Inventory & COGS Manager",
-  "description": "Phần mềm quản lý hàng hóa, nhập xuất kho từ Excel/CSV và tính giá vốn bình quân gia quyền.",
+  "name": "Nghia Tin Inventory & Finance",
+  "description": "Phần mềm quản lý kho, tính giá vốn và sao kê ngân hàng tích hợp AI để phân loại nghiệp vụ.",
   "requestFramePermissions": [],
   "majorCapabilities": []
 }

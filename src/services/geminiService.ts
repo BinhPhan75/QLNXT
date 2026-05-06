@@ -104,3 +104,66 @@ export const convertExtractedToTransactions = (extracted: ExtractedInvoice, type
     address: extracted.address || '',
   }));
 };
+
+export interface ClassifiedBankStatement {
+  classification: 'PURCHASE' | 'SALE' | 'CASH_WITHDRAWAL' | 'CASH_DEPOSIT' | 'INTEREST' | 'FEE' | 'OTHER';
+  customerName?: string;
+  itemInfo?: string;
+  note?: string;
+}
+
+export const classifyBankStatements = async (contents: string[]): Promise<ClassifiedBankStatement[]> => {
+  const response = await ai.models.generateContent({
+    model: "gemini-3-flash-preview",
+    contents: [
+      {
+        parts: [
+          {
+            text: `Bạn là một chuyên gia kế toán ngân hàng. Hãy phân loại các nội dung giao dịch ngân hàng sau đây.
+            Nội dung có thể chứa thông tin người mua, người bán, tên mặt hàng và số lượng.
+            
+            Các loại phân loại: 
+            - PURCHASE: Mua hàng (chuyển tiền đi cho người bán)
+            - SALE: Bán hàng (nhận tiền từ người mua)
+            - CASH_WITHDRAWAL: Rút tiền mặt (thường có từ "RUT SEC", "RUT TIEN")
+            - CASH_DEPOSIT: Nộp tiền mặt vào TK (thường có từ "NOP TIEN")
+            - INTEREST: Tiền lãi (thường có từ "INTEREST PAYMENT", "TRA LAI")
+            - FEE: Phí ngân hàng
+            - OTHER: Khác
+            
+            Hãy trích xuất tên khách hàng (customerName) và thông tin mặt hàng (itemInfo) nếu có trong nội dung.
+            
+            Danh sách nội dung:
+            ${contents.map((c, i) => `${i + 1}. ${c}`).join('\n')}
+            
+            Trả về một mảng JSON các đối tượng theo thứ tự.`,
+          },
+        ],
+      },
+    ],
+    config: {
+      responseMimeType: "application/json",
+      responseSchema: {
+        type: Type.ARRAY,
+        items: {
+          type: Type.OBJECT,
+          properties: {
+            classification: { 
+              type: Type.STRING, 
+              enum: ['PURCHASE', 'SALE', 'CASH_WITHDRAWAL', 'CASH_DEPOSIT', 'INTEREST', 'FEE', 'OTHER'] 
+            },
+            customerName: { type: Type.STRING },
+            itemInfo: { type: Type.STRING },
+            note: { type: Type.STRING },
+          },
+          required: ["classification"],
+        },
+      },
+    },
+  });
+
+  const text = response.text;
+  if (!text) throw new Error("Không thể phân loại nội dung ngân hàng");
+  
+  return JSON.parse(text) as ClassifiedBankStatement[];
+};

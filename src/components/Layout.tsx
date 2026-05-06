@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useInventory } from '../InventoryContext';
 import { LayoutDashboard, FileUp, BarChart3, Settings, LogOut, Menu, X, DollarSign, ChevronDown, ChevronUp } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
@@ -7,14 +7,16 @@ import { motion, AnimatePresence } from 'motion/react';
 import ImportExport from './ImportExport';
 import Reports from './Reports';
 import SystemSettings from './SystemSettings';
+import BankStatements from './BankStatements';
 import { formatCurrency } from '../lib/utils';
 
 export default function Layout() {
-  const { user, logout, products } = useInventory();
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'rev_import' | 'rev_report' | 'inv_pnj_import' | 'inv_pnj_report' | 'inv_other' | 'system'>('dashboard');
+  const { user, logout, products, bankStatements } = useInventory();
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'rev_import' | 'rev_report' | 'inv_pnj_import' | 'inv_pnj_report' | 'inv_other' | 'bank' | 'system'>('dashboard');
   const [isSidebarOpen, setSidebarOpen] = useState(false);
   const [isRevenueMenuOpen, setRevenueMenuOpen] = useState(true);
   const [isInventoryMenuOpen, setInventoryMenuOpen] = useState(true);
+  const [isBankMenuOpen, setBankMenuOpen] = useState(true);
 
   const [dbStatus, setDbStatus] = useState<'checking' | 'connected' | 'error' | 'missing'>('checking');
   const [dbError, setDbError] = useState<string>('');
@@ -68,6 +70,8 @@ export default function Layout() {
             <p className="text-xl font-medium">Tính năng Vàng Khác đang được phát triển</p>
           </div>
         );
+      case 'bank':
+        return <BankStatements />;
       case 'system':
         return <SystemSettings />;
       default:
@@ -275,6 +279,47 @@ export default function Layout() {
               </AnimatePresence>
             </div>
 
+            {/* BANK MENU */}
+            <div className="space-y-1">
+              <button
+                onClick={() => setBankMenuOpen(!isBankMenuOpen)}
+                className={`w-full flex items-center justify-between px-4 py-3 rounded-xl transition-all ${
+                  activeTab === 'bank'
+                  ? 'text-blue-600 font-semibold' 
+                  : 'text-slate-500 hover:bg-slate-50 hover:text-slate-700'
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  <DollarSign size={20} />
+                  <span>Ngân hàng</span>
+                </div>
+                {isBankMenuOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+              </button>
+
+              <AnimatePresence>
+                {isBankMenuOpen && (
+                  <motion.div
+                    initial={{ height: 0, opacity: 0 }}
+                    animate={{ height: 'auto', opacity: 1 }}
+                    exit={{ height: 0, opacity: 0 }}
+                    className="overflow-hidden pl-4"
+                  >
+                    <button
+                      onClick={() => handleTabChange('bank')}
+                      className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl transition-all text-sm ${
+                        activeTab === 'bank' 
+                        ? 'text-blue-600 bg-blue-50 font-medium' 
+                        : 'text-slate-500 hover:text-slate-700'
+                      }`}
+                    >
+                      <BarChart3 size={18} />
+                      Sao kê NH
+                    </button>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+
             <button
               onClick={() => handleTabChange('system')}
               className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${
@@ -335,13 +380,20 @@ export default function Layout() {
 }
 
 function DashboardView({ setActiveTab }: { setActiveTab: (tab: any) => void }) {
-  const { products, transactions } = useInventory();
+  const { products, transactions, bankStatements } = useInventory();
+
+  const bankSummary = useMemo(() => {
+    return {
+      in: bankStatements.reduce((sum, item) => sum + item.credit, 0),
+      out: bankStatements.reduce((sum, item) => sum + item.debit, 0)
+    };
+  }, [bankStatements]);
 
   const stats = [
     { label: 'Tổng mặt hàng', value: products.length, sub: 'Loại sản phẩm', color: 'blue' },
-    { label: 'Nhập kho', value: transactions.filter(t => t.type === 'IN').length, sub: 'Phiếu nhập', color: 'green' },
-    { label: 'Xuất kho', value: transactions.filter(t => t.type === 'OUT').length, sub: 'Phiếu xuất', color: 'red' },
-    { label: 'Tồn kho', value: products.reduce((acc, p) => acc + p.currentStock, 0), sub: 'Số lượng món', color: 'amber' },
+    { label: 'Biến động Thu NH', value: new Intl.NumberFormat('vi-VN').format(bankSummary.in), sub: 'VND', color: 'green' },
+    { label: 'Biến động Chi NH', value: new Intl.NumberFormat('vi-VN').format(bankSummary.out), sub: 'VND', color: 'red' },
+    { label: 'Tồn kho', value: products.reduce((acc, p) => acc + p.currentStock, 0).toFixed(3), sub: 'Số lượng chỉ', color: 'amber' },
   ];
 
   return (
@@ -393,7 +445,7 @@ function DashboardView({ setActiveTab }: { setActiveTab: (tab: any) => void }) {
                           <p className="text-xs text-slate-500">{p.code}</p>
                         </td>
                         <td className="px-6 py-4 text-slate-600">{p.unit}</td>
-                        <td className="px-6 py-4 text-slate-900 font-medium">{p.currentStock}</td>
+                        <td className="px-6 py-4 text-slate-900 font-medium">{p.currentStock.toFixed(3)}</td>
                         <td className="px-6 py-4 text-blue-600 font-semibold">{formatCurrency(p.averageCost)}</td>
                       </tr>
                     ))

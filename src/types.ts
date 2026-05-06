@@ -40,3 +40,19 @@ export interface Transaction {
 export interface User {
   username: string;
 }
+
+export type BankClassification = 'PURCHASE' | 'SALE' | 'CASH_WITHDRAWAL' | 'CASH_DEPOSIT' | 'INTEREST' | 'FEE' | 'OTHER';
+
+export interface BankStatement {
+  id: string;
+  transactionDate: string;
+  effectiveDate: string;
+  debit: number;
+  credit: number;
+  balance: number;
+  content: string;
+  classification: BankClassification;
+  customerName?: string;
+  itemInfo?: string;
+  note?: string;
+}
