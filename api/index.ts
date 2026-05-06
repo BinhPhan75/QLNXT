@@ -28,43 +28,39 @@ async function initDb() {
   try {
     console.log("[Database] Initializing tables and checking columns...");
     
-    // Create tables if they don't exist
-    const tables = ['pnj_transactions', 'revenue_transactions', 'transactions'];
-    
-    for (const table of tables) {
-      await client.query(`
-        CREATE TABLE IF NOT EXISTS ${table} (
-          id TEXT PRIMARY KEY,
-          type TEXT,
-          date TEXT
-        );
-      `);
+    // Create primary transactions table
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS transactions (
+        id TEXT PRIMARY KEY,
+        type TEXT,
+        date TEXT
+      );
+    `);
 
-      // Ensure all columns exist
-      const columns = [
-        ['item_code', 'TEXT'],
-        ['item_name', 'TEXT'],
-        ['unit', 'TEXT'],
-        ['quantity', 'FLOAT'],
-        ['price', 'FLOAT'],
-        ['discount', 'FLOAT'],
-        ['total', 'FLOAT'],
-        ['invoice_number', 'TEXT'],
-        ['invoice_date', 'TEXT'],
-        ['customer', 'TEXT'],
-        ['customer_card', 'TEXT'],
-        ['address', 'TEXT'],
-        ['note', 'TEXT'],
-        ['cogs', 'FLOAT'],
-        ['source', 'TEXT']
-      ];
+    // List of all expected columns for a unified schema
+    const columns = [
+      ['item_code', 'TEXT'],
+      ['item_name', 'TEXT'],
+      ['unit', 'TEXT'],
+      ['quantity', 'FLOAT'],
+      ['price', 'FLOAT'],
+      ['discount', 'FLOAT'],
+      ['total', 'FLOAT'],
+      ['invoice_number', 'TEXT'],
+      ['invoice_date', 'TEXT'],
+      ['customer', 'TEXT'],
+      ['customer_card', 'TEXT'],
+      ['address', 'TEXT'],
+      ['note', 'TEXT'],
+      ['cogs', 'FLOAT'],
+      ['source', 'TEXT']
+    ];
 
-      for (const [col, type] of columns) {
-        try {
-          await client.query(`ALTER TABLE ${table} ADD COLUMN IF NOT EXISTS ${col} ${type}`);
-        } catch (err) {
-          // Ignore errors
-        }
+    for (const [col, type] of columns) {
+      try {
+        await client.query(`ALTER TABLE transactions ADD COLUMN IF NOT EXISTS ${col} ${type}`);
+      } catch (err) {
+        // Ignore errors
       }
     }
 
@@ -86,13 +82,6 @@ async function initDb() {
     client.release();
   }
 }
-
-// Helper to get table name from source
-const getTableName = (source: string | undefined): string => {
-  if (source === 'REVENUE') return 'revenue_transactions';
-  if (source === 'PNJ') return 'pnj_transactions';
-  return 'transactions';
-};
 
 // Run init in background
 initDb();
@@ -117,21 +106,18 @@ router.get("/db-status", async (req, res) => {
   try {
     const timeResult = await client.query('SELECT NOW()');
     
-    // Debug: Check columns in both tables
-    const tableInfo = await Promise.all(['pnj_transactions', 'revenue_transactions'].map(async (table) => {
-      const cols = await client.query(`
-        SELECT column_name 
-        FROM information_schema.columns 
-        WHERE table_name = '${table}'
-      `);
-      return { table, columns: cols.rows.map(r => r.column_name) };
-    }));
+    const cols = await client.query(`
+      SELECT column_name 
+      FROM information_schema.columns 
+      WHERE table_name = 'transactions'
+    `);
 
     client.release();
     res.json({ 
       status: "connected", 
       time: timeResult.rows[0].now,
-      tables: tableInfo
+      table: 'transactions',
+      columns: cols.rows.map(r => r.column_name)
     });
   } catch (err: any) {
     console.error("[API] DB Status Check Error:", err.message);
@@ -146,18 +132,8 @@ router.get("/db-status", async (req, res) => {
 // 1. Get all transactions
 router.get("/transactions", async (req, res) => {
   try {
-    const pnj = await pool.query('SELECT * FROM pnj_transactions');
-    const rev = await pool.query('SELECT * FROM revenue_transactions');
-    const legacy = await pool.query('SELECT * FROM transactions');
-    
-    // Combine and mark source if missing
-    const combined = [
-      ...pnj.rows.map(r => ({ ...r, source: 'PNJ' })),
-      ...rev.rows.map(r => ({ ...r, source: 'REVENUE' })),
-      ...legacy.rows
-    ];
-    
-    res.json(combined);
+    const result = await pool.query('SELECT * FROM transactions ORDER BY date DESC');
+    res.json(result.rows);
   } catch (err: any) {
     console.error("[API] Get Transactions Error:", err.message);
     res.status(500).json({ error: "Failed to fetch transactions" });
@@ -178,9 +154,8 @@ router.post("/transactions/bulk", async (req, res) => {
   try {
     await client.query('BEGIN');
     for (const item of items) {
-      const tableName = getTableName(item.source);
       await client.query(
-        `INSERT INTO ${tableName} (id, type, date, item_code, item_name, unit, quantity, price, discount, total, invoice_number, invoice_date, customer, customer_card, address, note, cogs, source)
+        `INSERT INTO transactions (id, type, date, item_code, item_name, unit, quantity, price, discount, total, invoice_number, invoice_date, customer, customer_card, address, note, cogs, source)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
          ON CONFLICT (id) DO UPDATE SET
            type = EXCLUDED.type, date = EXCLUDED.date, item_code = EXCLUDED.item_code, item_name = EXCLUDED.item_name,
@@ -224,10 +199,8 @@ router.post("/transactions/bulk", async (req, res) => {
 
 // 3. Delete Single
 router.delete("/transactions/:id", async (req, res) => {
-  const { source } = req.query; // Expect source as query param
-  const tableName = getTableName(source as string);
   try {
-    await pool.query(`DELETE FROM ${tableName} WHERE id = $1`, [req.params.id]);
+    await pool.query('DELETE FROM transactions WHERE id = $1', [req.params.id]);
     res.json({ success: true });
   } catch (err: any) {
     console.error("[API] Delete Transaction Error:", err.message);
@@ -237,10 +210,8 @@ router.delete("/transactions/:id", async (req, res) => {
 
 // 4. Delete Invoice
 router.delete("/invoices/:number", async (req, res) => {
-  const { source } = req.query; // Expect source as query param
-  const tableName = getTableName(source as string);
   try {
-    await pool.query(`DELETE FROM ${tableName} WHERE invoice_number = $1`, [req.params.number]);
+    await pool.query('DELETE FROM transactions WHERE invoice_number = $1', [req.params.number]);
     res.json({ success: true });
   } catch (err: any) {
     console.error("[API] Delete Invoice Error:", err.message);
