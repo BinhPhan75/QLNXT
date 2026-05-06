@@ -98,6 +98,10 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         mappedTxs.forEach((item: Transaction) => {
           const code = item.itemCode.trim().toUpperCase();
           const name = item.itemName.trim();
+          
+          // Skip brand name or placeholders that aren't actual products
+          if (name.toUpperCase() === 'NGHIATINGOLD' || code === 'NGHIATINGOLD') return;
+
           // If code is missing, use name as the key
           const key = (code && code !== 'KHONG-MA') ? code : `NAME_${name.toLowerCase()}`;
           
@@ -337,10 +341,16 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     });
 
     const getItemKey = (t: any) => {
-      if (t.itemCode && t.itemCode !== 'KHONG-MA') return t.itemCode;
-      if (t.itemName) {
-        const normalizedName = t.itemName.trim().toLowerCase();
-        return nameToCodeMap[normalizedName] || t.itemName;
+      const code = (t.itemCode || '').toString().trim().toUpperCase();
+      const name = (t.itemName || '').toString().trim();
+      
+      // Filter out brand name placeholders
+      if (name.toUpperCase() === 'NGHIATINGOLD' || code === 'NGHIATINGOLD') return 'UNKNOWN';
+
+      if (code && code !== 'KHONG-MA') return code;
+      if (name) {
+        const normalizedName = name.toLowerCase();
+        return nameToCodeMap[normalizedName] || name;
       }
       return 'UNKNOWN';
     };
@@ -350,6 +360,10 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         ...tx,
         dateInfo: getYearMonth(tx.invoiceDate || tx.date)
       }));
+
+      // Define which source provides the "Source of Truth" for unit prices
+      // Usually prices come from INVENTORY (Purchases)
+      const priceHistorySource = sourceFilter === 'REVENUE' ? 'INVENTORY' : (sourceFilter || 'INVENTORY');
 
       const allSourceTxs = txsWithDates.filter(tx => !sourceFilter || tx.source === sourceFilter);
       const targetMonthTxs = allSourceTxs.filter(tx => 
@@ -363,7 +377,8 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         let label = sourceFilter === 'REVENUE' ? 'Doanh thu & Tiền công' : 'Quản lý hàng hóa';
         let detail = `Tháng ${targetMonth + 1}/${targetYear} không có dữ liệu giao dịch ${label}.`;
         if (totalInMonthAnyCategory > 0 && totalInCategory > 0) {
-          detail += `\n(Tìm thấy ${totalInMonthAnyCategory} giao dịch trong tháng này nhưng thuộc loại khác. Có tổng ${totalInCategory} giao dịch ${label} ở các tháng khác)`;
+          detail += `\n(Tìm thấy ${totalInMonthAnyCategory} giao dịch trong tháng này nhưng thuộc loại khác.`;
+          detail += `\nHãy kiểm tra xem bạn đã chọn đúng "Loại mặt hàng" cần tính giá vốn chưa?)`;
         } else if (totalInMonthAnyCategory === 0) {
           detail += `\n(Không tìm thấy bất kỳ giao dịch nào trong tháng ${targetMonth + 1}/${targetYear} trên toàn hệ thống)`;
         }
@@ -374,11 +389,13 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       const priceAssignmentMap: Record<string, number> = {};
       let warnNoPurchases = false;
 
-      // For every item in the target month, we need to trace history month-by-month
+      // For every item in the target month, trace history using the priceSource
       itemKeysInMonth.forEach(key => {
+        // We look for price history in the source that contains IN (Purchases)
+        // If sourceFilter is REVENUE, we MUST look in INVENTORY for the prices
         const itemHistory = txsWithDates.filter(t => getItemKey(t) === key && (
           t.dateInfo.year < targetYear || (t.dateInfo.year === targetYear && t.dateInfo.month <= targetMonth)
-        ) && (!sourceFilter || t.source === sourceFilter));
+        ) && (t.source === priceHistorySource || t.source === 'INVENTORY'));
         
         const itemOBs = manualOpeningBalances.filter(b => {
           const obKey = (b.itemCode && b.itemCode !== 'KHONG-MA') ? b.itemCode : (b.itemName ? (nameToCodeMap[b.itemName.trim().toLowerCase()] || b.itemName) : '');

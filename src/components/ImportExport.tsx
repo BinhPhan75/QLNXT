@@ -199,6 +199,11 @@ export default function ImportExport({ mode }: ImportExportProps) {
       const address = row[13]?.toString().trim() || '';
       const itemCode = row[14]?.toString().trim() || 'KHONG-MA';
       const itemName = row[15]?.toString().trim() || 'Hàng hóa';
+      
+      // Skip rows that are clearly not products (brand names in item columns)
+      if (itemName.toUpperCase() === 'NGHIATINGOLD' || itemCode.toUpperCase() === 'NGHIATINGOLD') return;
+      if (itemName.includes('Phần mềm quản lý')) return;
+
       const unit = row[17]?.toString().trim() || 'Chỉ';
       
       const quantity = parseVnNumber(row[18], true);
@@ -341,6 +346,9 @@ export default function ImportExport({ mode }: ImportExportProps) {
       const rawName = row[colIdx.name]?.toString().trim() || '';
       if (!rawName || rawName.includes('CỘNG TIỀN')) break;
       if (row.every(cell => !cell)) continue;
+      
+      // Skip noisy brand rows
+      if (rawName.toUpperCase() === 'NGHIATINGOLD') continue;
 
       let itemCode = '';
       let itemName = '';
