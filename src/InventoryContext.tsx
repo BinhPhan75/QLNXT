@@ -19,6 +19,7 @@ interface InventoryContextType {
   lockMonth: (month: number, year: number) => void;
   unlockMonth: (month: number, year: number) => void;
   isMonthClosed: (date: string | Date) => boolean;
+  categorizeItem: (code: string, name: string) => string;
   resetData: () => void;
 }
 
@@ -31,6 +32,27 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const [manualOpeningBalances, setManualOpeningBalances] = useState<OpeningBalance[]>([]);
   const [closedMonths, setClosedMonths] = useState<string[]>([]);
   const [user, setUser] = useState<User | null>(null);
+
+  const categorizeItem = (code: string, name: string): string => {
+    const c = (code || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+    const n = (name || '').toUpperCase();
+
+    if (c.startsWith('V9999') || n.includes('9999')) return 'V9999';
+    if (c.startsWith('V970') || n.includes('970')) return 'V970';
+    if (c.startsWith('V610') || n.includes('610')) return 'V610';
+    if (c.startsWith('VTS') || n.includes('TRANG SỨC')) return 'VTS';
+    if (c.startsWith('TC') || n.includes('TIỀN CÔNG')) return 'TC';
+    
+    // Jewelry specific codes from common gold management software
+    const vtsPrefixes = ['GB', 'GN', 'GL', 'GD', 'GV', 'GM', 'GA', 'GC', 'GX'];
+    if (vtsPrefixes.some(p => c.startsWith(p))) return 'VTS';
+    
+    // Keywords for Jewelry
+    const vtsKeywords = ['BÔNG', 'NHẪN', 'LẮC', 'DÂY', 'VÒNG', 'MẶT', 'ẢNH', 'CHÉO'];
+    if (vtsKeywords.some(kw => n.includes(kw))) return 'VTS';
+    
+    return 'VK'; // Vàng khác
+  };
 
   // Load data from Backend
   useEffect(() => {
@@ -51,10 +73,15 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       const mappedTxs = txRes.map((t: any) => {
           let source = (t.source === 'REVENUE' ? 'REVENUE' : 'INVENTORY') as TransactionSource;
           
+          const itemCode = (t.item_code || t.itemCode || '').toString().trim();
+          const itemName = (t.item_name || t.itemName || t.item_code || t.itemCode || '').toString().trim();
+          const category = t.category || categorizeItem(itemCode, itemName);
+          
           return {
             ...t,
-            itemCode: (t.item_code || t.itemCode || '').toString().trim(),
-            itemName: (t.item_name || t.itemName || t.item_code || t.itemCode || '').toString().trim(),
+            itemCode,
+            itemName,
+            category,
             invoiceNumber: (t.invoice_number || t.invoiceNumber || '').toString(),
             invoiceDate: (t.invoice_date || t.invoiceDate || '').toString(),
             customer: (t.customer || '').toString(),
@@ -107,13 +134,16 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
           
           const existing = productMap.get(key);
           if (existing) {
+            existing.category = item.category || categorizeItem(code, name);
             if (item.type === 'IN') existing.currentStock += item.quantity;
             else existing.currentStock -= item.quantity;
           } else {
             productMap.set(key, {
+              key: key,
               code: (code && code !== 'KHONG-MA') ? code : 'KHONG-MA',
               name: name,
               unit: item.unit,
+              category: item.category || categorizeItem(code, name),
               currentStock: item.type === 'IN' ? item.quantity : -item.quantity,
               averageCost: 0
             });
@@ -196,6 +226,7 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
           else existing.currentStock -= item.quantity;
         } else {
           productMap.set(key, {
+            key: key,
             code: (code && code !== 'KHONG-MA') ? code : 'KHONG-MA',
             name: name,
             unit: item.unit,
@@ -249,6 +280,7 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
           else existing.currentStock -= item.quantity;
         } else {
           productMap.set(key, {
+            key: key,
             code: (code && code !== 'KHONG-MA') ? code : 'KHONG-MA',
             name: name,
             unit: item.unit,
@@ -327,7 +359,7 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     setClosedMonths(closedMonths.filter(m => m !== key));
   };
 
-  const calculateMonthlyCOGS = async (targetMonth: number, targetYear: number, sourceFilter?: TransactionSource, itemKeyFilter?: string) => {
+  const calculateMonthlyCOGS = async (targetMonth: number, targetYear: number, sourceFilter?: TransactionSource, itemKeyFilter?: string, categoryFilter?: string) => {
     // 1. Build a name-to-code mapping to handle items missing codes in some transactions
     const nameToCodeMap: Record<string, string> = {};
     transactions.forEach(t => {
@@ -370,13 +402,20 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         tx.dateInfo.month === targetMonth && 
         tx.dateInfo.year === targetYear &&
         (!sourceFilter || tx.source === sourceFilter) &&
-        (!itemKeyFilter || getItemKey(tx) === itemKeyFilter)
+        (!itemKeyFilter || getItemKey(tx) === itemKeyFilter) &&
+        (!categoryFilter || tx.category === categoryFilter)
       );
 
       if (targetMonthTxs.length === 0) {
-        const totalInMonthAnyCategory = txsWithDates.filter(tx => tx.dateInfo.month === targetMonth && tx.dateInfo.year === targetYear && (!itemKeyFilter || getItemKey(tx) === itemKeyFilter)).length;
+        const totalInMonthAnyCategory = txsWithDates.filter(tx => 
+          tx.dateInfo.month === targetMonth && 
+          tx.dateInfo.year === targetYear && 
+          (!itemKeyFilter || getItemKey(tx) === itemKeyFilter) &&
+          (!categoryFilter || tx.category === categoryFilter)
+        ).length;
         let label = sourceFilter === 'REVENUE' ? 'Dữ liệu Doanh thu & Tiền công' : 'Dữ liệu Quản lý hàng hóa';
         if (itemKeyFilter) label += ` (mặt hàng ${itemKeyFilter})`;
+        if (categoryFilter) label += ` (nhóm ${categoryFilter})`;
         
         let detail = `Tháng ${targetMonth + 1}/${targetYear} không có dữ liệu giao dịch ${label}.`;
         

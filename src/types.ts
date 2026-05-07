@@ -8,9 +8,11 @@ export interface OpeningBalance {
 }
 
 export interface Product {
+  key: string;
   code: string;
   name: string;
   unit: string;
+  category?: string;
   currentStock: number;
   averageCost: number;
 }
@@ -22,6 +24,7 @@ export interface Transaction {
   id: string;
   type: TransactionType;
   source?: TransactionSource;
+  category?: string;
   date: string;
   itemCode: string;
   itemName: string;

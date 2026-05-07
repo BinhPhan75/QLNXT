@@ -115,7 +115,8 @@ async function initDb() {
         ['address', 'TEXT'],
         ['note', 'TEXT'],
         ['cogs', 'FLOAT'],
-        ['source', 'TEXT']
+        ['source', 'TEXT'],
+        ['category', 'TEXT']
       ];
 
       for (const [col, type] of columns) {
@@ -275,14 +276,14 @@ router.post("/transactions/bulk", async (req, res) => {
     for (const item of items) {
       const tableName = getTableName(item.source);
       await client.query(
-        `INSERT INTO ${tableName} (id, type, date, item_code, item_name, unit, quantity, price, discount, total, invoice_number, invoice_date, customer, customer_card, address, note, cogs, source)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
+        `INSERT INTO ${tableName} (id, type, date, item_code, item_name, unit, quantity, price, discount, total, invoice_number, invoice_date, customer, customer_card, address, note, cogs, source, category)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
          ON CONFLICT (id) DO UPDATE SET
            type = EXCLUDED.type, date = EXCLUDED.date, item_code = EXCLUDED.item_code, item_name = EXCLUDED.item_name,
            unit = EXCLUDED.unit, quantity = EXCLUDED.quantity, price = EXCLUDED.price, discount = EXCLUDED.discount,
            total = EXCLUDED.total, invoice_number = EXCLUDED.invoice_number, invoice_date = EXCLUDED.invoice_date,
            customer = EXCLUDED.customer, customer_card = EXCLUDED.customer_card, address = EXCLUDED.address,
-           note = EXCLUDED.note, cogs = EXCLUDED.cogs, source = EXCLUDED.source`,
+           note = EXCLUDED.note, cogs = EXCLUDED.cogs, source = EXCLUDED.source, category = EXCLUDED.category`,
         [
           item.id, 
           item.type, 
@@ -301,7 +302,8 @@ router.post("/transactions/bulk", async (req, res) => {
           item.address,
           item.note, 
           item.cogs || 0,
-          item.source
+          item.source,
+          item.category
         ]
       );
     }

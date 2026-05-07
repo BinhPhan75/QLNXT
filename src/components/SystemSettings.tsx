@@ -10,6 +10,7 @@ export default function SystemSettings() {
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
   const [calcCategory, setCalcCategory] = useState<'ALL' | 'INVENTORY' | 'REVENUE'>('INVENTORY');
   const [selectedItemKey, setSelectedItemKey] = useState<string>('ALL');
+  const [selectedGroup, setSelectedGroup] = useState<string>('ALL');
   const [showOBModal, setShowOBModal] = useState(false);
 
   // Manual OB Form State
@@ -33,14 +34,20 @@ export default function SystemSettings() {
     try {
       const sourceFilter = calcCategory === 'ALL' ? undefined : calcCategory as any;
       const itemFilter = selectedItemKey === 'ALL' ? undefined : selectedItemKey;
+      const groupFilter = selectedGroup === 'ALL' ? undefined : selectedGroup;
       
-      const confirmMsg = itemFilter 
-        ? `Bạn có chắc chắn muốn tính giá vốn RIÊNG cho mặt hàng "${itemFilter}" trong tháng ${selectedMonth + 1}/${selectedYear}?`
-        : `Bạn có chắc chắn muốn tính giá vốn CHO TẤT CẢ các mặt hàng của ${calcCategory === 'ALL' ? 'toàn bộ hệ thống' : calcCategory} trong tháng ${selectedMonth + 1}/${selectedYear}? (Hệ thống sẽ tính chi tiết cho từng mã hàng, không gộp chung).`;
+      let confirmMsg = '';
+      if (itemFilter) {
+        confirmMsg = `Bạn có chắc chắn muốn tính giá vốn RIÊNG cho mặt hàng "${itemFilter}" trong tháng ${selectedMonth + 1}/${selectedYear}?`;
+      } else if (groupFilter) {
+        confirmMsg = `Bạn có chắc chắn muốn tính giá vốn CHO NHÓM HÀNG "${groupFilter}" trong tháng ${selectedMonth + 1}/${selectedYear}?`;
+      } else {
+        confirmMsg = `Bạn có chắc chắn muốn tính giá vốn CHO TẤT CẢ các mặt hàng của ${calcCategory === 'ALL' ? 'toàn bộ hệ thống' : calcCategory} trong tháng ${selectedMonth + 1}/${selectedYear}? (Hệ thống sẽ tính chi tiết cho từng mã hàng, không gộp chung).`;
+      }
 
       if (!confirm(confirmMsg)) return;
 
-      const result = await calculateMonthlyCOGS(selectedMonth, selectedYear, sourceFilter, itemFilter);
+      const result = await calculateMonthlyCOGS(selectedMonth, selectedYear, sourceFilter, itemFilter, groupFilter);
       if (result && result.message) {
         alert(result.message);
       } else {
@@ -58,9 +65,17 @@ export default function SystemSettings() {
     
     setIsSavingOB(true);
     try {
+      const p = products.find(prod => prod.key === obItemCode);
+      const finalCode = p ? p.code : obItemCode;
+      const finalName = p ? p.name : obItemName;
+      
+      // If the selected product has no code (KHONG-MA), use its unique key as the code for storage
+      // to avoid overlapping with other no-code items in the opening_balances table.
+      const storageCode = (finalCode === 'KHONG-MA' && p) ? p.key : finalCode;
+
       const result = await setManualOpeningBalance({
-        itemCode: (obItemCode || 'KHONG-MA').trim().toUpperCase(),
-        itemName: obItemName.trim(),
+        itemCode: (storageCode || 'KHONG-MA').trim().toUpperCase(),
+        itemName: finalName.trim(),
         month: selectedMonth,
         year: selectedYear,
         quantity: obQty,
@@ -148,7 +163,7 @@ export default function SystemSettings() {
               </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-4">
               <div>
                 <label className="block text-xs font-semibold text-slate-400 uppercase mb-1">Nguồn dữ liệu</label>
                 <select 
@@ -162,16 +177,39 @@ export default function SystemSettings() {
                 </select>
               </div>
               <div>
+                <label className="block text-xs font-semibold text-slate-400 uppercase mb-1">Loại vàng (Nhóm)</label>
+                <select 
+                  value={selectedGroup}
+                  onChange={(e) => {
+                    setSelectedGroup(e.target.value);
+                    setSelectedItemKey('ALL');
+                  }}
+                  className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500/20 font-bold text-amber-700"
+                >
+                  <option value="ALL">-- Tất cả nhóm --</option>
+                  <option value="V9999">Vàng 9999</option>
+                  <option value="V970">Vàng 970</option>
+                  <option value="V610">Vàng 610</option>
+                  <option value="VTS">Vàng trang sức</option>
+                  <option value="TC">Tiền công (TC)</option>
+                  <option value="VK">Vàng khác</option>
+                </select>
+              </div>
+              <div>
                 <label className="block text-xs font-semibold text-slate-400 uppercase mb-1">Chọn Mặt hàng</label>
                 <select 
                   value={selectedItemKey}
                   onChange={(e) => setSelectedItemKey(e.target.value)}
                   className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500/20 font-bold text-blue-700"
                 >
-                  <option value="ALL">-- Tất cả chi tiết --</option>
-                  {products.sort((a,b) => a.code.localeCompare(b.code)).map(p => (
-                    <option key={p.code} value={p.code}>{p.code} - {p.name}</option>
-                  ))}
+                  <option value="ALL">-- Chi tiết mặt hàng --</option>
+                  {products
+                    .filter(p => selectedGroup === 'ALL' || p.category === selectedGroup)
+                    .sort((a,b) => a.code.localeCompare(b.code))
+                    .map(p => (
+                      <option key={p.key} value={p.key}>{p.code} - {p.name}</option>
+                    ))
+                  }
                 </select>
               </div>
               <div>
@@ -383,16 +421,16 @@ export default function SystemSettings() {
                     <select 
                       value={obItemCode}
                       onChange={(e) => {
-                        const code = e.target.value;
-                        setObItemCode(code);
-                        const p = products.find(prod => prod.code === code);
+                        const key = e.target.value;
+                        setObItemCode(key);
+                        const p = products.find(prod => prod.key === key);
                         if (p) setObItemName(p.name);
                       }}
                       required
                       className="w-full px-4 py-2.5 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-blue-500/20"
                     >
                       <option value="">Chọn mặt hàng...</option>
-                      {products.map(p => <option key={p.code} value={p.code}>{p.code} - {p.name}</option>)}
+                      {products.map(p => <option key={p.key} value={p.key}>{p.code} - {p.name}</option>)}
                     </select>
                   )}
                 </div>
