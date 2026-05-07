@@ -443,7 +443,7 @@ function DashboardView({ setActiveTab }: { setActiveTab: (tab: any) => void }) {
                     </tr>
                   ) : (
                     products.slice(0, 10).map((p) => (
-                      <tr key={p.code} className="hover:bg-slate-50/50 transition-colors">
+                      <tr key={p.key} className="hover:bg-slate-50/50 transition-colors">
                         <td className="px-6 py-4">
                           <p className="font-semibold text-slate-900">{p.name}</p>
                           <p className="text-xs text-slate-500">{p.code}</p>

@@ -487,10 +487,10 @@ export default function Reports({ mode }: ReportsProps) {
                     </tr>
                   ) : (
                     filteredProducts.map((p) => (
-                      <React.Fragment key={p.code}>
+                      <React.Fragment key={p.key}>
                         <tr 
-                          onClick={() => setExpandedProduct(expandedProduct === p.code ? null : p.code)}
-                          className={`hover:bg-slate-50 transition-colors cursor-pointer ${expandedProduct === p.code ? 'bg-blue-50/30' : ''}`}
+                          onClick={() => setExpandedProduct(expandedProduct === p.key ? null : p.key)}
+                          className={`hover:bg-slate-50 transition-colors cursor-pointer ${expandedProduct === p.key ? 'bg-blue-50/30' : ''}`}
                         >
                           <td className="px-6 py-4 text-sm font-mono font-bold text-slate-900">{p.code}</td>
                           <td className="px-6 py-4 text-sm text-slate-700">{p.name}</td>
@@ -503,7 +503,7 @@ export default function Reports({ mode }: ReportsProps) {
                             {formatCurrency(p.currentStock * p.averageCost)}
                           </td>
                         </tr>
-                        {expandedProduct === p.code && (
+                        {expandedProduct === p.key && (
                           <tr className="bg-slate-50/80">
                             <td colSpan={6} className="px-6 py-4">
                               <div className="bg-white rounded-lg border border-slate-200 overflow-hidden shadow-inner">
