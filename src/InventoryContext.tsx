@@ -96,6 +96,7 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
             customer: (t.customer || '').toString(),
             customerCard: (t.customer_card || t.customerCard || '').toString(),
             address: (t.address || '').toString(),
+            note: (t.note || '').toString(),
             source,
             quantity: parseFloat(t.quantity || 0),
             price: parseFloat(t.price || 0),

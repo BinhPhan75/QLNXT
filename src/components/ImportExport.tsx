@@ -93,6 +93,7 @@ const parseVnNumber = (val: string | number | undefined, isQuantity: boolean = f
 export default function ImportExport({ mode }: ImportExportProps) {
   const { importTransactions, transactions, isMonthClosed } = useInventory();
   const [importType, setImportType] = useState<'IN' | 'OUT'>(mode === 'REVENUE' ? 'OUT' : 'IN');
+  const [importFormat, setImportFormat] = useState<'STANDARD' | 'RETAIL_PURCHASE'>('STANDARD');
   const [logs, setLogs] = useState<{ msg: string; type: 'success' | 'error' | 'info' | 'loading' }[]>([]);
   const [isProcessingPdf, setIsProcessingPdf] = useState(false);
 
@@ -111,7 +112,7 @@ export default function ImportExport({ mode }: ImportExportProps) {
 
     const isExcel = file.name.endsWith('.xlsx') || file.name.endsWith('.xls');
     
-    if (isExcel && mode === 'INVENTORY') {
+    if (isExcel && mode === 'INVENTORY' && importFormat === 'STANDARD') {
        setLogs([{ msg: 'Dữ liệu tồn kho hiện tại chỉ hỗ trợ file CSV hoặc PDF AI.', type: 'error' }]);
        return;
     }
@@ -126,13 +127,24 @@ export default function ImportExport({ mode }: ImportExportProps) {
         const sheetName = workbook.SheetNames[0];
         const sheet = workbook.Sheets[sheetName];
         const rows = XLSX.utils.sheet_to_json(sheet, { header: 1 }) as any[][];
-        processImportData(rows.map(row => row.map(cell => cell === undefined || cell === null ? '' : cell.toString())), file.name);
+        const stringData = rows.map(row => row.map(cell => cell === undefined || cell === null ? '' : cell.toString()));
+        
+        if (importFormat === 'RETAIL_PURCHASE') {
+          processRetailPurchaseImport(stringData);
+        } else {
+          processImportData(stringData, file.name);
+        }
       };
       reader.readAsBinaryString(file);
     } else {
       Papa.parse(file, {
         complete: (results) => {
-          processImportData(results.data as string[][], file.name);
+          const stringData = results.data as string[][];
+          if (importFormat === 'RETAIL_PURCHASE') {
+            processRetailPurchaseImport(stringData);
+          } else {
+            processImportData(stringData, file.name);
+          }
         },
         error: (err) => {
           setLogs(prev => [...prev, { msg: `Lỗi đọc file: ${err.message}`, type: 'error' }]);
@@ -141,6 +153,103 @@ export default function ImportExport({ mode }: ImportExportProps) {
     }
 
     e.target.value = '';
+  };
+
+  const processRetailPurchaseImport = (data: string[][]) => {
+    // Search for header row "STT,Ngày,Tên khách hàng..."
+    let headerIdx = -1;
+    for (let i = 0; i < Math.min(20, data.length); i++) {
+      const rowStr = data[i].join(',').toLowerCase();
+      if (rowStr.includes('stt') && rowStr.includes('ngày') && rowStr.includes('tên khách hàng')) {
+        headerIdx = i;
+        break;
+      }
+    }
+
+    if (headerIdx === -1) {
+      setLogs(prev => [...prev, { msg: 'Không tìm thấy tiêu đề "STT, Ngày, Tên khách hàng" trong bảng kê.', type: 'error' }]);
+      return;
+    }
+
+    // Usually data starts after the sub-header row (which has V970, V9999, V610 labels)
+    const dataRows = data.slice(headerIdx + 2);
+    const items: Omit<Transaction, 'id'>[] = [];
+    let successCount = 0;
+    const importDate = new Date().toISOString().split('T')[0];
+
+    dataRows.forEach((row, idx) => {
+      // Basic validation: row must have index and date
+      const stt = row[0]?.toString().trim();
+      const rawDate = row[1]?.toString().trim();
+      if (!stt || !rawDate || isNaN(parseInt(stt)) || !rawDate.includes('/')) return;
+
+      // Extract date
+      let invoiceDate = rawDate;
+      const dateParts = rawDate.split('/');
+      if (dateParts.length === 3) {
+        const [d, m, y] = dateParts;
+        invoiceDate = `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
+      }
+
+      const customer = row[2]?.toString().trim() || 'Khách lẻ';
+      const customerCard = row[3]?.toString().trim() || '';
+      
+      // Check which column has quantity
+      const qtyV970 = parseVnNumber(row[4], true);
+      const qtyV9999 = parseVnNumber(row[5], true);
+      const qtyV610 = parseVnNumber(row[6], true);
+      
+      let finalQty = 0;
+      let itemCode = '';
+      let itemName = '';
+      
+      if (qtyV970 > 0) {
+        finalQty = qtyV970;
+        itemCode = 'V970';
+        itemName = 'Vàng 970';
+      } else if (qtyV9999 > 0) {
+        finalQty = qtyV9999;
+        itemCode = 'V9999';
+        itemName = 'Vàng 9999';
+      } else if (qtyV610 > 0) {
+        finalQty = qtyV610;
+        itemCode = 'V610';
+        itemName = 'Vàng 610';
+      } else {
+        return; // No quantity found
+      }
+
+      const price = parseVnNumber(row[7], false);
+      const total = parseVnNumber(row[8], false);
+      const note = row[9]?.toString().trim() || '';
+
+      items.push({
+        type: 'IN',
+        source: 'INVENTORY',
+        date: importDate,
+        invoiceDate,
+        invoiceNumber: `RETAIL-${invoiceDate}-${stt}`,
+        customer,
+        customerCard,
+        address: '',
+        itemCode,
+        itemName,
+        unit: 'Chỉ',
+        quantity: finalQty,
+        price,
+        total,
+        discount: 0,
+        note: note
+      });
+      successCount++;
+    });
+
+    if (items.length > 0) {
+      importTransactions(items);
+      setLogs(prev => [...prev, { msg: `Đã nhập thành công ${successCount} dòng thu mua lẻ.`, type: 'success' }]);
+    } else {
+      setLogs(prev => [...prev, { msg: 'Không tìm thấy dữ liệu thu mua hợp lệ.', type: 'error' }]);
+    }
   };
 
   const processImportData = (data: string[][], fileName: string) => {
@@ -485,6 +594,23 @@ export default function ImportExport({ mode }: ImportExportProps) {
               </button>
             </div>
 
+            {!isRevenue && (
+              <div className="flex p-1 bg-slate-100 rounded-lg">
+                <button 
+                  onClick={() => setImportFormat('STANDARD')}
+                  className={`flex-1 py-2 text-sm font-medium rounded-md transition-all ${importFormat === 'STANDARD' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                >
+                  Hóa đơn tiêu chuẩn
+                </button>
+                <button 
+                  onClick={() => setImportFormat('RETAIL_PURCHASE')}
+                  className={`flex-1 py-2 text-sm font-medium rounded-md transition-all ${importFormat === 'RETAIL_PURCHASE' ? 'bg-white text-orange-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                >
+                  Mua lẻ không hóa đơn
+                </button>
+              </div>
+            )}
+
             <label className={`flex flex-col items-center justify-center w-full h-40 border-2 border-dashed rounded-xl transition-all ${isProcessingPdf ? 'bg-slate-50 border-blue-300 cursor-not-allowed' : 'border-slate-300 cursor-pointer hover:bg-slate-50 hover:border-blue-400'}`}>
               <div className="flex flex-col items-center justify-center pt-5 pb-6 text-center px-4">
                 {isProcessingPdf ? (
@@ -540,11 +666,20 @@ export default function ImportExport({ mode }: ImportExportProps) {
         <AlertCircle size={20} className="shrink-0" />
         <div>
           <p className="font-bold mb-1">Hướng dẫn mẫu file:</p>
-          <ul className="list-disc list-inside space-y-1">
-            <li>Hàng 1: Tiêu đề hóa đơn (có ngày tháng)</li>
-            <li>Hàng 5: Tiêu đề cột (STT, NGAY, Tên hàng hóa, Mã hàng, ĐVT, Số lượng, Đơn giá...)</li>
-            <li>Dữ liệu bắt đầu từ hàng 6.</li>
-          </ul>
+          {importFormat === 'STANDARD' ? (
+            <ul className="list-disc list-inside space-y-1">
+              <li>Hàng 1: Tiêu đề hóa đơn (có ngày tháng)</li>
+              <li>Hàng 5: Tiêu đề cột (STT, NGAY, Tên hàng hóa, Mã hàng, ĐVT, Số lượng, Đơn giá...)</li>
+              <li>Dữ liệu bắt đầu từ hàng 6.</li>
+            </ul>
+          ) : (
+            <ul className="list-disc list-inside space-y-1">
+              <li>Bảng kê thu mua hàng hóa dịch vụ không có hóa đơn.</li>
+              <li>Cột 2: Ngày (DD/MM/YYYY)</li>
+              <li>Cột 5, 6, 7: Số lượng lần lượt cho (Vàng 970, V9999, V610)</li>
+              <li>Cột 8, 9: Đơn giá và Thành tiền.</li>
+            </ul>
+          )}
         </div>
       </div>
     </div>

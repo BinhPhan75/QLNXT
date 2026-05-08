@@ -38,6 +38,7 @@ export interface Transaction {
   address?: string;
   invoiceNumber?: string;
   invoiceDate?: string;
+  note?: string;
   cogs?: number; 
 }
 
