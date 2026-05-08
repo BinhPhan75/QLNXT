@@ -630,8 +630,20 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     const getItemKey = (t: any) => {
       const code = (t.itemCode || '').toString().trim().toUpperCase();
       const name = (t.itemName || '').toString().trim();
-      if (code && code !== 'KHONG-MA') return code;
-      if (name) return nameToCodeMap[name.toLowerCase()] || name;
+      
+      // If we have a code, try to find a matching product by code or by key
+      if (code && code !== 'KHONG-MA') {
+        const pByCode = products.find(p => p.code === code || p.key === code);
+        if (pByCode) return pByCode.key;
+        return code;
+      }
+      
+      // If no code, try to match by name
+      if (name) {
+        const pByName = products.find(p => p.name.toLowerCase() === name.toLowerCase() || p.key.toLowerCase() === name.toLowerCase());
+        if (pByName) return pByName.key;
+        return nameToCodeMap[name.toLowerCase()] || name;
+      }
       return 'UNKNOWN';
     };
 
