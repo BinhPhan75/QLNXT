@@ -243,6 +243,13 @@ async function initDb() {
       );
     `);
 
+    // Migration: ensure customer_card exists
+    try {
+      await client.query(`ALTER TABLE bank_statements ADD COLUMN IF NOT EXISTS customer_card TEXT`);
+    } catch (e) {
+      console.log("[Database] Migration: customer_card column might already exist.");
+    }
+
     console.log("[Database] Table schema verified.");
   } catch (err: any) {
     console.error("[Database] Initialization error:", err.message);
