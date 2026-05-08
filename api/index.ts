@@ -174,7 +174,18 @@ async function initDb() {
     try {
       console.log("[Database] Checking opening_balances constraints...");
       
-      // Force drop existing PK to recreate it correctly (handling potential migration issues)
+      // 1. Ensure columns are NOT NULL (required for PK)
+      // First fill any NULLs with defaults
+      await client.query(`UPDATE opening_balances SET item_code = 'KHONG-MA' WHERE item_code IS NULL`);
+      await client.query(`UPDATE opening_balances SET month = 0 WHERE month IS NULL`);
+      await client.query(`UPDATE opening_balances SET year = 0 WHERE year IS NULL`);
+      
+      // Then set NOT NULL
+      await client.query(`ALTER TABLE opening_balances ALTER COLUMN item_code SET NOT NULL`);
+      await client.query(`ALTER TABLE opening_balances ALTER COLUMN month SET NOT NULL`);
+      await client.query(`ALTER TABLE opening_balances ALTER COLUMN year SET NOT NULL`);
+
+      // 2. Force drop existing PK to recreate it correctly
       await client.query(`
         DO $$ 
         BEGIN 
@@ -182,12 +193,18 @@ async function initDb() {
             SELECT 1 FROM information_schema.table_constraints 
             WHERE table_name = 'opening_balances' AND constraint_type = 'PRIMARY KEY'
           ) THEN
-            ALTER TABLE opening_balances DROP CONSTRAINT opening_balances_pkey;
+            -- Find the actual constraint name
+            EXECUTE (
+              SELECT 'ALTER TABLE opening_balances DROP CONSTRAINT ' || constraint_name
+              FROM information_schema.table_constraints
+              WHERE table_name = 'opening_balances' AND constraint_type = 'PRIMARY KEY'
+              LIMIT 1
+            );
           END IF;
         END $$;
       `);
 
-      // Remove duplicates keeping the most recent data
+      // 3. Remove duplicates keeping the most recent data
       await client.query(`
         DELETE FROM opening_balances a USING (
           SELECT MIN(ctid) as keep_id, item_code, month, year
@@ -201,7 +218,7 @@ async function initDb() {
           AND a.ctid > b.keep_id;
       `);
 
-      // Add the PK
+      // 4. Add the PK
       await client.query(`ALTER TABLE opening_balances ADD PRIMARY KEY (item_code, month, year)`);
       console.log("[Database] opening_balances Primary Key assigned successfully.");
 
