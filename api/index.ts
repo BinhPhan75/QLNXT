@@ -162,34 +162,39 @@ async function initDb() {
 
     // Ensure Primary Key and clean up duplicates if necessary
     try {
-      // First, let's check if the constraint already exists
-      const constraintCheck = await client.query(`
-        SELECT count(*) 
-        FROM information_schema.table_constraints 
-        WHERE table_name = 'opening_balances' AND constraint_type = 'PRIMARY KEY'
-      `);
+      console.log("[Database] Checking opening_balances constraints...");
       
-      if (parseInt(constraintCheck.rows[0].count) === 0) {
-        console.log("[Database] Adding missing Primary Key to opening_balances...");
-        
-        // Remove duplicates before adding PK, keeping the latest one (highest ID if it had one, or just one)
-        // Since it has no ID, we'll use a temporary table approach
-        await client.query(`
-          CREATE TABLE opening_balances_temp AS 
-          SELECT DISTINCT ON (item_code, month, year) * 
-          FROM opening_balances 
-          ORDER BY item_code, month, year;
-          
-          TRUNCATE opening_balances;
-          
-          INSERT INTO opening_balances SELECT * FROM opening_balances_temp;
-          
-          DROP TABLE opening_balances_temp;
-          
-          ALTER TABLE opening_balances ADD PRIMARY KEY (item_code, month, year);
-        `);
-        console.log("[Database] Primary Key added successfully.");
-      }
+      // Force drop existing PK to recreate it correctly (handling potential migration issues)
+      await client.query(`
+        DO $$ 
+        BEGIN 
+          IF EXISTS (
+            SELECT 1 FROM information_schema.table_constraints 
+            WHERE table_name = 'opening_balances' AND constraint_type = 'PRIMARY KEY'
+          ) THEN
+            ALTER TABLE opening_balances DROP CONSTRAINT opening_balances_pkey;
+          END IF;
+        END $$;
+      `);
+
+      // Remove duplicates keeping the most recent data
+      await client.query(`
+        DELETE FROM opening_balances a USING (
+          SELECT MIN(ctid) as keep_id, item_code, month, year
+          FROM opening_balances
+          GROUP BY item_code, month, year
+          HAVING COUNT(*) > 1
+        ) b
+        WHERE a.item_code = b.item_code 
+          AND a.month = b.month 
+          AND a.year = b.year 
+          AND a.ctid > b.keep_id;
+      `);
+
+      // Add the PK
+      await client.query(`ALTER TABLE opening_balances ADD PRIMARY KEY (item_code, month, year)`);
+      console.log("[Database] opening_balances Primary Key assigned successfully.");
+
     } catch (err: any) {
       console.error("[Database] Failed to ensure opening_balances PK:", err.message);
     }
