@@ -18,6 +18,8 @@ export default function SystemSettings() {
   const [obItemName, setObItemName] = useState('');
   const [obQty, setObQty] = useState(0);
   const [obValue, setObValue] = useState(0);
+  const [obMonth, setObMonth] = useState(selectedMonth);
+  const [obYear, setObYear] = useState(selectedYear);
   const [isSavingOB, setIsSavingOB] = useState(false);
   const [useCustomCode, setUseCustomCode] = useState(false);
 
@@ -76,8 +78,8 @@ export default function SystemSettings() {
       const result = await setManualOpeningBalance({
         itemCode: (storageCode || 'KHONG-MA').trim().toUpperCase(),
         itemName: finalName.trim(),
-        month: selectedMonth,
-        year: selectedYear,
+        month: obMonth,
+        year: obYear,
         quantity: obQty,
         totalValue: obValue
       });
@@ -286,7 +288,11 @@ export default function SystemSettings() {
                 <p className="text-sm text-slate-500">Chỉ dùng khi bắt đầu sử dụng phần mềm</p>
               </div>
               <button 
-                onClick={() => setShowOBModal(true)}
+                onClick={() => {
+                  setObMonth(selectedMonth);
+                  setObYear(selectedYear);
+                  setShowOBModal(true);
+                }}
                 disabled={isCurrentMonthClosed}
                 className="flex items-center gap-2 text-sm font-bold text-blue-600 hover:text-blue-700 disabled:opacity-50"
               >
@@ -382,8 +388,31 @@ export default function SystemSettings() {
               exit={{ scale: 0.95, opacity: 0 }}
               className="bg-white w-full max-w-md rounded-2xl p-6 shadow-2xl"
             >
-              <h2 className="text-xl font-bold mb-4">Nhập số dư đầu kỳ tháng {selectedMonth+1}</h2>
+              <h2 className="text-xl font-bold mb-4">Nhập số dư đầu kỳ</h2>
               <form onSubmit={handleAddOB} className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Tháng áp dụng</label>
+                    <select 
+                      value={obMonth}
+                      onChange={(e) => setObMonth(parseInt(e.target.value))}
+                      className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500/20"
+                    >
+                      {months.map((m, i) => <option key={i} value={i}>{m}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Năm áp dụng</label>
+                    <select 
+                      value={obYear}
+                      onChange={(e) => setObYear(parseInt(e.target.value))}
+                      className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500/20"
+                    >
+                      {years.map(y => <option key={y} value={y}>{y}</option>)}
+                    </select>
+                  </div>
+                </div>
+
                 <div>
                   <div className="flex justify-between items-center mb-1">
                     <label className="block text-xs font-bold text-slate-500 uppercase">Mặt hàng</label>
