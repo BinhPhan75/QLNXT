@@ -53,17 +53,40 @@ export default function NXTReport() {
 
   const totals = useMemo(() => {
     if (reportData.length === 0) return null;
+    
+    const outValue = reportData.reduce((sum, r) => sum + r.out.value, 0);
+    
+    // Calculate revenue from raw transactions for selected product in selected period
+    const revenue = itemTransactions.reduce((sum, t) => {
+      const d = new Date(t.invoiceDate || t.date);
+      const month = d.getMonth();
+      const year = d.getFullYear();
+      const startMonth = (selectedQuarter - 1) * 3;
+      const endMonth = startMonth + 2;
+      
+      if (year === selectedYear && month >= startMonth && month <= endMonth && t.type === 'OUT') {
+        return sum + (t.total || 0);
+      }
+      return sum;
+    }, 0);
+
+    const valueAdded = revenue - outValue;
+    const tax = valueAdded * 0.1;
+
     return {
       openingQty: reportData[0].opening.qty,
       openingValue: reportData[0].opening.value,
       inQty: reportData.reduce((sum, r) => sum + r.in.qty, 0),
       inValue: reportData.reduce((sum, r) => sum + r.in.value, 0),
       outQty: reportData.reduce((sum, r) => sum + r.out.qty, 0),
-      outValue: reportData.reduce((sum, r) => sum + r.out.value, 0),
+      outValue,
       closingQty: reportData[reportData.length - 1].closing.qty,
       closingValue: reportData[reportData.length - 1].closing.value,
+      revenue,
+      valueAdded,
+      tax
     };
-  }, [reportData]);
+  }, [reportData, itemTransactions, selectedYear, selectedQuarter]);
 
   const handlePrint = () => {
     window.print();
@@ -263,16 +286,20 @@ export default function NXTReport() {
               {totals && (
                 <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 shadow-inner space-y-2">
                   <div className="flex justify-between items-center text-sm">
-                    <span className="font-bold text-slate-600">Dthu (Cộng giá bán):</span>
-                    <span className="font-bold text-slate-900">{formatCurrency(reportData.reduce((sum, r) => sum + r.out.value * 1.1, 0))}</span>
+                    <span className="font-bold text-slate-600">Doanh thu (Cộng giá bán):</span>
+                    <span className="font-bold text-slate-900">{formatCurrency(totals.revenue)}</span>
                   </div>
                   <div className="flex justify-between items-center text-sm border-t border-slate-200 pt-2">
-                    <span className="font-bold text-slate-600">GTGT:</span>
-                    <span className="font-bold text-slate-900">{formatCurrency(reportData.reduce((sum, r) => sum + r.out.value, 0))}</span>
+                    <span className="font-bold text-slate-600">Giá vốn (Hàng xuất):</span>
+                    <span className="font-bold text-slate-900">{formatCurrency(totals.outValue)}</span>
+                  </div>
+                  <div className="flex justify-between items-center text-sm border-t border-slate-200 pt-2">
+                    <span className="font-bold text-slate-600">Chênh lệch (GTGT):</span>
+                    <span className="font-bold text-blue-600">{formatCurrency(totals.valueAdded)}</span>
                   </div>
                   <div className="flex justify-between items-center text-sm border-t border-slate-200 pt-2">
                     <span className="font-bold text-slate-600">Thuế GTGT (10%):</span>
-                    <span className="font-bold text-slate-900">{formatCurrency(reportData.reduce((sum, r) => sum + r.out.value * 0.1, 0))}</span>
+                    <span className="font-bold text-orange-600">{formatCurrency(totals.tax)}</span>
                   </div>
                 </div>
               )}
