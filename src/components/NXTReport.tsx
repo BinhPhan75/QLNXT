@@ -71,7 +71,7 @@ export default function NXTReport() {
     }, 0);
 
     const valueAdded = revenue - outValue;
-    const tax = valueAdded * 0.1;
+    const tax = valueAdded > 0 ? valueAdded * 0.1 : 0;
 
     return {
       openingQty: reportData[0].opening.qty,
