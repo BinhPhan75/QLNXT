@@ -142,11 +142,12 @@ async function initDb() {
     // Ensure 'item_name' and 'value' columns exist (for older table versions)
     try {
       const colCheck = await client.query(`
-        SELECT column_name 
+        SELECT column_name, is_nullable
         FROM information_schema.columns 
         WHERE table_name = 'opening_balances'
       `);
-      const existingCols = colCheck.rows.map(r => r.column_name);
+      const cols = colCheck.rows;
+      const existingCols = cols.map(r => r.column_name);
       
       if (!existingCols.includes('value')) {
         console.log("[Database] Adding missing 'value' column to opening_balances...");
@@ -155,6 +156,15 @@ async function initDb() {
       if (!existingCols.includes('item_name')) {
         console.log("[Database] Adding missing 'item_name' column to opening_balances...");
         await client.query(`ALTER TABLE opening_balances ADD COLUMN item_name TEXT`);
+      }
+
+      // Fix legacy 'balance' column if it exists and is NOT NULL
+      if (existingCols.includes('balance')) {
+        const balanceCol = cols.find(c => c.column_name === 'balance');
+        if (balanceCol && balanceCol.is_nullable === 'NO') {
+          console.log("[Database] Fixing legacy 'balance' column in opening_balances...");
+          await client.query(`ALTER TABLE opening_balances ALTER COLUMN balance DROP NOT NULL`);
+        }
       }
     } catch (err) {
       console.error("[Database] Failed to update opening_balances columns:", err);
