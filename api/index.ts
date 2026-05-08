@@ -391,6 +391,21 @@ router.delete("/transactions/:id", async (req, res) => {
 });
 
 // 4. Delete Invoice
+router.delete("/invoices/bulk", async (req, res) => {
+  const { source, invoiceNumbers } = req.body;
+  if (!Array.isArray(invoiceNumbers) || invoiceNumbers.length === 0) {
+    return res.json({ success: true, count: 0 });
+  }
+  const tableName = getTableName(source as string);
+  try {
+    await pool.query(`DELETE FROM ${tableName} WHERE invoice_number = ANY($1)`, [invoiceNumbers]);
+    res.json({ success: true, count: invoiceNumbers.length });
+  } catch (err: any) {
+    console.error("[API] Bulk Delete Invoice Error:", err.message);
+    res.status(500).json({ error: "Failed to bulk delete invoices" });
+  }
+});
+
 router.delete("/invoices/:number", async (req, res) => {
   const { source } = req.query;
   const tableName = getTableName(source as string);

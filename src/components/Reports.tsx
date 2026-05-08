@@ -9,7 +9,9 @@ interface ReportsProps {
 }
 
 export default function Reports({ mode }: ReportsProps) {
-  const { transactions, deleteInvoice, user, products } = useInventory();
+  const { transactions, deleteInvoice, deleteMultipleInvoices, user, products } = useInventory();
+  
+  const [selectedInvoices, setSelectedInvoices] = useState<string[]>([]);
   
   // Filter transactions based on source
   const sourceFilteredTransactions = useMemo(() => {
@@ -298,6 +300,33 @@ export default function Reports({ mode }: ReportsProps) {
     }
   };
 
+  const handleBulkDelete = () => {
+    if (selectedInvoices.length === 0) return;
+    deleteMultipleInvoices(selectedInvoices).then(() => {
+      setSelectedInvoices([]);
+    });
+  };
+
+  const toggleSelectInvoice = (invNum: string) => {
+    setSelectedInvoices(prev => 
+      prev.includes(invNum) 
+        ? prev.filter(n => n !== invNum) 
+        : [...prev, invNum]
+    );
+  };
+
+  const toggleSelectAll = (visibleInvoices: string[]) => {
+    if (selectedInvoices.length === visibleInvoices.length) {
+      setSelectedInvoices([]);
+    } else {
+      setSelectedInvoices(visibleInvoices);
+    }
+  };
+
+  const currentVisibleInvoiceNumbers = useMemo(() => {
+    return Array.from(new Set(filteredData.map(tx => tx.invoiceNumber || (tx as any).invoice_number))).filter(n => !!n);
+  }, [filteredData]);
+
   return (
     <div className="space-y-6">
       <header className="flex flex-col md:flex-row md:items-end justify-between gap-4">
@@ -445,6 +474,14 @@ export default function Reports({ mode }: ReportsProps) {
             />
           </div>
           <div className="flex gap-2">
+            {selectedInvoices.length > 0 && (
+              <button 
+                onClick={handleBulkDelete}
+                className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors text-sm font-bold shadow-lg"
+              >
+                <Trash2 size={16} /> Xóa {selectedInvoices.length} HĐ
+              </button>
+            )}
             {reportType !== 'STOCK' && (
               <select 
                 className="px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-blue-500/20 text-sm"
@@ -568,6 +605,14 @@ export default function Reports({ mode }: ReportsProps) {
               <>
                 <thead>
                   <tr className="bg-slate-50 text-slate-500 text-[10px] font-semibold uppercase tracking-wider">
+                    <th className="px-2 py-3 w-10 text-center">
+                      <input 
+                        type="checkbox" 
+                        className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                        checked={selectedInvoices.length > 0 && selectedInvoices.length === currentVisibleInvoiceNumbers.length}
+                        onChange={() => toggleSelectAll(currentVisibleInvoiceNumbers)}
+                      />
+                    </th>
                     <th className="px-2 py-3 whitespace-nowrap">Ngày HĐ</th>
                     <th className="px-2 py-3 whitespace-nowrap">Số HĐ</th>
                     <th className="px-3 py-3 min-w-[110px]">Khách hàng</th>
@@ -601,7 +646,7 @@ export default function Reports({ mode }: ReportsProps) {
                 <tbody className="divide-y divide-slate-100 font-medium">
                   {transactions.length === 0 ? (
                     <tr>
-                      <td colSpan={mode === 'REVENUE' ? 12 : 9} className="px-6 py-12 text-center">
+                      <td colSpan={mode === 'REVENUE' ? 13 : 10} className="px-6 py-12 text-center">
                         <div className="bg-amber-50 border border-amber-200 p-6 rounded-2xl text-center">
                           <p className="text-amber-800 font-medium italic">Hệ thống chưa có bất kỳ dữ liệu nào. Vui lòng nhập dữ liệu từ menu Import.</p>
                           <div className="mt-4 text-xs text-amber-600 font-mono text-left max-w-sm mx-auto">
@@ -614,7 +659,7 @@ export default function Reports({ mode }: ReportsProps) {
                     </tr>
                   ) : filteredDataDisplay.length === 0 && (
                     <tr>
-                      <td colSpan={mode === 'REVENUE' ? 12 : 9} className="px-6 py-12 text-center">
+                      <td colSpan={mode === 'REVENUE' ? 13 : 10} className="px-6 py-12 text-center">
                         <div className="bg-slate-50 border border-slate-200 p-6 rounded-2xl text-center">
                           <p className="text-slate-500 italic">Không tìm thấy dữ liệu phù hợp với bộ lọc hiện tại.</p>
                           <div className="mt-4 text-[10px] text-slate-400 font-mono text-left max-w-sm mx-auto space-y-1">
@@ -645,6 +690,14 @@ export default function Reports({ mode }: ReportsProps) {
                               onClick={() => setExpandedRevenueKey(isExpanded ? null : row.key)}
                               className={`hover:bg-blue-50/30 transition-colors cursor-pointer text-[11px] ${isExpanded ? 'bg-blue-50/50' : ''}`}
                             >
+                              <td className="px-2 py-3 text-center" onClick={(e) => e.stopPropagation()}>
+                                <input 
+                                  type="checkbox"
+                                  className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                                  checked={selectedInvoices.includes(row.invoiceNumber)}
+                                  onChange={() => toggleSelectInvoice(row.invoiceNumber)}
+                                />
+                              </td>
                               <td className="px-2 py-3 whitespace-nowrap text-slate-500">{formatDate(row.invoiceDate)}</td>
                               <td className="px-2 py-3 font-bold text-blue-600">{row.invoiceNumber}</td>
                               <td className="px-3 py-3 text-slate-900 leading-tight max-w-[120px] truncate" title={row.customer}>{row.customer}</td>
@@ -660,7 +713,7 @@ export default function Reports({ mode }: ReportsProps) {
                             </tr>
                             {isExpanded && (
                               <tr>
-                                <td colSpan={12} className="px-6 py-4 bg-slate-50/80">
+                                <td colSpan={13} className="px-6 py-4 bg-slate-50/80">
                                   <div className="rounded-lg border border-slate-200 overflow-hidden bg-white shadow-inner">
                                     <table className="w-full text-xs">
                                       <thead className="bg-slate-100 text-slate-500 font-bold">
@@ -696,6 +749,14 @@ export default function Reports({ mode }: ReportsProps) {
                       const tx = row;
                       return (
                         <tr key={tx.id} className="hover:bg-slate-50/50 transition-colors text-[11px]">
+                          <td className="px-2 py-3 text-center">
+                            <input 
+                              type="checkbox"
+                              className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                              checked={selectedInvoices.includes(tx.invoiceNumber)}
+                              onChange={() => toggleSelectInvoice(tx.invoiceNumber)}
+                            />
+                          </td>
                           <td className="px-2 py-3 text-slate-600">
                             {formatDate(tx.invoiceDate || tx.date)}
                           </td>
@@ -732,7 +793,7 @@ export default function Reports({ mode }: ReportsProps) {
                   <tfoot className="border-t-2 border-slate-200">
                     {mode === 'REVENUE' ? (
                       <tr className="bg-slate-50 font-bold text-[11px] text-slate-900 border-t border-slate-300">
-                        <td colSpan={6} className="px-2 py-4 text-right uppercase text-slate-500">Tổng cộng:</td>
+                        <td colSpan={7} className="px-2 py-4 text-right uppercase text-slate-500">Tổng cộng:</td>
                         <td className="px-2 py-4 text-center">
                           {formatQuantity(filteredDataDisplay.reduce((sum: number, r: any) => sum + (Number(r.quantity) || 0), 0))}
                         </td>
@@ -752,7 +813,7 @@ export default function Reports({ mode }: ReportsProps) {
                       </tr>
                     ) : (
                       <tr className="bg-slate-50 font-bold text-[11px] text-slate-900 border-t border-slate-300">
-                        <td colSpan={5} className="px-2 py-4 text-right uppercase text-slate-500">Tổng cộng:</td>
+                        <td colSpan={6} className="px-2 py-4 text-right uppercase text-slate-500">Tổng cộng:</td>
                         <td></td>
                         <td className="px-2 py-4 text-center">
                           {formatQuantity(filteredDataDisplay.reduce((sum: number, r: any) => sum + (Number(r.quantity) || 0), 0))}
@@ -780,6 +841,14 @@ export default function Reports({ mode }: ReportsProps) {
               <>
                 <thead>
                   <tr className="bg-slate-50 text-slate-500 text-xs font-semibold uppercase tracking-wider">
+                    <th className="px-6 py-4 w-10 text-center">
+                      <input 
+                        type="checkbox" 
+                        className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                        checked={selectedInvoices.length > 0 && selectedInvoices.length === currentVisibleInvoiceNumbers.length}
+                        onChange={() => toggleSelectAll(currentVisibleInvoiceNumbers)}
+                      />
+                    </th>
                     <th className="px-6 py-4">Ngày</th>
                     <th className="px-6 py-4">Số Hóa Đơn</th>
                     <th className="px-6 py-4">Đối tác</th>
@@ -791,7 +860,7 @@ export default function Reports({ mode }: ReportsProps) {
                 <tbody className="divide-y divide-slate-100">
                   {invoices.length === 0 ? (
                     <tr>
-                      <td colSpan={6} className="px-6 py-12 text-center text-slate-400 italic">
+                      <td colSpan={7} className="px-6 py-12 text-center text-slate-400 italic">
                         Không tìm thấy hóa đơn nào
                       </td>
                     </tr>
@@ -802,6 +871,14 @@ export default function Reports({ mode }: ReportsProps) {
                           onClick={() => setExpandedInvoice(expandedInvoice === inv.number ? null : inv.number)}
                           className={`hover:bg-slate-50 transition-colors cursor-pointer ${expandedInvoice === inv.number ? 'bg-blue-50/30' : ''}`}
                         >
+                          <td className="px-6 py-4 text-center" onClick={(e) => e.stopPropagation()}>
+                            <input 
+                              type="checkbox"
+                              className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                              checked={selectedInvoices.includes(inv.number)}
+                              onChange={() => toggleSelectInvoice(inv.number)}
+                            />
+                          </td>
                           <td className="px-6 py-4 text-sm text-slate-600">{formatDate(inv.date)}</td>
                           <td className="px-6 py-4">
                             <div className="flex items-center gap-2">
@@ -830,7 +907,7 @@ export default function Reports({ mode }: ReportsProps) {
                         </tr>
                         {expandedInvoice === inv.number && (
                           <tr className="bg-slate-50/80">
-                            <td colSpan={6} className="px-6 py-4">
+                            <td colSpan={7} className="px-6 py-4">
                               <div className="bg-white rounded-lg border border-slate-200 overflow-hidden shadow-inner">
                                 <table className="w-full text-xs">
                                   <thead>

@@ -30,6 +30,7 @@ interface InventoryContextType {
   isMonthClosed: (date: string | Date) => boolean;
   categorizeItem: (code: string, name: string) => string;
   resetData: () => void;
+  deleteMultipleInvoices: (invoiceNumbers: string[]) => Promise<void>;
 }
 
 const InventoryContext = createContext<InventoryContextType | undefined>(undefined);
@@ -205,25 +206,54 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   };
 
   const deleteInvoice = async (invNum: string) => {
-    const txToDelete = transactions.filter(t => t.invoiceNumber === invNum);
-    if (txToDelete.length === 0) return;
+    await deleteMultipleInvoices([invNum]);
+  };
 
-    if (isMonthClosed(txToDelete[0].date, txToDelete[0].invoiceDate)) {
-      alert("Không thể xóa hóa đơn thuộc tháng đã chốt sổ.");
+  const deleteMultipleInvoices = async (invNums: string[]) => {
+    if (invNums.length === 0) return;
+
+    const txsToDelete = transactions.filter(t => invNums.includes(t.invoiceNumber || ''));
+    if (txsToDelete.length === 0) return;
+
+    // Check if any invoice is in a closed month
+    const closedInvoices = txsToDelete.filter(t => isMonthClosed(t.date, t.invoiceDate));
+    if (closedInvoices.length > 0) {
+      alert(`Có ${closedInvoices.length} hóa đơn thuộc tháng đã chốt sổ. Vui lòng mở khóa trước khi xóa.`);
       return;
     }
 
-    // Determine target table from the transactions being deleted
-    const source = txToDelete[0].source || 'INVENTORY';
+    if (!confirm(`Bạn có chắc chắn muốn xóa ${invNums.length} hóa đơn đã chọn?`)) return;
+
+    // We assume all selected invoices come from the same source for simplicity in UI, 
+    // but the context should handle them based on their actual source.
+    // However, if they have mixed sources, we might need multiple calls or a smarter backend.
+    // For now, let's group by source.
+    const bySource: Record<string, string[]> = {};
+    txsToDelete.forEach(t => {
+      const src = t.source || 'INVENTORY';
+      if (!bySource[src]) bySource[src] = [];
+      if (!bySource[src].includes(t.invoiceNumber || '')) {
+        bySource[src].push(t.invoiceNumber || '');
+      }
+    });
 
     try {
-      const res = await fetch(`/api/invoices/${invNum}?source=${source === 'REVENUE' ? 'REVENUE' : 'NGHIATINGOLD'}`, { method: 'DELETE' });
-      if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+      for (const [source, numbers] of Object.entries(bySource)) {
+        const res = await fetch('/api/invoices/bulk', {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ 
+            source: source === 'REVENUE' ? 'REVENUE' : 'NGHIATINGOLD',
+            invoiceNumbers: numbers
+          })
+        });
+        if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+      }
       
-      const remainingTxs = transactions.filter(t => t.invoiceNumber !== invNum);
+      const remainingTxs = transactions.filter(t => !invNums.includes(t.invoiceNumber || ''));
       setTransactions(remainingTxs);
 
-      // Recalculate stock
+      // Recalculate products
       const productMap = new Map<string, Product>();
       remainingTxs.forEach(item => {
         const code = item.itemCode.trim().toUpperCase();
@@ -240,13 +270,15 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
             code: (code && code !== 'KHONG-MA') ? code : 'KHONG-MA',
             name: name,
             unit: item.unit,
+            category: item.category || categorizeItem(code, name),
             currentStock: item.type === 'IN' ? item.quantity : -item.quantity,
             averageCost: 0
           });
         }
       });
       setProducts(Array.from(productMap.values()));
-      alert(`Đã xóa hóa đơn ${invNum} thành công.`);
+      
+      alert(`Đã xóa ${invNums.length} hóa đơn thành công.`);
     } catch (err) {
       console.error(err);
       alert("Lỗi khi xóa hóa đơn.");
@@ -715,6 +747,7 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       unlockMonth,
       isMonthClosed,
       deleteInvoice,
+      deleteMultipleInvoices,
       resetData 
     }}>
       {children}
