@@ -108,6 +108,7 @@ export const convertExtractedToTransactions = (extracted: ExtractedInvoice, type
 export interface ClassifiedBankStatement {
   classification: 'PURCHASE' | 'SALE' | 'CASH_WITHDRAWAL' | 'CASH_DEPOSIT' | 'INTEREST' | 'FEE' | 'OTHER';
   customerName?: string;
+  customerCard?: string;
   itemInfo?: string;
   note?: string;
 }
@@ -131,7 +132,7 @@ export const classifyBankStatements = async (contents: string[]): Promise<Classi
             - FEE: Phí ngân hàng
             - OTHER: Khác
             
-            Hãy trích xuất tên khách hàng (customerName) và thông tin mặt hàng (itemInfo) nếu có trong nội dung.
+            Hãy trích xuất tên khách hàng (customerName), số CCCD hoặc thẻ khách hàng (customerCard) nếu có, và thông tin mặt hàng (itemInfo) nếu có trong nội dung.
             
             Danh sách nội dung:
             ${contents.map((c, i) => `${i + 1}. ${c}`).join('\n')}
@@ -153,6 +154,7 @@ export const classifyBankStatements = async (contents: string[]): Promise<Classi
               enum: ['PURCHASE', 'SALE', 'CASH_WITHDRAWAL', 'CASH_DEPOSIT', 'INTEREST', 'FEE', 'OTHER'] 
             },
             customerName: { type: Type.STRING },
+            customerCard: { type: Type.STRING },
             itemInfo: { type: Type.STRING },
             note: { type: Type.STRING },
           },

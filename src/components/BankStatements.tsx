@@ -27,6 +27,7 @@ export default function BankStatements() {
       'Ngày HL': item.effectiveDate,
       'Nghiệp vụ': getClassificationLabel(item.classification).text,
       'Khách hàng': item.customerName || '',
+      'Số CCCD': item.customerCard || '',
       'Thông tin mặt hàng': item.itemInfo || '',
       'Nội dung': item.content,
       'Số tiền ghi nợ (Debit)': item.debit,
@@ -364,12 +365,12 @@ export default function BankStatements() {
         </div>
 
         <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse min-w-[1000px]">
+          <table className="w-full text-left border-collapse min-w-[1100px]">
             <thead>
               <tr className="bg-slate-50 text-slate-500 text-[10px] font-semibold uppercase tracking-wider border-b border-slate-200">
                 <th className="px-4 py-3">Ngày</th>
                 <th className="px-4 py-3">Nghiệp vụ</th>
-                <th className="px-4 py-3">Khách hàng / Thông tin</th>
+                <th className="px-4 py-3">Khách hàng / CCCD</th>
                 <th className="px-4 py-3">Nội dung chi tiết</th>
                 <th className="px-4 py-3 text-right text-red-500">Chi ra (Debit)</th>
                 <th className="px-4 py-3 text-right text-green-600">Thu vào (Credit)</th>
@@ -378,7 +379,7 @@ export default function BankStatements() {
             <tbody className="divide-y divide-slate-100">
               {filteredData.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-4 py-12 text-center text-slate-400 italic">
+                  <td colSpan={6} className="px-4 py-12 text-center text-slate-400 italic">
                     Không có dữ liệu phù hợp
                   </td>
                 </tr>
@@ -399,7 +400,8 @@ export default function BankStatements() {
                       </td>
                       <td className="px-4 py-3 border-r border-slate-50 max-w-[200px]">
                         <div className="font-bold text-slate-700 truncate" title={item.customerName}>{item.customerName || '-'}</div>
-                        <div className="text-[10px] text-blue-600 line-clamp-1">{item.itemInfo || '-'}</div>
+                        <div className="text-[10px] text-blue-600 line-clamp-1">{item.customerCard || '-'}</div>
+                        <div className="text-[9px] text-slate-400 line-clamp-1 italic">{item.itemInfo || ''}</div>
                       </td>
                       <td className="px-4 py-3 border-r border-slate-50 max-w-[300px]">
                         <p className="text-slate-500 line-clamp-2 leading-tight" title={item.content}>{item.content}</p>

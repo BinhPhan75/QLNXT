@@ -58,6 +58,7 @@ export interface BankStatement {
   content: string;
   classification: BankClassification;
   customerName?: string;
+  customerCard?: string;
   itemInfo?: string;
   note?: string;
 }

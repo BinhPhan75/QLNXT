@@ -121,6 +121,7 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
           transactionDate: b.transaction_date || b.transactionDate,
           effectiveDate: b.effective_date || b.effectiveDate,
           customerName: b.customer_name || b.customerName,
+          customerCard: b.customer_card || b.customerCard,
           itemInfo: b.item_info || b.itemInfo,
           debit: parseFloat(b.debit || 0),
           credit: parseFloat(b.credit || 0),

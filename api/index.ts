@@ -237,6 +237,7 @@ async function initDb() {
         content TEXT,
         classification TEXT,
         customer_name TEXT,
+        customer_card TEXT,
         item_info TEXT,
         note TEXT
       );
@@ -487,8 +488,8 @@ router.post("/bank-statements/bulk", async (req, res) => {
     await client.query('BEGIN');
     for (const item of items) {
       await client.query(
-        `INSERT INTO bank_statements (id, transaction_date, effective_date, debit, credit, balance, content, classification, customer_name, item_info, note)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+        `INSERT INTO bank_statements (id, transaction_date, effective_date, debit, credit, balance, content, classification, customer_name, customer_card, item_info, note)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
          ON CONFLICT (id) DO UPDATE SET
            transaction_date = EXCLUDED.transaction_date, 
            effective_date = EXCLUDED.effective_date,
@@ -498,6 +499,7 @@ router.post("/bank-statements/bulk", async (req, res) => {
            content = EXCLUDED.content,
            classification = EXCLUDED.classification,
            customer_name = EXCLUDED.customer_name,
+           customer_card = EXCLUDED.customer_card,
            item_info = EXCLUDED.item_info,
            note = EXCLUDED.note`,
         [
@@ -510,6 +512,7 @@ router.post("/bank-statements/bulk", async (req, res) => {
           item.content,
           item.classification,
           item.customer_name || item.customerName,
+          item.customer_card || item.customerCard,
           item.item_info || item.itemInfo,
           item.note
         ]
