@@ -15,6 +15,15 @@ interface InventoryContextType {
   importBankStatements: (newStatements: Omit<BankStatement, 'id'>[]) => void;
   deleteInvoice: (invoiceNumber: string) => void;
   calculateMonthlyCOGS: (month: number, year: number, sourceFilter?: TransactionSource, itemKeyFilter?: string) => Promise<{ success: boolean; message: string }>;
+  getNXTReportData: (itemKey: string, year: number, quarter: number) => {
+    month: number;
+    monthLabel: string;
+    itemName: string;
+    opening: { qty: number; price: number; value: number };
+    in: { qty: number; price: number; value: number };
+    out: { qty: number; price: number; value: number };
+    closing: { qty: number; price: number; value: number };
+  }[];
   setManualOpeningBalance: (balance: OpeningBalance) => void;
   lockMonth: (month: number, year: number) => void;
   unlockMonth: (month: number, year: number) => void;
@@ -573,6 +582,119 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     }
   };
 
+  const getNXTReportData = (itemKey: string, year: number, quarter: number) => {
+    const months = [ (quarter - 1) * 3, (quarter - 1) * 3 + 1, (quarter - 1) * 3 + 2 ];
+    const report: any[] = [];
+    
+    const nameToCodeMap: Record<string, string> = {};
+    transactions.forEach(t => {
+      if (t.itemName && t.itemCode && t.itemCode !== 'KHONG-MA') {
+        const normalizedName = t.itemName.trim().toLowerCase();
+        if (!nameToCodeMap[normalizedName]) nameToCodeMap[normalizedName] = t.itemCode;
+      }
+    });
+
+    const getItemKey = (t: any) => {
+      const code = (t.itemCode || '').toString().trim().toUpperCase();
+      const name = (t.itemName || '').toString().trim();
+      if (code && code !== 'KHONG-MA') return code;
+      if (name) return nameToCodeMap[name.toLowerCase()] || name;
+      return 'UNKNOWN';
+    };
+
+    const targetProduct = products.find(p => p.key === itemKey);
+    const itemName = targetProduct ? targetProduct.name : itemKey;
+
+    const txsWithDates = transactions.map(tx => ({
+      ...tx,
+      dateInfo: getYearMonth(tx.invoiceDate || tx.date)
+    }));
+
+    // Find the very first period relevant to this item
+    let firstY = year;
+    let firstM = months[0];
+    txsWithDates.forEach(t => {
+      if (getItemKey(t) === itemKey) {
+        if (t.dateInfo.year < firstY || (t.dateInfo.year === firstY && t.dateInfo.month < firstM)) {
+          firstY = t.dateInfo.year;
+          firstM = t.dateInfo.month;
+        }
+      }
+    });
+    manualOpeningBalances.forEach(b => {
+      const bKey = (b.itemCode && b.itemCode !== 'KHONG-MA') ? b.itemCode : (b.itemName ? (nameToCodeMap[b.itemName.trim().toLowerCase()] || b.itemName) : '');
+      if (bKey === itemKey) {
+        if (b.year < firstY || (b.year === firstY && b.month < firstM)) {
+          firstY = b.year;
+          firstM = b.month;
+        }
+      }
+    });
+
+    // Run calculation from the beginning of time until the end of the quarter
+    let currentQty = 0;
+    let currentValue = 0;
+    let lastAvgPrice = 0;
+
+    let currY = firstY;
+    let currM = firstM;
+    const endMonth = months[2];
+    const endYear = year;
+
+    while (currY < endYear || (currY === endYear && currM <= endMonth)) {
+      const manualOB = manualOpeningBalances.find(b => {
+        const bKey = (b.itemCode && b.itemCode !== 'KHONG-MA') ? b.itemCode : (b.itemName ? (nameToCodeMap[b.itemName.trim().toLowerCase()] || b.itemName) : '');
+        return bKey === itemKey && b.month === currM && b.year === currY;
+      });
+
+      if (manualOB) {
+        currentQty = manualOB.quantity;
+        currentValue = manualOB.totalValue;
+        lastAvgPrice = currentQty > 0 ? currentValue / currentQty : lastAvgPrice;
+      }
+
+      const opQty = currentQty;
+      const opVal = currentValue;
+      const opPrice = lastAvgPrice;
+
+      const inTxs = txsWithDates.filter(t => getItemKey(t) === itemKey && t.dateInfo.month === currM && t.dateInfo.year === currY && t.type === 'IN');
+      const outTxs = txsWithDates.filter(t => getItemKey(t) === itemKey && t.dateInfo.month === currM && t.dateInfo.year === currY && t.type === 'OUT');
+
+      const inQty = inTxs.reduce((sum, t) => sum + t.quantity, 0);
+      const inVal = inTxs.reduce((sum, t) => sum + (t.quantity * t.price), 0);
+      const outQty = outTxs.reduce((sum, t) => sum + t.quantity, 0);
+
+      if (currentQty + inQty > 0) {
+        lastAvgPrice = (currentValue + inVal) / (currentQty + inQty);
+      }
+
+      const outVal = outQty * lastAvgPrice;
+      
+      currentQty = Math.max(0, currentQty + inQty - outQty);
+      currentValue = currentQty * lastAvgPrice;
+
+      if (months.includes(currM) && currY === year) {
+        report.push({
+          month: currM,
+          monthLabel: `Tháng ${currM + 1}`,
+          itemName,
+          opening: { qty: opQty, price: opPrice, value: opVal },
+          in: { qty: inQty, price: inQty > 0 ? inVal / inQty : 0, value: inVal },
+          out: { qty: outQty, price: lastAvgPrice, value: outVal },
+          closing: { qty: currentQty, price: lastAvgPrice, value: currentValue }
+        });
+      }
+
+      currM++;
+      if (currM > 11) {
+        currM = 0;
+        currY++;
+      }
+    }
+
+    return report;
+  };
+
   return (
     <InventoryContext.Provider value={{ 
       products, 
@@ -586,6 +708,7 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       importTransactions, 
       importBankStatements,
       calculateMonthlyCOGS, 
+      getNXTReportData,
       setManualOpeningBalance,
       lockMonth,
       unlockMonth,

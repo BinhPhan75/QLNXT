@@ -1,18 +1,19 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useInventory } from '../InventoryContext';
-import { LayoutDashboard, FileUp, BarChart3, Settings, LogOut, Menu, X, DollarSign, ChevronDown, ChevronUp } from 'lucide-react';
+import { LayoutDashboard, FileUp, BarChart3, Settings, LogOut, Menu, X, DollarSign, ChevronDown, ChevronUp, FileSearch } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
 // Subcomponents
 import ImportExport from './ImportExport';
 import Reports from './Reports';
+import NXTReport from './NXTReport';
 import SystemSettings from './SystemSettings';
 import BankStatements from './BankStatements';
 import { formatCurrency, formatQuantity } from '../lib/utils';
 
 export default function Layout() {
   const { user, logout, products, bankStatements } = useInventory();
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'rev_import' | 'rev_report' | 'inv_import' | 'inv_report' | 'inv_other' | 'bank' | 'system'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'rev_import' | 'rev_report' | 'inv_import' | 'inv_report' | 'inv_nxt' | 'inv_other' | 'bank' | 'system'>('dashboard');
   const [isSidebarOpen, setSidebarOpen] = useState(false);
   const [isRevenueMenuOpen, setRevenueMenuOpen] = useState(true);
   const [isInventoryMenuOpen, setInventoryMenuOpen] = useState(true);
@@ -63,6 +64,8 @@ export default function Layout() {
         return <ImportExport mode="INVENTORY" />;
       case 'inv_report':
         return <Reports mode="INVENTORY" />;
+      case 'inv_nxt':
+        return <NXTReport />;
       case 'inv_other':
         return (
           <div className="flex flex-col items-center justify-center h-96 text-slate-400">
@@ -264,6 +267,17 @@ export default function Layout() {
                     >
                       <BarChart3 size={18} />
                       Báo cáo tồn kho
+                    </button>
+                    <button
+                      onClick={() => handleTabChange('inv_nxt')}
+                      className={`w-full flex items-center gap-3 px-4 py-2 rounded-xl transition-all text-sm ${
+                        activeTab === 'inv_nxt' 
+                        ? 'text-blue-600 bg-blue-50 font-medium' 
+                        : 'text-slate-500 hover:text-slate-700'
+                      }`}
+                    >
+                      <FileSearch size={18} />
+                      Báo cáo NXT
                     </button>
 
                     <div className="py-1 mt-2 px-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Vàng khác</div>
