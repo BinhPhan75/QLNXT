@@ -160,11 +160,38 @@ async function initDb() {
       console.error("[Database] Failed to update opening_balances columns:", err);
     }
 
-    // Ensure Primary Key
+    // Ensure Primary Key and clean up duplicates if necessary
     try {
-      await client.query(`ALTER TABLE opening_balances ADD PRIMARY KEY (item_code, month, year)`);
-    } catch (err) {
-      // PK likely already exists
+      // First, let's check if the constraint already exists
+      const constraintCheck = await client.query(`
+        SELECT count(*) 
+        FROM information_schema.table_constraints 
+        WHERE table_name = 'opening_balances' AND constraint_type = 'PRIMARY KEY'
+      `);
+      
+      if (parseInt(constraintCheck.rows[0].count) === 0) {
+        console.log("[Database] Adding missing Primary Key to opening_balances...");
+        
+        // Remove duplicates before adding PK, keeping the latest one (highest ID if it had one, or just one)
+        // Since it has no ID, we'll use a temporary table approach
+        await client.query(`
+          CREATE TABLE opening_balances_temp AS 
+          SELECT DISTINCT ON (item_code, month, year) * 
+          FROM opening_balances 
+          ORDER BY item_code, month, year;
+          
+          TRUNCATE opening_balances;
+          
+          INSERT INTO opening_balances SELECT * FROM opening_balances_temp;
+          
+          DROP TABLE opening_balances_temp;
+          
+          ALTER TABLE opening_balances ADD PRIMARY KEY (item_code, month, year);
+        `);
+        console.log("[Database] Primary Key added successfully.");
+      }
+    } catch (err: any) {
+      console.error("[Database] Failed to ensure opening_balances PK:", err.message);
     }
 
     await client.query(`
