@@ -22,15 +22,23 @@ export default function NXTReport() {
     if (!selectedProduct) return [];
     
     return transactions.filter(t => {
-      const code = (t.itemCode || '').toString().trim().toUpperCase();
+      let code = (t.itemCode || '').toString().trim().toUpperCase();
       const name = (t.itemName || '').toString().trim();
       
       const p = products.find(prod => prod.key === selectedProduct);
       if (!p) return false;
 
+      // Unify 9999 codes
+      if (code === 'V999.9' || code === '999.9') code = 'V9999';
+      
+      const is9999Product = p.key === 'V9999' || p.code === 'V9999' || p.name.includes('9999') || p.name.includes('999.9');
+
       if (code && code !== 'KHONG-MA') {
+        if (code === 'V9999' && is9999Product) return true;
         return code === p.code || code === p.key;
       }
+      
+      if (is9999Product && (name.includes('999.9') || name.includes('9999'))) return true;
       return name.toLowerCase() === p.name.toLowerCase() || name.toLowerCase() === p.key.toLowerCase();
     });
   }, [selectedProduct, transactions, products]);

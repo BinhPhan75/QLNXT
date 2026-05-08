@@ -629,18 +629,33 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     });
 
     const getItemKey = (t: any) => {
-      const code = (t.itemCode || '').toString().trim().toUpperCase();
+      let code = (t.itemCode || '').toString().trim().toUpperCase();
       const name = (t.itemName || '').toString().trim();
       
+      // Standardize 9999 and 999.9
+      if (code === 'V999.9' || code === '999.9') code = 'V9999';
+
       // If we have a code, try to find a matching product by code or by key
       if (code && code !== 'KHONG-MA') {
         const pByCode = products.find(p => p.code === code || p.key === code);
         if (pByCode) return pByCode.key;
+        
+        // Final fallback for standardized code
+        if (code === 'V9999') {
+           const p99 = products.find(p => p.code === 'V9999' || p.key === 'V9999' || p.name.includes('9999') || p.name.includes('999.9'));
+           if (p99) return p99.key;
+        }
         return code;
       }
       
       // If no code, try to match by name
       if (name) {
+        // Unify name patterns for 9999
+        if (name.includes('999.9') || name.includes('9999')) {
+           const p99 = products.find(p => p.key === 'V9999' || p.code === 'V9999' || p.name.includes('9999') || p.name.includes('999.9'));
+           if (p99) return p99.key;
+        }
+
         const pByName = products.find(p => p.name.toLowerCase() === name.toLowerCase() || p.key.toLowerCase() === name.toLowerCase());
         if (pByName) return pByName.key;
         return nameToCodeMap[name.toLowerCase()] || name;
