@@ -5,6 +5,8 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 const { Pool } = pg;
+import { createClient } from "@supabase/supabase-js";
+
 const app = express();
 app.use(express.json({ limit: '50mb' }));
 
@@ -18,21 +20,19 @@ const pool = new Pool({
   }
 });
 
-// Supabase Sales Database (Lazy initialized)
-let supabasePool: pg.Pool | null = null;
+// Supabase Client (Lazy initialized)
+let supabaseClient: any = null;
 
-function getSupabasePool() {
-  if (!supabasePool) {
-    const supabaseUrl = process.env.SUPABASE_SALES_DB_URL;
-    if (!supabaseUrl) {
-      throw new Error("SUPABASE_SALES_DB_URL environment variable is not configured.");
+function getSupabaseClient() {
+  if (!supabaseClient) {
+    const supabaseUrl = process.env.VITE_SUPABASE_URL;
+    const supabaseKey = process.env.VITE_SUPABASE_ANON_KEY;
+    if (!supabaseUrl || !supabaseKey) {
+      throw new Error("Supabase environment variables are not configured.");
     }
-    supabasePool = new pg.Pool({ 
-      connectionString: supabaseUrl,
-      ssl: { rejectUnauthorized: false }
-    });
+    supabaseClient = createClient(supabaseUrl, supabaseKey);
   }
-  return supabasePool;
+  return supabaseClient;
 }
 
 // Initialize database tables
@@ -332,32 +332,32 @@ router.get("/sales/transactions", async (req, res) => {
   const { startDate, endDate, clientCccd, itemType } = req.query;
   
   try {
-    const sPool = getSupabasePool();
-    let query = `SELECT * FROM transactions WHERE 1=1`;
-    const params: any[] = [];
+    const supabase = getSupabaseClient();
+    let query = supabase
+      .from('transactions')
+      .select('*')
+      .order('date', { ascending: false })
+      .order('created_at', { ascending: false });
 
     if (startDate) {
-      params.push(startDate);
-      query += ` AND date >= $${params.length}`;
+      query = query.gte('date', startDate);
     }
     if (endDate) {
-      params.push(endDate);
-      query += ` AND date <= $${params.length}`;
+      query = query.lte('date', endDate);
     }
     if (clientCccd) {
-      params.push(`%${clientCccd}%`);
-      query += ` AND customer_cccd ILIKE $${params.length}`;
+      query = query.ilike('customer_cccd', `%${clientCccd}%`);
     }
     if (itemType && itemType !== 'ALL') {
-      params.push(itemType);
-      query += ` AND type = $${params.length}`;
+      query = query.eq('type', itemType);
     }
 
-    query += ` ORDER BY date DESC, created_at DESC LIMIT 200`;
-    const result = await sPool.query(query, params);
-    res.json(result.rows);
+    const { data, error } = await query.limit(200);
+
+    if (error) throw error;
+    res.json(data);
   } catch (err: any) {
-    if (err.message.includes("SUPABASE_SALES_DB_URL")) {
+    if (err.message.includes("environment variables")) {
       return res.status(404).json({ error: "Supabase connection not configured.", code: "CONFIG_MISSING" });
     }
     console.error("[API] Supabase Sales Fetch Error:", err.message);
