@@ -346,6 +346,7 @@ router.get("/sales/transactions", async (req, res) => {
     
     // Khởi tạo query
     // Dựa trên screenshot, bảng là 'transactions'
+    // Sử dụng 'created_at' để lọc ngày vì bảng không có cột 'date'
     let query = supabase
       .from('transactions')
       .select('*');
@@ -355,14 +356,12 @@ router.get("/sales/transactions", async (req, res) => {
       query = query.eq('type', itemType);
     }
 
-    // Lọc theo ngày
-    // Nếu trong Supabase không có cột 'date', chúng ta sẽ sử dụng 'created_at' làm fallback
+    // Lọc theo ngày sử dụng created_at
     if (startDate) {
-      // Thử lọc theo date, nếu lỗi sẽ bắt ở catch
-      query = query.gte('date', `${startDate}T00:00:00`);
+      query = query.gte('created_at', `${startDate}T00:00:00`);
     }
     if (endDate) {
-      query = query.lte('date', `${endDate}T23:59:59`);
+      query = query.lte('created_at', `${endDate}T23:59:59`);
     }
 
     // Lọc theo CCCD
@@ -374,26 +373,7 @@ router.get("/sales/transactions", async (req, res) => {
       .order('created_at', { ascending: false })
       .limit(200);
 
-    if (error) {
-      // Nếu lỗi do thiếu cột 'date', thử lại với 'created_at'
-      if (error.message.includes('column "date" does not exist')) {
-        let fallbackQuery = supabase
-          .from('transactions')
-          .select('*')
-          .order('created_at', { ascending: false })
-          .limit(200);
-          
-        if (startDate) fallbackQuery = fallbackQuery.gte('created_at', `${startDate}T00:00:00`);
-        if (endDate) fallbackQuery = fallbackQuery.lte('created_at', `${endDate}T23:59:59`);
-        if (itemType && itemType !== 'ALL') fallbackQuery = fallbackQuery.eq('type', itemType);
-        if (clientCccd) fallbackQuery = fallbackQuery.ilike('customer_cccd', `%${clientCccd}%`);
-        
-        const { data: fbData, error: fbError } = await fallbackQuery;
-        if (fbError) throw fbError;
-        return res.json(fbData);
-      }
-      throw error;
-    }
+    if (error) throw error;
     
     res.json(data);
   } catch (err: any) {
