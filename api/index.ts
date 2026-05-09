@@ -55,8 +55,29 @@ async function initDb() {
 
     if (checkSalesAppTable.rows[0].exists) {
       console.log("[Database] Detected Sales App 'transactions' table on Supabase.");
-      // Ensure our queries can potentially pull from here if needed
     }
+
+    // Create Local Sales Sync Table
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS sales_app_transactions (
+        id UUID PRIMARY KEY,
+        type TEXT,
+        customer_name TEXT,
+        customer_cccd TEXT,
+        dia_chi TEXT,
+        product_id UUID,
+        product_name TEXT,
+        quantity NUMERIC,
+        unit TEXT,
+        price_per_unit NUMERIC,
+        total_amount NUMERIC,
+        tien_mat NUMERIC,
+        chuyen_khoan NUMERIC,
+        created_by UUID,
+        created_at TIMESTAMPTZ,
+        synced_at TIMESTAMPTZ DEFAULT NOW()
+      );
+    `);
 
     // Check for legacy general 'transactions' table
     const checkGenLegacy = await client.query(`
@@ -344,41 +365,91 @@ router.get("/sales/transactions", async (req, res) => {
 
     const supabase = getSupabaseClient();
     
-    // Khởi tạo query
-    // Dựa trên screenshot, bảng là 'transactions'
-    // Sử dụng 'created_at' để lọc ngày vì bảng không có cột 'date'
-    let query = supabase
-      .from('transactions')
-      .select('*');
-
-    // Lọc theo loại (Mua vào/Bán ra)
-    if (itemType && itemType !== 'ALL') {
-      query = query.eq('type', itemType);
+    // 1. AUTO-SYNC LOGIC: Fetch NEW data from Supabase and save to local Neon DB
+    try {
+      // Find the last record synced locally
+      const lastRecord = await pool.query('SELECT MAX(created_at) as last_date FROM sales_app_transactions');
+      const lastDate = lastRecord.rows[0].last_date;
+      
+      let syncQuery = supabase.from('transactions').select('*');
+      if (lastDate) {
+        syncQuery = syncQuery.gt('created_at', lastDate.toISOString());
+      }
+      
+      const { data: newData, error: syncError } = await syncQuery.limit(500);
+      
+      if (!syncError && newData && newData.length > 0) {
+        console.log(`[Sync] Found ${newData.length} new records from Supabase. Saving to local DB...`);
+        const syncClient = await pool.connect();
+        try {
+          await syncClient.query('BEGIN');
+          for (const row of newData) {
+            await syncClient.query(`
+              INSERT INTO sales_app_transactions (
+                id, type, customer_name, customer_cccd, dia_chi, 
+                product_id, product_name, quantity, unit, 
+                price_per_unit, total_amount, tien_mat, chuyen_khoan, 
+                created_by, created_at
+              ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+              ON CONFLICT (id) DO UPDATE SET
+                type = EXCLUDED.type, customer_name = EXCLUDED.customer_name,
+                customer_cccd = EXCLUDED.customer_cccd, dia_chi = EXCLUDED.dia_chi,
+                product_name = EXCLUDED.product_name, quantity = EXCLUDED.quantity,
+                unit = EXCLUDED.unit, price_per_unit = EXCLUDED.price_per_unit,
+                total_amount = EXCLUDED.total_amount, tien_mat = EXCLUDED.tien_mat,
+                chuyen_khoan = EXCLUDED.chuyen_khoan, created_at = EXCLUDED.created_at,
+                synced_at = NOW()
+            `, [
+              row.id, row.type, row.customer_name, row.customer_cccd, row.dia_chi,
+              row.product_id, row.product_name, row.quantity, row.unit,
+              row.price_per_unit, row.total_amount, row.tien_mat, row.chuyen_khoan,
+              row.created_by, row.created_at
+            ]);
+          }
+          await syncClient.query('COMMIT');
+        } catch (e) {
+          await syncClient.query('ROLLBACK');
+          console.error("[Sync] Local Save Error:", e);
+        } finally {
+          syncClient.release();
+        }
+      }
+    } catch (syncErr) {
+      console.error("[Sync] Background Sync Error (skipping):", syncErr);
+      // We continue to fetch from local even if sync fails
     }
 
-    // Lọc theo ngày sử dụng created_at
+    // 2. QUERY FROM LOCAL DB (Neon) - Fast and searchable
+    let localQuery = `SELECT * FROM sales_app_transactions WHERE 1=1`;
+    const params: any[] = [];
+
+    if (itemType && itemType !== 'ALL') {
+      params.push(itemType);
+      localQuery += ` AND type = $${params.length}`;
+    }
+
     if (startDate) {
-      query = query.gte('created_at', `${startDate}T00:00:00`);
+      params.push(`${startDate}T00:00:00`);
+      localQuery += ` AND created_at >= $${params.length}`;
     }
     if (endDate) {
-      query = query.lte('created_at', `${endDate}T23:59:59`);
+      params.push(`${endDate}T23:59:59`);
+      localQuery += ` AND created_at <= $${params.length}`;
     }
 
-    // Lọc theo CCCD
     if (clientCccd) {
-      query = query.ilike('customer_cccd', `%${clientCccd}%`);
+      params.push(`%${clientCccd}%`);
+      localQuery += ` AND customer_cccd ILIKE $${params.length}`;
     }
 
-    const { data, error } = await query
-      .order('created_at', { ascending: false })
-      .limit(200);
-
-    if (error) throw error;
+    localQuery += ` ORDER BY created_at DESC LIMIT 500`;
     
-    res.json(data);
+    const result = await pool.query(localQuery, params);
+    res.json(result.rows);
+
   } catch (err: any) {
-    console.error("[API] Supabase Sales Fetch Error:", err.message);
-    res.status(500).json({ error: "Lỗi kết nối Supabase: " + err.message, code: "FETCH_ERROR" });
+    console.error("[API] Sales Report Process Error:", err.message);
+    res.status(500).json({ error: "Lỗi xử lý báo cáo: " + err.message, code: "PROCESS_ERROR" });
   }
 });
 

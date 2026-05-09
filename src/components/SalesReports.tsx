@@ -264,6 +264,18 @@ export default function SalesReports() {
                           {formatCurrency(item.price_per_unit || 0)} / {item.unit}
                         </div>
                         <div className="text-base font-black text-slate-900">{formatCurrency(item.total_amount)}</div>
+                        <div className="flex flex-col items-end gap-0.5 mt-1">
+                          {Number(item.tien_mat) > 0 && (
+                            <span className="text-[9px] font-bold text-orange-600 bg-orange-50 px-1 rounded">
+                              TM: {formatCurrency(item.tien_mat)}
+                            </span>
+                          )}
+                          {Number(item.chuyen_khoan) > 0 && (
+                            <span className="text-[9px] font-bold text-indigo-600 bg-indigo-50 px-1 rounded">
+                              CK: {formatCurrency(item.chuyen_khoan)}
+                            </span>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   ))}
