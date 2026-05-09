@@ -50,20 +50,18 @@ export default function SalesReports() {
   }, []);
 
   const totals = data.reduce((acc, current) => {
-    const total = Number(current.total) || 0;
-    const paymentMethod = current.payment_method || 'CASH';
+    const totalAmount = Number(current.total_amount) || 0;
+    const cash = Number(current.tien_mat) || 0;
+    const transfer = Number(current.chuyen_khoan) || 0;
     
     if (current.type === 'BUY') {
-      acc.buy += total;
+      acc.buy += totalAmount;
     } else {
-      acc.sell += total;
+      acc.sell += totalAmount;
     }
     
-    if (paymentMethod === 'CASH') {
-      acc.cash += total;
-    } else {
-      acc.transfer += total;
-    }
+    acc.cash += cash;
+    acc.transfer += transfer;
     
     return acc;
   }, { buy: 0, sell: 0, cash: 0, transfer: 0 });
@@ -211,14 +209,13 @@ export default function SalesReports() {
                     <th className="px-6 py-4">Loại GD</th>
                     <th className="px-6 py-4">Khách hàng & Địa chỉ</th>
                     <th className="px-6 py-4">Mặt hàng</th>
-                    <th className="px-6 py-4">Người thực hiện</th>
-                    <th className="px-6 py-4 text-right">Thành tiền</th>
+                    <th className="px-6 py-4">Thành tiền</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 font-medium">
                   {loading ? (
                     <tr>
-                      <td colSpan={6} className="px-6 py-20 text-center">
+                      <td colSpan={5} className="px-6 py-20 text-center">
                         <div className="flex flex-col items-center gap-3">
                           <div className="w-8 h-8 border-4 border-orange-500 border-t-transparent rounded-full animate-spin"></div>
                           <p className="text-slate-400 italic text-sm">Đang truy xuất dữ liệu từ Supabase...</p>
@@ -227,15 +224,19 @@ export default function SalesReports() {
                     </tr>
                   ) : data.length === 0 ? (
                     <tr>
-                      <td colSpan={6} className="px-6 py-20 text-center text-slate-400 italic">
+                      <td colSpan={5} className="px-6 py-20 text-center text-slate-400 italic">
                         Không tìm thấy dữ liệu phù hợp.
                       </td>
                     </tr>
                   ) : data.map((item, idx) => (
                     <tr key={item.id || idx} className="hover:bg-slate-50 transition-colors group">
                       <td className="px-6 py-4">
-                        <div className="text-xs font-bold text-slate-900">{formatDate(item.date)}</div>
-                        <div className="text-[10px] text-slate-400 mt-0.5">{new Date(item.created_at || Date.now()).toLocaleTimeString()}</div>
+                        <div className="text-xs font-bold text-slate-900">
+                          {new Date(item.created_at).toLocaleDateString()}
+                        </div>
+                        <div className="text-[10px] text-slate-400 mt-0.5">
+                          {new Date(item.created_at).toLocaleTimeString()}
+                        </div>
                       </td>
                       <td className="px-6 py-4">
                         <span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-widest ${
@@ -245,24 +246,24 @@ export default function SalesReports() {
                         </span>
                       </td>
                       <td className="px-6 py-4">
-                        <div className="text-[10px] text-slate-400 uppercase font-bold mb-0.5">Người bán (Khách)</div>
+                        <div className="text-[10px] text-slate-400 uppercase font-bold mb-0.5">Khách hàng</div>
                         <div className="text-sm font-bold text-slate-900 uppercase">{item.customer_name || 'Khách lẻ'}</div>
                         <div className="text-[10px] text-slate-500 font-mono mt-0.5">{item.customer_cccd || '-'}</div>
                         <div className="text-[10px] text-slate-400 italic mt-1 line-clamp-1 max-w-[200px]" title={item.dia_chi}>Đ/C: {item.dia_chi || '-'}</div>
                       </td>
                       <td className="px-6 py-4">
                         <div className="text-sm font-bold text-slate-900 italic">
-                          {item.items?.[0]?.name || 'Vàng 9999'} 
-                          <span className="text-[10px] text-slate-400 font-normal ml-1">x{item.items?.[0]?.quantity || 1}</span>
+                          {item.product_name || 'Hàng hóa'} 
+                          <span className="text-[10px] text-slate-400 font-normal ml-1">
+                            x{formatQuantity(item.quantity)} {item.unit}
+                          </span>
                         </div>
                       </td>
-                      <td className="px-6 py-4">
-                        <div className="text-xs font-bold text-slate-700">{item.staff_name || 'Chủ doanh nghiệp'}</div>
-                        <div className="text-[9px] text-slate-400 font-mono tracking-tighter">giamdoc@nghiatingold.com</div>
-                      </td>
                       <td className="px-6 py-4 text-right">
-                        <div className="text-[10px] text-slate-400 font-medium mb-1 line-through opacity-30">Đơn giá: {formatCurrency(item.unit_price || 0)}</div>
-                        <div className="text-base font-black text-slate-900">{formatCurrency(item.total)}</div>
+                        <div className="text-[10px] text-slate-400 font-medium mb-1 opacity-50">
+                          {formatCurrency(item.price_per_unit || 0)} / {item.unit}
+                        </div>
+                        <div className="text-base font-black text-slate-900">{formatCurrency(item.total_amount)}</div>
                       </td>
                     </tr>
                   ))}
