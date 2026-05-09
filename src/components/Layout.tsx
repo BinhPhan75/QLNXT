@@ -6,6 +6,7 @@ import { motion, AnimatePresence } from 'motion/react';
 // Subcomponents
 import ImportExport from './ImportExport';
 import Reports from './Reports';
+import SalesReports from './SalesReports';
 import NXTReport from './NXTReport';
 import SystemSettings from './SystemSettings';
 import BankStatements from './BankStatements';
@@ -13,11 +14,12 @@ import { formatCurrency, formatQuantity } from '../lib/utils';
 
 export default function Layout() {
   const { user, logout, products, bankStatements } = useInventory();
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'rev_import' | 'rev_report' | 'inv_import' | 'inv_report' | 'inv_nxt' | 'inv_other' | 'bank' | 'system'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'sales_purchase' | 'rev_import' | 'rev_report' | 'inv_import' | 'inv_report' | 'inv_nxt' | 'inv_other' | 'bank' | 'system'>('dashboard');
   const [isSidebarOpen, setSidebarOpen] = useState(false);
+  const [isSalesMenuOpen, setSalesMenuOpen] = useState(true);
   const [isRevenueMenuOpen, setRevenueMenuOpen] = useState(true);
   const [isInventoryMenuOpen, setInventoryMenuOpen] = useState(true);
-  const [isBankMenuOpen, setBankMenuOpen] = useState(true);
+  const [isBankMenuOpen, setBankMenuOpen] = useState(false);
 
   const [dbStatus, setDbStatus] = useState<'checking' | 'connected' | 'error' | 'missing'>('checking');
   const [dbError, setDbError] = useState<string>('');
@@ -56,6 +58,8 @@ export default function Layout() {
     switch (activeTab) {
       case 'dashboard':
         return <DashboardView setActiveTab={setActiveTab} />;
+      case 'sales_purchase':
+        return <SalesReports />;
       case 'rev_import':
         return <ImportExport mode="REVENUE" />;
       case 'rev_report':
@@ -168,6 +172,47 @@ export default function Layout() {
               <LayoutDashboard size={20} />
               Tổng quan
             </button>
+
+            {/* BÁN HÀNG (SALES) */}
+            <div className="space-y-1">
+              <button
+                onClick={() => setSalesMenuOpen(!isSalesMenuOpen)}
+                className={`w-full flex items-center justify-between px-4 py-3 rounded-xl transition-all ${
+                  (activeTab === 'sales_purchase') 
+                  ? 'text-orange-600 font-semibold' 
+                  : 'text-slate-500 hover:bg-slate-50 hover:text-slate-700'
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  <DollarSign size={20} />
+                  <span>Bán hàng (Sales)</span>
+                </div>
+                {isSalesMenuOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+              </button>
+
+              <AnimatePresence>
+                {isSalesMenuOpen && (
+                  <motion.div
+                    initial={{ height: 0, opacity: 0 }}
+                    animate={{ height: 'auto', opacity: 1 }}
+                    exit={{ height: 0, opacity: 0 }}
+                    className="overflow-hidden pl-4"
+                  >
+                    <button
+                      onClick={() => handleTabChange('sales_purchase')}
+                      className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl transition-all text-sm ${
+                        activeTab === 'sales_purchase' 
+                        ? 'text-orange-600 bg-orange-50 font-medium' 
+                        : 'text-slate-500 hover:text-slate-700'
+                      }`}
+                    >
+                      <FileSearch size={18} />
+                      Báo cáo mua vào
+                    </button>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
 
             {/* REVENUE MENU */}
             <div className="space-y-1">

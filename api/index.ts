@@ -18,6 +18,23 @@ const pool = new Pool({
   }
 });
 
+// Supabase Sales Database (Lazy initialized)
+let supabasePool: pg.Pool | null = null;
+
+function getSupabasePool() {
+  if (!supabasePool) {
+    const supabaseUrl = process.env.SUPABASE_SALES_DB_URL;
+    if (!supabaseUrl) {
+      throw new Error("SUPABASE_SALES_DB_URL environment variable is not configured.");
+    }
+    supabasePool = new pg.Pool({ 
+      connectionString: supabaseUrl,
+      ssl: { rejectUnauthorized: false }
+    });
+  }
+  return supabasePool;
+}
+
 // Initialize database tables
 async function initDb() {
   if (!dbUrl) {
@@ -31,37 +48,14 @@ async function initDb() {
     // Create source-specific tables
     const tables = ['nghiatingold_transactions', 'revenue_transactions'];
     
-    // Check for legacy pnj_transactions table
-    const checkPnjLegacy = await client.query(`
-      SELECT EXISTS (
-        SELECT FROM information_schema.tables 
-        WHERE table_name = 'pnj_transactions'
-      );
+    // Check for "transactions" table (from Sales App on Supabase)
+    const checkSalesAppTable = await client.query(`
+      SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'transactions')
     `);
 
-    if (checkPnjLegacy.rows[0].exists) {
-      console.log("[Database] Legacy pnj_transactions found. Migrating data...");
-      await client.query(`CREATE TABLE IF NOT EXISTS nghiatingold_transactions (id TEXT PRIMARY KEY, type TEXT, date TEXT)`);
-      try {
-        const colsResult = await client.query(`
-          SELECT column_name FROM information_schema.columns WHERE table_name = 'pnj_transactions'
-        `);
-        const commonCols = colsResult.rows.map(r => r.column_name).filter(c => 
-          ['id', 'type', 'date', 'item_code', 'item_name', 'unit', 'quantity', 'price', 'discount', 'total', 'invoice_number', 'invoice_date', 'customer', 'customer_card', 'address', 'note', 'cogs', 'source'].includes(c)
-        );
-        
-        if (commonCols.length > 0) {
-          const colsStr = commonCols.join(', ');
-          await client.query(`
-            INSERT INTO nghiatingold_transactions (${colsStr})
-            SELECT ${colsStr} FROM pnj_transactions 
-            ON CONFLICT (id) DO NOTHING
-          `);
-          console.log(`[Database] Migrated ${commonCols.length} columns from pnj_transactions.`);
-        }
-      } catch (e) {
-        console.error("Migration error from pnj_transactions:", e);
-      }
+    if (checkSalesAppTable.rows[0].exists) {
+      console.log("[Database] Detected Sales App 'transactions' table on Supabase.");
+      // Ensure our queries can potentially pull from here if needed
     }
 
     // Check for legacy general 'transactions' table
@@ -100,6 +94,7 @@ async function initDb() {
       `);
 
       // List of all expected columns for consistent schema
+      // We align with Sales App: customer_name instead of customer, customer_cccd instead of customer_card
       const columns = [
         ['item_code', 'TEXT'],
         ['item_name', 'TEXT'],
@@ -111,8 +106,11 @@ async function initDb() {
         ['invoice_number', 'TEXT'],
         ['invoice_date', 'TEXT'],
         ['customer', 'TEXT'],
+        ['customer_name', 'TEXT'],
         ['customer_card', 'TEXT'],
+        ['customer_cccd', 'TEXT'],
         ['address', 'TEXT'],
+        ['dia_chi', 'TEXT'],
         ['note', 'TEXT'],
         ['cogs', 'FLOAT'],
         ['source', 'TEXT'],
@@ -327,6 +325,43 @@ router.get("/transactions", async (req, res) => {
   } catch (err: any) {
     console.error("[API] Get Transactions Error:", err.message);
     res.status(500).json({ error: "Failed to fetch transactions" });
+  }
+});
+
+router.get("/sales/transactions", async (req, res) => {
+  const { startDate, endDate, clientCccd, itemType } = req.query;
+  
+  try {
+    const sPool = getSupabasePool();
+    let query = `SELECT * FROM transactions WHERE 1=1`;
+    const params: any[] = [];
+
+    if (startDate) {
+      params.push(startDate);
+      query += ` AND date >= $${params.length}`;
+    }
+    if (endDate) {
+      params.push(endDate);
+      query += ` AND date <= $${params.length}`;
+    }
+    if (clientCccd) {
+      params.push(`%${clientCccd}%`);
+      query += ` AND customer_cccd ILIKE $${params.length}`;
+    }
+    if (itemType && itemType !== 'ALL') {
+      params.push(itemType);
+      query += ` AND type = $${params.length}`;
+    }
+
+    query += ` ORDER BY date DESC, created_at DESC LIMIT 200`;
+    const result = await sPool.query(query, params);
+    res.json(result.rows);
+  } catch (err: any) {
+    if (err.message.includes("SUPABASE_SALES_DB_URL")) {
+      return res.status(404).json({ error: "Supabase connection not configured.", code: "CONFIG_MISSING" });
+    }
+    console.error("[API] Supabase Sales Fetch Error:", err.message);
+    res.status(500).json({ error: "Failed to fetch sales data from Supabase" });
   }
 });
 
