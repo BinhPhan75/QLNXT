@@ -332,36 +332,73 @@ router.get("/sales/transactions", async (req, res) => {
   const { startDate, endDate, clientCccd, itemType } = req.query;
   
   try {
+    const supabaseUrl = process.env.VITE_SUPABASE_URL;
+    const supabaseKey = process.env.VITE_SUPABASE_ANON_KEY;
+
+    if (!supabaseUrl || !supabaseKey) {
+      return res.status(404).json({ 
+        error: "Chưa cấu hình biến môi trường VITE_SUPABASE_URL hoặc VITE_SUPABASE_ANON_KEY trong Settings của AI Studio.", 
+        code: "CONFIG_MISSING" 
+      });
+    }
+
     const supabase = getSupabaseClient();
+    
+    // Khởi tạo query
+    // Dựa trên screenshot, bảng là 'transactions'
     let query = supabase
       .from('transactions')
-      .select('*')
-      .order('date', { ascending: false })
-      .order('created_at', { ascending: false });
+      .select('*');
 
-    if (startDate) {
-      query = query.gte('date', startDate);
-    }
-    if (endDate) {
-      query = query.lte('date', endDate);
-    }
-    if (clientCccd) {
-      query = query.ilike('customer_cccd', `%${clientCccd}%`);
-    }
+    // Lọc theo loại (Mua vào/Bán ra)
     if (itemType && itemType !== 'ALL') {
       query = query.eq('type', itemType);
     }
 
-    const { data, error } = await query.limit(200);
+    // Lọc theo ngày
+    // Nếu trong Supabase không có cột 'date', chúng ta sẽ sử dụng 'created_at' làm fallback
+    if (startDate) {
+      // Thử lọc theo date, nếu lỗi sẽ bắt ở catch
+      query = query.gte('date', `${startDate}T00:00:00`);
+    }
+    if (endDate) {
+      query = query.lte('date', `${endDate}T23:59:59`);
+    }
 
-    if (error) throw error;
+    // Lọc theo CCCD
+    if (clientCccd) {
+      query = query.ilike('customer_cccd', `%${clientCccd}%`);
+    }
+
+    const { data, error } = await query
+      .order('created_at', { ascending: false })
+      .limit(200);
+
+    if (error) {
+      // Nếu lỗi do thiếu cột 'date', thử lại với 'created_at'
+      if (error.message.includes('column "date" does not exist')) {
+        let fallbackQuery = supabase
+          .from('transactions')
+          .select('*')
+          .order('created_at', { ascending: false })
+          .limit(200);
+          
+        if (startDate) fallbackQuery = fallbackQuery.gte('created_at', `${startDate}T00:00:00`);
+        if (endDate) fallbackQuery = fallbackQuery.lte('created_at', `${endDate}T23:59:59`);
+        if (itemType && itemType !== 'ALL') fallbackQuery = fallbackQuery.eq('type', itemType);
+        if (clientCccd) fallbackQuery = fallbackQuery.ilike('customer_cccd', `%${clientCccd}%`);
+        
+        const { data: fbData, error: fbError } = await fallbackQuery;
+        if (fbError) throw fbError;
+        return res.json(fbData);
+      }
+      throw error;
+    }
+    
     res.json(data);
   } catch (err: any) {
-    if (err.message.includes("environment variables")) {
-      return res.status(404).json({ error: "Supabase connection not configured.", code: "CONFIG_MISSING" });
-    }
     console.error("[API] Supabase Sales Fetch Error:", err.message);
-    res.status(500).json({ error: "Failed to fetch sales data from Supabase" });
+    res.status(500).json({ error: "Lỗi kết nối Supabase: " + err.message, code: "FETCH_ERROR" });
   }
 });
 

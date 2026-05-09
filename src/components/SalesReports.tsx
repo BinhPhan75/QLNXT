@@ -30,11 +30,11 @@ export default function SalesReports() {
       const result = await response.json();
       
       if (!response.ok) {
+        setError(result.error || 'Lỗi khi tải dữ liệu');
         if (result.code === 'CONFIG_MISSING') {
           setConfigMissing(true);
-          throw new Error(result.error);
         }
-        throw new Error(result.error || 'Lỗi khi tải dữ liệu');
+        return;
       }
       
       setData(result);
@@ -87,6 +87,13 @@ export default function SalesReports() {
           </button>
         </div>
       </div>
+
+      {error && !configMissing && (
+        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-2xl flex items-center gap-3">
+          <AlertCircle size={20} />
+          <p className="text-sm font-medium">{error}</p>
+        </div>
+      )}
 
       {/* Filter Bar */}
       <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 grid grid-cols-1 md:grid-cols-4 gap-6">
@@ -146,9 +153,15 @@ export default function SalesReports() {
             <AlertCircle size={32} />
           </div>
           <h2 className="text-xl font-bold text-amber-900">Chưa cấu hình Supabase</h2>
-          <p className="text-amber-700 max-w-md mx-auto">
-            Vui lòng cấu hình biến môi trường <code>SUPABASE_SALES_DB_URL</code> trong mục Settings để kết nối với phần mềm bán hàng.
-          </p>
+          <div className="text-amber-700 max-w-md mx-auto space-y-2">
+            <p>Vui lòng mở mục <b>Settings (biểu tượng bánh răng)</b> ở góc dưới bên trái của <b>AI Studio</b>.</p>
+            <p>Sau đó chọn tab <b>Environment Variables</b> và thêm 2 biến sau:</p>
+            <ul className="text-sm font-mono bg-white/50 p-3 rounded-xl border border-amber-200 text-left list-disc list-inside">
+              <li>VITE_SUPABASE_URL</li>
+              <li>VITE_SUPABASE_ANON_KEY</li>
+            </ul>
+            <p className="text-xs italic mt-2">(Lưu ý: Sau khi thêm, hãy làm mới trình duyệt để cập nhật)</p>
+          </div>
         </div>
       ) : (
         <>
