@@ -291,23 +291,32 @@ export default function ImportExport({ mode }: ImportExportProps) {
     const rows = data.slice(headerIdx + 1);
     
     // Dynamic column mapping with preference for exact/better matches
-    const findCol = (keywords: string[]) => {
-      // First pass: look for more specific matches
+    const findCol = (keywords: string[], exclude: string[] = []) => {
+      // First pass: look for exact matches
       for (const k of keywords) {
-        const idx = headerRow.findIndex(h => h.trim() === k.toLowerCase());
+        const idx = headerRow.findIndex(h => {
+          const val = h.trim().toLowerCase();
+          return val === k.toLowerCase() && !exclude.some(ex => val.includes(ex));
+        });
         if (idx !== -1) return idx;
       }
       // Second pass: starts with
       for (const k of keywords) {
-        const idx = headerRow.findIndex(h => h.trim().startsWith(k.toLowerCase()));
+        const idx = headerRow.findIndex(h => {
+          const val = h.trim().toLowerCase();
+          return val.startsWith(k.toLowerCase()) && !exclude.some(ex => val.includes(ex));
+        });
         if (idx !== -1) return idx;
       }
       // Third pass: includes
-      return headerRow.findIndex(h => keywords.some(k => h.includes(k)));
+      return headerRow.findIndex(h => {
+        const val = h.trim().toLowerCase();
+        return keywords.some(k => val.includes(k)) && !exclude.some(ex => val.includes(ex));
+      });
     };
     
     const colIdx = {
-      series: findCol(['ký hiệu hóa đơn', 'ký hiệu']),
+      series: findCol(['ký hiệu hóa đơn', 'ký hiệu'], ['mẫu số', 'mẫu']),
       invoiceNum: findCol(['số hóa đơn', 'số hđ']),
       date: findCol(['ngày, tháng', 'ngày lập', 'ngày']),
       customerName: findCol(['tên khách hàng', 'khách hàng']),
@@ -346,8 +355,8 @@ export default function ImportExport({ mode }: ImportExportProps) {
       
       if (!rawNum) return;
       
-      // If series is already present in rawNum (sometimes people put "AA/123" in number col), don't duplicate
-      const invoiceNum = rawSeries && !rawNum.includes(rawSeries) ? `${rawSeries}/${rawNum}` : rawNum;
+      // Final formatting: Ký hiệu/Số
+      const invoiceNum = rawSeries && !rawNum.includes(rawSeries) && rawSeries.length > 1 ? `${rawSeries}/${rawNum}` : rawNum;
       
       const quantity = parseVnNumber(row[colIdx.qty], true);
       const price = colIdx.price !== -1 ? parseVnNumber(row[colIdx.price], false) : 0;
