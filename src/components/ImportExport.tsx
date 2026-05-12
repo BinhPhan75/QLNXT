@@ -323,7 +323,8 @@ export default function ImportExport({ mode }: ImportExportProps) {
       series: findCol(['ký hiệu', 'số hiệu']),
       invoiceNum: findCol(['số hóa đơn', 'số hđ', 'số hiệu']),
       date: findCol(['ngày']),
-      customer: findCol(['khách hàng', 'tên đơn vị']),
+      customer: findCol(['tên khách hàng', 'khách hàng']),
+      company: findCol(['tên đơn vị']),
       customerCard: findCol(['cccd', 'số thẻ', 'passport']),
       address: findCol(['địa chỉ']),
       itemCode: findCol(['mã hàng', 'mã số']),
@@ -374,7 +375,9 @@ export default function ImportExport({ mode }: ImportExportProps) {
         }
       }
 
-      const customer = colIdx.customer !== -1 ? (row[colIdx.customer]?.toString().trim() || 'Khách lẻ') : 'Khách lẻ';
+      const customer = (colIdx.customer !== -1 && row[colIdx.customer]?.toString().trim()) 
+                    || (colIdx.company !== -1 && row[colIdx.company]?.toString().trim())
+                    || 'Khách lẻ';
       const customerCard = colIdx.customerCard !== -1 ? (row[colIdx.customerCard]?.toString().trim() || '') : '';
       const address = colIdx.address !== -1 ? (row[colIdx.address]?.toString().trim() || '') : '';
       const itemCode = colIdx.itemCode !== -1 ? (row[colIdx.itemCode]?.toString().trim() || 'KHONG-MA') : 'KHONG-MA';
