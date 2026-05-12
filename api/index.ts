@@ -486,44 +486,55 @@ router.post("/transactions/bulk", async (req, res) => {
     await client.query('BEGIN');
     for (const item of items) {
       const tableName = getTableName(item.source);
-      await client.query(
-        `INSERT INTO ${tableName} (id, type, date, item_code, item_name, unit, quantity, price, discount, total, invoice_number, invoice_date, customer, customer_card, address, note, cogs, source, category)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
-         ON CONFLICT (id) DO UPDATE SET
-           type = EXCLUDED.type, date = EXCLUDED.date, item_code = EXCLUDED.item_code, item_name = EXCLUDED.item_name,
-           unit = EXCLUDED.unit, quantity = EXCLUDED.quantity, price = EXCLUDED.price, discount = EXCLUDED.discount,
-           total = EXCLUDED.total, invoice_number = EXCLUDED.invoice_number, invoice_date = EXCLUDED.invoice_date,
-           customer = EXCLUDED.customer, customer_card = EXCLUDED.customer_card, address = EXCLUDED.address,
-           note = EXCLUDED.note, cogs = EXCLUDED.cogs, source = EXCLUDED.source, category = EXCLUDED.category`,
-        [
-          item.id, 
-          item.type, 
-          item.date, 
-          item.itemCode || item.item_code, 
-          item.itemName || item.item_name, 
-          item.unit, 
-          item.quantity, 
-          item.price, 
-          item.discount, 
-          item.total, 
-          item.invoiceNumber || item.invoice_number,
-          item.invoiceDate || item.invoice_date,
-          item.customer, 
-          item.customerCard || item.customer_card,
-          item.address,
-          item.note, 
-          item.cogs || 0,
-          item.source,
-          item.category
-        ]
-      );
+      
+      // Sanitize inputs
+      const safeId = item.id || Math.random().toString(36).substr(2, 9);
+      const safeType = (item.type || 'OUT').toUpperCase();
+      const safeDate = item.date || new Date().toISOString().split('T')[0];
+      const safeItemCode = (item.itemCode || item.item_code || 'KHONG-MA').toString().trim();
+      const safeItemName = (item.itemName || item.item_name || 'Hàng hóa').toString().trim();
+      const safeUnit = (item.unit || 'Chỉ').toString().trim();
+      const safeQty = parseFloat(item.quantity || 0) || 0;
+      const safePrice = parseFloat(item.price || 0) || 0;
+      const safeDiscount = parseFloat(item.discount || 0) || 0;
+      const safeTotal = parseFloat(item.total || 0) || 0;
+      const safeInvNum = (item.invoiceNumber || item.invoice_number || '').toString().trim();
+      const safeInvDate = (item.invoiceDate || item.invoice_date || safeDate).toString().trim();
+      const safeCustomer = (item.customer || 'Khách lẻ').toString().trim();
+      const safeCustomerCard = (item.customerCard || item.customer_card || '').toString().trim();
+      const safeAddress = (item.address || '').toString().trim();
+      const safeNote = (item.note || '').toString().trim();
+      const safeCogs = parseFloat(item.cogs || 0) || 0;
+      const safeSource = item.source || 'INVENTORY';
+      const safeCategory = (item.category || '').toString().trim();
+
+      try {
+        await client.query(
+          `INSERT INTO ${tableName} (id, type, date, item_code, item_name, unit, quantity, price, discount, total, invoice_number, invoice_date, customer, customer_card, address, note, cogs, source, category)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
+           ON CONFLICT (id) DO UPDATE SET
+             type = EXCLUDED.type, date = EXCLUDED.date, item_code = EXCLUDED.item_code, item_name = EXCLUDED.item_name,
+             unit = EXCLUDED.unit, quantity = EXCLUDED.quantity, price = EXCLUDED.price, discount = EXCLUDED.discount,
+             total = EXCLUDED.total, invoice_number = EXCLUDED.invoice_number, invoice_date = EXCLUDED.invoice_date,
+             customer = EXCLUDED.customer, customer_card = EXCLUDED.customer_card, address = EXCLUDED.address,
+             note = EXCLUDED.note, cogs = EXCLUDED.cogs, source = EXCLUDED.source, category = EXCLUDED.category`,
+          [
+            safeId, safeType, safeDate, safeItemCode, safeItemName, safeUnit, safeQty, safePrice,
+            safeDiscount, safeTotal, safeInvNum, safeInvDate, safeCustomer, safeCustomerCard,
+            safeAddress, safeNote, safeCogs, safeSource, safeCategory
+          ]
+        );
+      } catch (rowErr: any) {
+        console.error(`[API] Error inserting row ${safeId}:`, rowErr.message);
+        throw new Error(`Row ${safeId} failed: ${rowErr.message}`);
+      }
     }
     await client.query('COMMIT');
     res.json({ success: true, count: items.length });
   } catch (err: any) {
-    await client.query('ROLLBACK');
-    console.error("[API] Bulk write error:", err.message);
-    res.status(500).json({ error: "Failed to save transactions", details: err.message });
+    if (client) await client.query('ROLLBACK');
+    console.error("[API] Bulk write master error:", err.message);
+    res.status(500).json({ error: "Lỗi lưu dữ liệu: " + err.message, details: err.message });
   } finally {
     client.release();
   }
