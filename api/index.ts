@@ -463,7 +463,7 @@ router.get("/sales/transactions", async (req, res) => {
       localQuery += ` AND customer_cccd ILIKE $${params.length}`;
     }
 
-    localQuery += ` ORDER BY created_at DESC LIMIT 500`;
+    localQuery += ` ORDER BY created_at DESC LIMIT 1000`;
     
     const result = await pool.query(localQuery, params);
     res.json(result.rows);

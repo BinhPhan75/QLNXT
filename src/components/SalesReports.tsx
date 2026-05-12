@@ -9,6 +9,10 @@ export default function SalesReports() {
   const [configMissing, setConfigMissing] = useState(false);
   const [data, setData] = useState<any[]>([]);
   
+  // Pagination
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(50);
+  
   // Filters
   const [startDate, setStartDate] = useState(new Date().toISOString().split('T')[0]);
   const [endDate, setEndDate] = useState(new Date().toISOString().split('T')[0]);
@@ -38,6 +42,7 @@ export default function SalesReports() {
       }
       
       setData(result);
+      setCurrentPage(1); // Reset to first page on new fetch
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -65,6 +70,18 @@ export default function SalesReports() {
     
     return acc;
   }, { buy: 0, sell: 0, cash: 0, transfer: 0 });
+
+  // Pagination Logic
+  const totalPages = Math.ceil(data.length / pageSize);
+  const startIndex = (currentPage - 1) * pageSize;
+  const paginatedData = data.slice(startIndex, startIndex + pageSize);
+
+  const handlePageChange = (newPage: number) => {
+    if (newPage >= 1 && newPage <= totalPages) {
+      setCurrentPage(newPage);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  };
 
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-700">
@@ -192,13 +209,41 @@ export default function SalesReports() {
           </div>
 
           <div className="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden">
-            <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50/30">
-              <h2 className="font-bold text-slate-700 uppercase tracking-wider text-xs">
-                Dữ liệu chi tiết: {loading ? '...' : data.length} giao dịch
-              </h2>
-              <button className="flex items-center gap-2 text-xs font-bold text-slate-600 hover:text-slate-900 transition-colors uppercase tracking-widest">
-                <Download size={14} /> Xuất CSV
-              </button>
+            <div className="p-6 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-slate-50/30">
+              <div className="flex flex-col gap-1">
+                <h2 className="font-bold text-slate-700 uppercase tracking-wider text-xs">
+                  Dữ liệu chi tiết: {loading ? '...' : data.length} giao dịch
+                </h2>
+                {!loading && data.length > 0 && (
+                  <p className="text-[10px] text-slate-400 font-medium italic">
+                    Hiển thị {startIndex + 1} - {Math.min(startIndex + pageSize, data.length)} của {data.length}
+                  </p>
+                )}
+              </div>
+
+              <div className="flex items-center gap-4">
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Hiển thị</span>
+                  <select 
+                    value={pageSize}
+                    onChange={(e) => {
+                      setPageSize(Number(e.target.value));
+                      setCurrentPage(1);
+                    }}
+                    className="text-xs font-bold text-slate-600 bg-white border border-slate-200 rounded-lg px-2 py-1 outline-none focus:ring-2 focus:ring-orange-500/10"
+                  >
+                    <option value={50}>50 bản ghi</option>
+                    <option value={100}>100 bản ghi</option>
+                    <option value={200}>200 bản ghi</option>
+                    <option value={300}>300 bản ghi</option>
+                    <option value={500}>500 bản ghi</option>
+                  </select>
+                </div>
+                
+                <button className="flex items-center gap-2 text-xs font-bold text-slate-600 hover:text-slate-900 transition-colors uppercase tracking-widest">
+                  <Download size={14} /> Xuất CSV
+                </button>
+              </div>
             </div>
 
             <div className="overflow-x-auto">
@@ -229,7 +274,7 @@ export default function SalesReports() {
                         Không tìm thấy dữ liệu phù hợp.
                       </td>
                     </tr>
-                  ) : data.map((item, idx) => (
+                  ) : paginatedData.map((item, idx) => (
                     <tr key={item.id || idx} className="hover:bg-slate-50 transition-colors group">
                       <td className="px-6 py-4">
                         <div className="text-xs font-bold text-slate-900">
@@ -302,6 +347,56 @@ export default function SalesReports() {
                 </tbody>
               </table>
             </div>
+
+            {/* Pagination Controls */}
+            {!loading && totalPages > 1 && (
+              <div className="p-4 bg-slate-50/50 border-t border-slate-100 flex items-center justify-center gap-2">
+                <button
+                  onClick={() => handlePageChange(currentPage - 1)}
+                  disabled={currentPage === 1}
+                  className="px-3 py-1.5 text-xs font-bold text-slate-600 disabled:text-slate-300 disabled:cursor-not-allowed hover:bg-white rounded-lg border border-slate-200 transition-all cursor-pointer"
+                >
+                  Trước
+                </button>
+                
+                <div className="flex items-center gap-1">
+                  {[...Array(Math.min(5, totalPages))].map((_, i) => {
+                    let pageNum: number;
+                    if (totalPages <= 5) {
+                      pageNum = i + 1;
+                    } else if (currentPage <= 3) {
+                      pageNum = i + 1;
+                    } else if (currentPage >= totalPages - 2) {
+                      pageNum = totalPages - 4 + i;
+                    } else {
+                      pageNum = currentPage - 2 + i;
+                    }
+
+                    return (
+                      <button
+                        key={pageNum}
+                        onClick={() => handlePageChange(pageNum)}
+                        className={`w-8 h-8 flex items-center justify-center rounded-lg text-xs font-black transition-all cursor-pointer ${
+                          currentPage === pageNum 
+                            ? 'bg-slate-900 text-white shadow-md' 
+                            : 'text-slate-600 hover:bg-white border border-transparent hover:border-slate-200'
+                        }`}
+                      >
+                        {pageNum}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <button
+                  onClick={() => handlePageChange(currentPage + 1)}
+                  disabled={currentPage === totalPages}
+                  className="px-3 py-1.5 text-xs font-bold text-slate-600 disabled:text-slate-300 disabled:cursor-not-allowed hover:bg-white rounded-lg border border-slate-200 transition-all cursor-pointer"
+                >
+                  Tiếp
+                </button>
+              </div>
+            )}
           </div>
         </>
       )}
