@@ -73,33 +73,24 @@ async function initDb() {
         total_amount NUMERIC,
         tien_mat NUMERIC,
         chuyen_khoan NUMERIC,
-        created_by UUID,
-        created_at TIMESTAMPTZ,
-        customer_bank_id UUID,
-        customer_account_no TEXT,
         chiet_khau NUMERIC,
         other_deduction NUMERIC,
-        deduction_note TEXT,
         cong_them NUMERIC,
         giam_tru NUMERIC,
+        created_by UUID,
+        created_at TIMESTAMPTZ,
         synced_at TIMESTAMPTZ DEFAULT NOW()
       );
     `);
 
-    // Migration for adding missing columns to existing table
-    const salesAppCols = [
-      ['customer_bank_id', 'UUID'],
-      ['customer_account_no', 'TEXT'],
-      ['chiet_khau', 'NUMERIC'],
-      ['other_deduction', 'NUMERIC'],
-      ['deduction_note', 'TEXT'],
-      ['cong_them', 'NUMERIC'],
-      ['giam_tru', 'NUMERIC']
-    ];
-    for (const [col, type] of salesAppCols) {
+    // Ensure columns exist for existing tables (migration)
+    const salesTableCols = ['chiet_khau', 'other_deduction', 'cong_them', 'giam_tru'];
+    for (const col of salesTableCols) {
       try {
-        await client.query(`ALTER TABLE sales_app_transactions ADD COLUMN IF NOT EXISTS ${col} ${type}`);
-      } catch (err) { /* ignore */ }
+        await client.query(`ALTER TABLE sales_app_transactions ADD COLUMN IF NOT EXISTS ${col} NUMERIC DEFAULT 0`);
+      } catch (err) {
+        // Ignore
+      }
     }
 
     // Check for legacy general 'transactions' table
@@ -412,32 +403,28 @@ router.get("/sales/transactions", async (req, res) => {
                 id, type, customer_name, customer_cccd, dia_chi, 
                 product_id, product_name, quantity, unit, 
                 price_per_unit, total_amount, tien_mat, chuyen_khoan, 
-                created_by, created_at,
-                customer_bank_id, customer_account_no, chiet_khau,
-                other_deduction, deduction_note, cong_them, giam_tru
-              ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22)
+                chiet_khau, other_deduction, cong_them, giam_tru,
+                created_by, created_at
+              ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
               ON CONFLICT (id) DO UPDATE SET
                 type = EXCLUDED.type, customer_name = EXCLUDED.customer_name,
                 customer_cccd = EXCLUDED.customer_cccd, dia_chi = EXCLUDED.dia_chi,
                 product_name = EXCLUDED.product_name, quantity = EXCLUDED.quantity,
                 unit = EXCLUDED.unit, price_per_unit = EXCLUDED.price_per_unit,
                 total_amount = EXCLUDED.total_amount, tien_mat = EXCLUDED.tien_mat,
-                chuyen_khoan = EXCLUDED.chuyen_khoan, created_at = EXCLUDED.created_at,
-                customer_bank_id = EXCLUDED.customer_bank_id,
-                customer_account_no = EXCLUDED.customer_account_no,
+                chuyen_khoan = EXCLUDED.chuyen_khoan, 
                 chiet_khau = EXCLUDED.chiet_khau,
                 other_deduction = EXCLUDED.other_deduction,
-                deduction_note = EXCLUDED.deduction_note,
                 cong_them = EXCLUDED.cong_them,
                 giam_tru = EXCLUDED.giam_tru,
+                created_at = EXCLUDED.created_at,
                 synced_at = NOW()
             `, [
               row.id, row.type, row.customer_name, row.customer_cccd, row.dia_chi,
               row.product_id, row.product_name, row.quantity, row.unit,
               row.price_per_unit, row.total_amount, row.tien_mat, row.chuyen_khoan,
-              row.created_by, row.created_at,
-              row.customer_bank_id, row.customer_account_no, row.chiet_khau,
-              row.other_deduction, row.deduction_note, row.cong_them, row.giam_tru
+              row.chiet_khau || 0, row.other_deduction || 0, row.cong_them || 0, row.giam_tru || 0,
+              row.created_by, row.created_at
             ]);
           }
           await syncClient.query('COMMIT');

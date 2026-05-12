@@ -204,19 +204,21 @@ export default function SalesReports() {
             <div className="overflow-x-auto">
               <table className="w-full text-left">
                 <thead className="bg-slate-900 text-white">
-                  <tr className="text-[10px] font-bold uppercase tracking-widest text-center">
-                    <th className="px-4 py-4 text-left">Thời gian</th>
-                    <th className="px-4 py-4">Loại GD</th>
-                    <th className="px-4 py-4 text-left">Khách hàng / STK</th>
-                    <th className="px-4 py-4 text-left">Mặt hàng & Đơn giá</th>
-                    <th className="px-4 py-4">Chiết khấu / Thuế / Phí</th>
-                    <th className="px-4 py-4 text-right">Tổng cộng</th>
+                  <tr className="text-[10px] font-bold uppercase tracking-widest">
+                    <th className="px-6 py-4">Thời gian</th>
+                    <th className="px-6 py-4">Loại GD</th>
+                    <th className="px-6 py-4">Khách hàng & Địa chỉ</th>
+                    <th className="px-6 py-4">Mặt hàng</th>
+                    <th className="px-6 py-4 text-rose-500">Chiết khấu</th>
+                    <th className="px-6 py-4 text-emerald-500">Cộng thêm</th>
+                    <th className="px-6 py-4 text-rose-500">Giảm trừ</th>
+                    <th className="px-6 py-4 text-right">Thành tiền</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 font-medium">
                   {loading ? (
                     <tr>
-                      <td colSpan={6} className="px-6 py-20 text-center">
+                      <td colSpan={8} className="px-6 py-20 text-center">
                         <div className="flex flex-col items-center gap-3">
                           <div className="w-8 h-8 border-4 border-orange-500 border-t-transparent rounded-full animate-spin"></div>
                           <p className="text-slate-400 italic text-sm">Đang truy xuất dữ liệu từ Supabase...</p>
@@ -225,85 +227,64 @@ export default function SalesReports() {
                     </tr>
                   ) : data.length === 0 ? (
                     <tr>
-                      <td colSpan={6} className="px-6 py-20 text-center text-slate-400 italic">
+                      <td colSpan={8} className="px-6 py-20 text-center text-slate-400 italic">
                         Không tìm thấy dữ liệu phù hợp.
                       </td>
                     </tr>
                   ) : data.map((item, idx) => (
                     <tr key={item.id || idx} className="hover:bg-slate-50 transition-colors group">
-                      <td className="px-4 py-4">
-                        <div className="text-xs font-bold text-slate-900 leading-tight">
+                      <td className="px-6 py-4">
+                        <div className="text-xs font-bold text-slate-900">
                           {new Date(item.created_at).toLocaleDateString()}
                         </div>
-                        <div className="text-[10px] text-slate-400">
+                        <div className="text-[10px] text-slate-400 mt-0.5">
                           {new Date(item.created_at).toLocaleTimeString()}
                         </div>
                       </td>
-                      <td className="px-4 py-4 text-center">
+                      <td className="px-6 py-4">
                         <span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-widest ${
                           item.type === 'BUY' ? 'bg-rose-100 text-rose-600' : 'bg-emerald-100 text-emerald-600'
                         }`}>
                           {item.type === 'BUY' ? 'Mua vào' : 'Bán ra'}
                         </span>
                       </td>
-                      <td className="px-4 py-4 text-sm whitespace-nowrap">
+                      <td className="px-6 py-4">
+                        <div className="text-[10px] text-slate-400 uppercase font-bold mb-0.5">Khách hàng</div>
                         <div className="text-sm font-bold text-slate-900 uppercase">{item.customer_name || 'Khách lẻ'}</div>
-                        <div className="flex flex-col gap-0.5 mt-1">
-                          {item.customer_cccd && <div className="text-[10px] text-slate-500 font-mono">CCCD: {item.customer_cccd}</div>}
-                          {item.customer_account_no && (
-                            <div className="text-[10px] text-indigo-600 font-bold bg-indigo-50 px-1.5 py-0.5 rounded w-fit">
-                              STK: {item.customer_account_no}
-                            </div>
-                          )}
-                          <div className="text-[10px] text-slate-400 italic line-clamp-1 max-w-[150px]" title={item.dia_chi}>Đ/C: {item.dia_chi || '-'}</div>
-                        </div>
+                        <div className="text-[10px] text-slate-500 font-mono mt-0.5">{item.customer_cccd || '-'}</div>
+                        <div className="text-[10px] text-slate-400 italic mt-1 line-clamp-1 max-w-[200px]" title={item.dia_chi}>Đ/C: {item.dia_chi || '-'}</div>
                       </td>
-                      <td className="px-4 py-4">
+                      <td className="px-6 py-4">
                         <div className="text-sm font-bold text-slate-900 italic">
                           {item.product_name || 'Hàng hóa'} 
-                          <span className="text-[10px] text-slate-400 font-normal ml-1 whitespace-nowrap">
-                            x{formatQuantity(item.quantity || 0)} {item.unit}
+                          <span className="text-[10px] text-slate-400 font-normal ml-1">
+                            x{formatQuantity(item.quantity)} {item.unit}
                           </span>
                         </div>
-                        <div className="text-[10px] text-slate-400 font-medium mt-1">
-                          Đơn giá: {formatCurrency(item.price_per_unit || 0)} / {item.unit}
-                        </div>
                       </td>
-                      <td className="px-4 py-4 text-right">
-                        <div className="flex flex-col gap-1 items-end">
-                          {Number(item.chiet_khau) > 0 && (
-                            <div className="text-[10px] text-rose-600 font-bold">
-                              CK: -{formatCurrency(item.chiet_khau)}
-                            </div>
-                          )}
-                          {Number(item.giam_tru) > 0 && (
-                            <div className="text-[10px] text-rose-500 font-medium whitespace-nowrap">
-                              Giảm trừ: -{formatCurrency(item.giam_tru)}
-                            </div>
-                          )}
-                          {Number(item.cong_them) > 0 && (
-                            <div className="text-[10px] text-emerald-600 font-medium whitespace-nowrap">
-                              Cộng thêm: +{formatCurrency(item.cong_them)}
-                            </div>
-                          )}
-                          {item.other_deduction > 0 && (
-                            <div className="text-[10px] text-slate-500 italic">
-                              Khác: -{formatCurrency(item.other_deduction)}
-                            </div>
-                          )}
-                        </div>
+                      <td className="px-6 py-4 text-rose-600 font-bold">
+                        {Number(item.chiet_khau) > 0 ? `-${formatCurrency(item.chiet_khau)}` : '-'}
                       </td>
-                      <td className="px-4 py-4 text-right">
+                      <td className="px-6 py-4 text-emerald-600 font-bold">
+                        {Number(item.cong_them) > 0 ? `+${formatCurrency(item.cong_them)}` : '-'}
+                      </td>
+                      <td className="px-6 py-4 text-rose-600 font-bold">
+                        {Number(item.giam_tru) > 0 ? `-${formatCurrency(item.giam_tru)}` : '-'}
+                      </td>
+                      <td className="px-6 py-4 text-right">
+                        <div className="text-[10px] text-slate-400 font-medium mb-1 opacity-50">
+                          {formatCurrency(item.price_per_unit || 0)} / {item.unit}
+                        </div>
                         <div className="text-base font-black text-slate-900">{formatCurrency(item.total_amount)}</div>
-                        <div className="flex flex-col items-end gap-1 mt-1">
+                        <div className="flex flex-col items-end gap-0.5 mt-1">
                           {Number(item.tien_mat) > 0 && (
-                            <span className="text-[9px] font-bold text-orange-600 bg-orange-50 px-2 py-0.5 rounded-full border border-orange-100 whitespace-nowrap">
-                              TIỀN MẶT: {formatCurrency(item.tien_mat)}
+                            <span className="text-[9px] font-bold text-orange-600 bg-orange-50 px-1 rounded">
+                              TM: {formatCurrency(item.tien_mat)}
                             </span>
                           )}
                           {Number(item.chuyen_khoan) > 0 && (
-                            <span className="text-[9px] font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-full border border-indigo-100 whitespace-nowrap">
-                              CHUYỂN KHOẢN: {formatCurrency(item.chuyen_khoan)}
+                            <span className="text-[9px] font-bold text-indigo-600 bg-indigo-50 px-1 rounded">
+                              CK: {formatCurrency(item.chuyen_khoan)}
                             </span>
                           )}
                         </div>
