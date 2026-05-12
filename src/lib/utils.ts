@@ -59,8 +59,10 @@ export function getYearMonth(dateStr: string | Date) {
   if (parts.length === 3) {
     if (parts[0].length === 4) { // YYYY-MM-DD
       return { month: parseInt(parts[1]) - 1, year: parseInt(parts[0]) };
-    } else if (parts[2].length === 4) { // DD/MM/YYYY
-      return { month: parseInt(parts[1]) - 1, year: parseInt(parts[2]) };
+    } else if (parts[2].length === 4 || parts[2].length === 2) { // DD/MM/YYYY or DD/MM/YY
+      let year = parseInt(parts[2]);
+      if (parts[2].length === 2) year = (year > 50 ? 1900 : 2000) + year;
+      return { month: parseInt(parts[1]) - 1, year };
     }
   }
   

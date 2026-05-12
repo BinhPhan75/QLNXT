@@ -32,13 +32,24 @@ export default function Reports({ mode }: ReportsProps) {
   const [pageSize, setPageSize] = useState(50);
   
   const parseItemDate = (dateStr: string) => {
-    // Expected formats: YYYY-MM-DD or DD/MM/YYYY
     if (!dateStr) return 0;
-    if (dateStr.includes('/')) {
-      const [d, m, y] = dateStr.split('/').map(Number);
-      return new Date(y, m - 1, d).getTime();
+    
+    // Normalize string: remove time if present, replace common separators
+    const cleanDate = dateStr.toString().split(' ')[0].split('T')[0];
+    const parts = cleanDate.split(/[-/.]/);
+
+    if (parts.length === 3) {
+      if (parts[0].length === 4) { // YYYY-MM-DD
+        return new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2])).getTime();
+      } else if (parts[2].length === 4 || parts[2].length === 2) { // DD/MM/YYYY or DD/MM/YY
+        let year = parseInt(parts[2]);
+        if (parts[2].length === 2) year = (year > 50 ? 1900 : 2000) + year;
+        return new Date(year, parseInt(parts[1]) - 1, parseInt(parts[0])).getTime();
+      }
     }
-    return new Date(dateStr).getTime();
+    
+    const d = new Date(dateStr);
+    return isNaN(d.getTime()) ? 0 : d.getTime();
   };
   
   const [expandedRevenueKey, setExpandedRevenueKey] = useState<string | null>(null);
@@ -61,9 +72,10 @@ export default function Reports({ mode }: ReportsProps) {
           const end = new Date(endDate).setHours(23,59,59,999);
           if (itemTime > end) return false;
         }
-      } else if (selectedMonth !== 'ALL') {
+      } else {
         const { month, year } = getYearMonth(tx.invoiceDate || tx.date);
-        if (month !== selectedMonth || year !== selectedYear) return false;
+        if (year !== selectedYear) return false;
+        if (selectedMonth !== 'ALL' && month !== selectedMonth) return false;
       }
 
       const matchesSearch = (tx.itemName || '').toLowerCase().includes(searchTerm.toLowerCase()) || 
@@ -167,11 +179,58 @@ export default function Reports({ mode }: ReportsProps) {
   }, [filteredData, revenueRows, mode, reportType, viewMode]);
 
   const filteredProducts = useMemo(() => {
+    // For STOCK report, calculate stock as of the end of selected period
+    if (reportType === 'STOCK') {
+      const cutOffMonth = selectedMonth === 'ALL' ? 11 : selectedMonth;
+      const cutOffYear = selectedYear;
+
+      const productMap = new Map<string, any>();
+      
+      transactions.forEach(tx => {
+        const { month, year } = getYearMonth(tx.invoiceDate || tx.date);
+        
+        // Filter: everything before this year OR same year but before/in target month
+        const isBeforeOrIn = year < cutOffYear || (year === cutOffYear && (selectedMonth === 'ALL' || month <= selectedMonth));
+        if (!isBeforeOrIn) return;
+
+        const code = (tx.itemCode || 'KHONG-MA').trim().toUpperCase();
+        const name = (tx.itemName || 'Hàng hóa').trim();
+        
+        // Skip brand names or non-products
+        if (name.toUpperCase() === 'NGHIATINGOLD' || code === 'NGHIATINGOLD') return;
+        
+        const key = (code && code !== 'KHONG-MA') ? code : `NAME_${name.toLowerCase()}`;
+        
+        const existing = productMap.get(key);
+        if (existing) {
+          if (tx.type === 'IN') existing.currentStock += tx.quantity;
+          else existing.currentStock -= tx.quantity;
+          // Weighted average cost (simplistic)
+          if (tx.type === 'IN' && tx.price > 0) {
+            existing.averageCost = (existing.averageCost + tx.price) / 2;
+          }
+        } else {
+          productMap.set(key, {
+            code: (code && code !== 'KHONG-MA') ? code : 'KHONG-MA',
+            name,
+            unit: tx.unit,
+            currentStock: tx.type === 'IN' ? tx.quantity : -tx.quantity,
+            averageCost: tx.price || 0
+          });
+        }
+      });
+
+      return Array.from(productMap.values()).filter(p => 
+        p.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+        p.code.toLowerCase().includes(searchTerm.toLowerCase())
+      );
+    }
+
     return products.filter(p => 
       p.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
       p.code.toLowerCase().includes(searchTerm.toLowerCase())
     );
-  }, [products, searchTerm]);
+  }, [products, transactions, reportType, selectedMonth, selectedYear, searchTerm]);
 
   const invoices = useMemo(() => {
     const invMap = new Map<string, { id: string, date: string, customer: string, total: number, items: number, number: string, details: any[] }>();
@@ -930,10 +989,10 @@ export default function Reports({ mode }: ReportsProps) {
                           {formatQuantity(paginatedData.reduce((sum: number, r: any) => sum + (Number(r.quantity) || 0), 0))}
                         </td>
                         <td className="px-2 py-4"></td>
-                        <td className="px-2 py-4 text-right">{formatCurrency(paginatedData.reduce((sum: number, r: any) => sum + (Number(r.itemTotal) || 0), 0))}</td>
+                        <td className="px-2 py-4 text-right">{formatCurrency(paginatedData.reduce((sum: number, r: any) => sum + (Number(r.itemTotal || r.total) || 0), 0))}</td>
                         <td className="px-2 py-4 text-right text-green-600">{formatCurrency(paginatedData.reduce((sum: number, r: any) => sum + (Number(r.laborTotal) || 0), 0))}</td>
                         <td className="px-2 py-4 text-right text-red-500">{formatCurrency(paginatedData.reduce((sum: number, r: any) => sum + (Number(r.discountTotal) || 0), 0))}</td>
-                        <td className="px-2 py-4 text-right text-blue-700">{formatCurrency(paginatedData.reduce((sum: number, r: any) => sum + (Number(r.finalTotal) || 0), 0))}</td>
+                        <td className="px-2 py-4 text-right text-blue-700">{formatCurrency(paginatedData.reduce((sum: number, r: any) => sum + (Number(r.finalTotal || r.total) || 0), 0))}</td>
                       </tr>
                     ) : (
                       <tr className="bg-slate-50 font-bold text-xs text-slate-900 border-t border-slate-300">
@@ -959,31 +1018,24 @@ export default function Reports({ mode }: ReportsProps) {
                     )}
                     {/* Grand Total Row */}
                     <tr className="bg-blue-50/50 font-black text-[12px] text-blue-900 border-t-2 border-blue-100">
-                      <td colSpan={reportType === 'STOCK' ? 2 : 7} className="px-2 py-4 text-right uppercase text-blue-600/70">Tổng kết tất cả ({filteredDataDisplay.length}):</td>
+                      <td colSpan={reportType === 'STOCK' ? 2 : 7} className="px-2 py-4 text-right uppercase text-blue-600/70">Tổng kết tất cả:</td>
                       <td className="px-2 py-4 text-center">
-                        {formatQuantity(filteredDataDisplay.reduce((sum: number, r: any) => 
-                          sum + (reportType === 'STOCK' ? (Number(r.currentStock) || 0) : (Number(r.quantity) || 0)), 0
-                        ))}
+                        {formatQuantity(totals.qty)}
                       </td>
                       <td className="px-2 py-4"></td>
                       {mode === 'REVENUE' ? (
                         <>
-                          <td className="px-2 py-4 text-right">{formatCurrency(filteredDataDisplay.reduce((sum: number, r: any) => sum + (Number(r.itemTotal) || 0), 0))}</td>
-                          <td className="px-2 py-4 text-right">{formatCurrency(filteredDataDisplay.reduce((sum: number, r: any) => sum + (Number(r.laborTotal) || 0), 0))}</td>
-                          <td className="px-2 py-4 text-right">{formatCurrency(filteredDataDisplay.reduce((sum: number, r: any) => sum + (Number(r.discountTotal) || 0), 0))}</td>
-                          <td className="px-2 py-4 text-right text-blue-900 border-l border-blue-100">{formatCurrency(filteredDataDisplay.reduce((sum: number, r: any) => sum + (Number(r.finalTotal) || 0), 0))}</td>
+                          <td className="px-2 py-4 text-right" colSpan={4}>{formatCurrency(totals.total)}</td>
                         </>
                       ) : (
                         <>
-                          <td className="px-2 py-4 text-right">
-                            {formatCurrency(filteredDataDisplay.reduce((sum: number, r: any) => 
-                              sum + (reportType === 'STOCK' ? (Number(r.currentStock) * Number(r.averageCost) || 0) : (Number(r.total) || 0)), 0
-                            ))}
+                          <td className="px-2 py-4 text-right font-bold">
+                            {formatCurrency(totals.total)}
                           </td>
                           {reportType === 'SELL' && (
                             <>
-                              <td className="px-2 py-4 text-right text-red-600">{formatCurrency(filteredDataDisplay.reduce((sum: number, r: any) => sum + (Number(r.cogs) || 0), 0))}</td>
-                              <td className="px-2 py-4 text-right text-green-700">{formatCurrency(filteredDataDisplay.reduce((sum: number, r: any) => sum + ((Number(r.total) || 0) - (Number(r.cogs) || 0)), 0))}</td>
+                              <td className="px-2 py-4 text-right text-red-600">{formatCurrency(totals.cogs)}</td>
+                              <td className="px-2 py-4 text-right text-green-700">{formatCurrency(totals.total - totals.cogs)}</td>
                             </>
                           )}
                         </>

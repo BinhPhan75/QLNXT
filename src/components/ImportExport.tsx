@@ -124,15 +124,39 @@ export default function ImportExport({ mode }: ImportExportProps) {
       reader.onload = (e) => {
         const data = e.target?.result;
         const workbook = XLSX.read(data, { type: 'binary' });
-        const sheetName = workbook.SheetNames[0];
-        const sheet = workbook.Sheets[sheetName];
-        const rows = XLSX.utils.sheet_to_json(sheet, { header: 1 }) as any[][];
-        const stringData = rows.map(row => row.map(cell => cell === undefined || cell === null ? '' : cell.toString()));
+        
+        let allSheetData: string[][] = [];
+        workbook.SheetNames.forEach((sheetName, index) => {
+          const sheet = workbook.Sheets[sheetName];
+          const rows = XLSX.utils.sheet_to_json(sheet, { header: 1 }) as any[][];
+          const stringData = rows.map(row => row.map(cell => cell === undefined || cell === null ? '' : cell.toString()));
+          
+          if (index === 0) {
+            allSheetData = stringData;
+          } else {
+            // Check if this sheet has a similar header structure
+            let sheetHeaderIdx = -1;
+            for (let i = 0; i < Math.min(20, stringData.length); i++) {
+              const rowStr = stringData[i].join(' ').toLowerCase();
+              if ((rowStr.includes('số hóa đơn') || rowStr.includes('số hđ')) && (rowStr.includes('mã hàng chi tiết') || rowStr.includes('mã hàng'))) {
+                sheetHeaderIdx = i;
+                break;
+              }
+            }
+            if (sheetHeaderIdx !== -1) {
+              // Append only the data rows from subsequent sheets
+              allSheetData.push(...stringData.slice(sheetHeaderIdx + 1));
+            } else if (importFormat === 'RETAIL_PURCHASE') {
+               // Similar logic for retail purchase
+               allSheetData.push(...stringData);
+            }
+          }
+        });
         
         if (importFormat === 'RETAIL_PURCHASE') {
-          processRetailPurchaseImport(stringData);
+          processRetailPurchaseImport(allSheetData);
         } else {
-          processImportData(stringData, file.name);
+          processImportData(allSheetData, file.name);
         }
       };
       reader.readAsBinaryString(file);
@@ -185,9 +209,11 @@ export default function ImportExport({ mode }: ImportExportProps) {
 
       // Extract date
       let invoiceDate = rawDate;
-      const dateParts = rawDate.split('/');
+      const dateParts = rawDate.split(/[-/.]/);
       if (dateParts.length === 3) {
-        const [d, m, y] = dateParts;
+        let [d, m, y] = dateParts;
+        // Fix for 2-digit years
+        if (y.length === 2) y = (parseInt(y) > 50 ? '19' : '20') + y;
         invoiceDate = `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
       }
 
@@ -259,13 +285,14 @@ export default function ImportExport({ mode }: ImportExportProps) {
     }
 
     let isDetailedReport = false;
-    let headerRowIdx = -1;
+    let headerIdx = -1;
 
-    for (let i = 0; i < Math.min(15, data.length); i++) {
+    for (let i = 0; i < Math.min(20, data.length); i++) {
        const row = data[i];
-       if (row.some(c => c?.toString().includes('Số hóa đơn')) && row.some(c => c?.toString().includes('Mã hàng hóa'))) {
+       const rowStr = row.join(' ').toLowerCase();
+       if ((rowStr.includes('số hóa đơn') || rowStr.includes('số hđ')) && (rowStr.includes('mã hàng chi tiết') || rowStr.includes('mã hàng'))) {
          isDetailedReport = true;
-         headerRowIdx = i;
+         headerIdx = i;
          break;
        }
     }
@@ -275,7 +302,7 @@ export default function ImportExport({ mode }: ImportExportProps) {
          setLogs(prev => [...prev, { msg: 'File này là Báo cáo chi tiết (Doanh thu). Vui lòng chuyển sang menu Doanh thu để nhập.', type: 'error' }]);
          return;
       }
-      processDetailedImport(data, headerRowIdx);
+      processDetailedImport(data, headerIdx);
     } else {
       if (mode === 'REVENUE') {
         setLogs(prev => [...prev, { msg: 'File này không phải Báo cáo chi tiết. Vui lòng kiểm tra lại.', type: 'error' }]);
@@ -286,38 +313,78 @@ export default function ImportExport({ mode }: ImportExportProps) {
   };
 
   const processDetailedImport = (data: string[][], headerIdx: number) => {
+    const headerRow = data[headerIdx].map(c => c?.toString().toLowerCase() || '');
     const rows = data.slice(headerIdx + 1);
+    
+    // Dynamic column mapping
+    const findCol = (keywords: string[]) => headerRow.findIndex(h => keywords.some(k => h.includes(k)));
+    
+    const colIdx = {
+      series: findCol(['ký hiệu', 'số hiệu']),
+      invoiceNum: findCol(['số hóa đơn', 'số hđ', 'số hiệu']),
+      date: findCol(['ngày']),
+      customer: findCol(['khách hàng', 'tên đơn vị']),
+      customerCard: findCol(['cccd', 'số thẻ', 'passport']),
+      address: findCol(['địa chỉ']),
+      itemCode: findCol(['mã hàng', 'mã số']),
+      itemName: findCol(['tên hàng', 'tên sản phẩm']),
+      unit: findCol(['đvt', 'đơn vị tính']),
+      qty: findCol(['số lượng', 'sl']),
+      price: findCol(['đơn giá']),
+      total: findCol(['thành tiền', 'tổng cộng'])
+    };
+
+    if (colIdx.invoiceNum === -1 || colIdx.qty === -1) {
+       setLogs(prev => [...prev, { msg: 'Không tìm thấy các cột bắt buộc (Số hóa đơn, Số lượng).', type: 'error' }]);
+       return;
+    }
+
     const items: Omit<Transaction, 'id'>[] = [];
     let successCount = 0;
     const importDate = new Date().toISOString().split('T')[0];
 
     rows.forEach(row => {
-      if (!row[3] || !row[14]) return; 
+      const rawSeries = colIdx.series !== -1 ? row[colIdx.series]?.toString().trim() : '';
+      const rawNum = row[colIdx.invoiceNum]?.toString().trim();
+      const invoiceNum = rawSeries ? `${rawSeries}/${rawNum}` : rawNum;
       
-      const invoiceNum = row[3]?.toString().trim();
-      let rawDate = row[4]?.toString().trim() || '';
+      const quantity = parseVnNumber(row[colIdx.qty], true);
+      const total = colIdx.total !== -1 ? parseVnNumber(row[colIdx.total], false) : (quantity * (colIdx.price !== -1 ? parseVnNumber(row[colIdx.price], false) : 0));
+      
+      // Allow rows with quantity 0 if total is non-zero (fees, discounts)
+      if (!invoiceNum || (quantity === 0 && total === 0)) return; 
+      
+      let rawDate = (colIdx.date !== -1 ? row[colIdx.date] : '').toString().trim();
       let invoiceDate = rawDate;
       if (rawDate.includes('/')) {
         const datePart = rawDate.split(' ')[0];
-        const [d, m, y] = datePart.split('/');
-        invoiceDate = `${y}-${m}-${d}`;
+        const parts = datePart.split('/');
+        if (parts.length === 3) {
+          const [d, m, y] = parts;
+          invoiceDate = `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
+        }
+      } else if (rawDate.includes('-')) {
+        const parts = rawDate.split(' ')[0].split('-');
+        if (parts.length === 3) {
+          if (parts[0].length === 4) invoiceDate = rawDate.split(' ')[0]; // YYYY-MM-DD
+          else {
+            const [d, m, y] = parts;
+            invoiceDate = `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
+          }
+        }
       }
 
-      const customer = row[7]?.toString().trim() || 'Khách lẻ';
-      const customerCard = row[11]?.toString().trim() || '';
-      const address = row[13]?.toString().trim() || '';
-      const itemCode = row[14]?.toString().trim() || 'KHONG-MA';
-      const itemName = row[15]?.toString().trim() || 'Hàng hóa';
+      const customer = colIdx.customer !== -1 ? (row[colIdx.customer]?.toString().trim() || 'Khách lẻ') : 'Khách lẻ';
+      const customerCard = colIdx.customerCard !== -1 ? (row[colIdx.customerCard]?.toString().trim() || '') : '';
+      const address = colIdx.address !== -1 ? (row[colIdx.address]?.toString().trim() || '') : '';
+      const itemCode = colIdx.itemCode !== -1 ? (row[colIdx.itemCode]?.toString().trim() || 'KHONG-MA') : 'KHONG-MA';
+      const itemName = colIdx.itemName !== -1 ? (row[colIdx.itemName]?.toString().trim() || 'Hàng hóa') : 'Hàng hóa';
       
-      // Skip rows that are clearly not products (brand names in item columns)
       if (itemName.toUpperCase() === 'NGHIATINGOLD' || itemCode.toUpperCase() === 'NGHIATINGOLD') return;
       if (itemName.includes('Phần mềm quản lý')) return;
 
-      const unit = row[17]?.toString().trim() || 'Chỉ';
-      
-      const quantity = parseVnNumber(row[18], true);
-      const price = parseVnNumber(row[19], false);
-      const total = parseVnNumber(row[20], false);
+      const unit = colIdx.unit !== -1 ? (row[colIdx.unit]?.toString().trim() || 'Chỉ') : 'Chỉ';
+      const price = colIdx.price !== -1 ? parseVnNumber(row[colIdx.price], false) : 0;
 
       items.push({
         type: importType,
@@ -374,8 +441,13 @@ export default function ImportExport({ mode }: ImportExportProps) {
     const importDate = new Date().toISOString().split('T')[0];
     let formattedInvoiceDate = invoiceDateStr;
     if (invoiceDateStr.includes('/')) {
-      const [d, m, y] = invoiceDateStr.split('/');
-      formattedInvoiceDate = `${y}-${m}-${d}`;
+      const parts = invoiceDateStr.split('/');
+      if (parts.length === 3) {
+        let [d, m, y] = parts;
+        // Fix for 2-digit years
+        if (y.length === 2) y = (parseInt(y) > 50 ? '19' : '20') + y;
+        formattedInvoiceDate = `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
+      }
     }
     
     let sellerName = '';
@@ -481,7 +553,7 @@ export default function ImportExport({ mode }: ImportExportProps) {
 
       items.push({
         type: importType,
-        source: 'INVENTORY',
+        source: mode,
         date: importDate,
         invoiceDate: formattedInvoiceDate,
         itemCode,
