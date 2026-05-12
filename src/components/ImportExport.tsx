@@ -125,39 +125,17 @@ export default function ImportExport({ mode }: ImportExportProps) {
         const data = e.target?.result;
         const workbook = XLSX.read(data, { type: 'binary' });
         
-        let allSheetData: string[][] = [];
-        workbook.SheetNames.forEach((sheetName, index) => {
+        workbook.SheetNames.forEach((sheetName) => {
           const sheet = workbook.Sheets[sheetName];
           const rows = XLSX.utils.sheet_to_json(sheet, { header: 1 }) as any[][];
           const stringData = rows.map(row => row.map(cell => cell === undefined || cell === null ? '' : cell.toString()));
           
-          if (index === 0) {
-            allSheetData = stringData;
+          if (importFormat === 'RETAIL_PURCHASE') {
+            processRetailPurchaseImport(stringData);
           } else {
-            // Check if this sheet has a similar header structure
-            let sheetHeaderIdx = -1;
-            for (let i = 0; i < Math.min(20, stringData.length); i++) {
-              const rowStr = stringData[i].join(' ').toLowerCase();
-              if ((rowStr.includes('số hóa đơn') || rowStr.includes('số hđ')) && (rowStr.includes('mã hàng chi tiết') || rowStr.includes('mã hàng'))) {
-                sheetHeaderIdx = i;
-                break;
-              }
-            }
-            if (sheetHeaderIdx !== -1) {
-              // Append only the data rows from subsequent sheets
-              allSheetData.push(...stringData.slice(sheetHeaderIdx + 1));
-            } else if (importFormat === 'RETAIL_PURCHASE') {
-               // Similar logic for retail purchase
-               allSheetData.push(...stringData);
-            }
+            processImportData(stringData, file.name);
           }
         });
-        
-        if (importFormat === 'RETAIL_PURCHASE') {
-          processRetailPurchaseImport(allSheetData);
-        } else {
-          processImportData(allSheetData, file.name);
-        }
       };
       reader.readAsBinaryString(file);
     } else {
@@ -316,24 +294,43 @@ export default function ImportExport({ mode }: ImportExportProps) {
     const headerRow = data[headerIdx].map(c => c?.toString().toLowerCase() || '');
     const rows = data.slice(headerIdx + 1);
     
-    // Dynamic column mapping
-    const findCol = (keywords: string[]) => headerRow.findIndex(h => keywords.some(k => h.includes(k)));
+    // Dynamic column mapping with preference for exact/better matches
+    const findCol = (keywords: string[]) => {
+      // First pass: look for more specific matches
+      for (const k of keywords) {
+        const idx = headerRow.findIndex(h => h.trim() === k.toLowerCase());
+        if (idx !== -1) return idx;
+      }
+      // Second pass: starts with
+      for (const k of keywords) {
+        const idx = headerRow.findIndex(h => h.trim().startsWith(k.toLowerCase()));
+        if (idx !== -1) return idx;
+      }
+      // Third pass: includes
+      return headerRow.findIndex(h => keywords.some(k => h.includes(k)));
+    };
     
     const colIdx = {
-      series: findCol(['ký hiệu', 'số hiệu']),
-      invoiceNum: findCol(['số hóa đơn', 'số hđ', 'số hiệu']),
-      date: findCol(['ngày']),
-      customer: findCol(['tên khách hàng', 'khách hàng']),
-      company: findCol(['tên đơn vị']),
-      customerCard: findCol(['cccd', 'số thẻ', 'passport']),
+      series: findCol(['ký hiệu hóa đơn', 'ký hiệu']),
+      invoiceNum: findCol(['số hóa đơn', 'số hđ']),
+      date: findCol(['ngày, tháng', 'ngày lập', 'ngày']),
+      customerName: findCol(['tên khách hàng', 'khách hàng']),
+      customerCode: findCol(['mã khách hàng', 'mã kh']),
+      company: findCol(['tên đơn vị', 'đơn vị']),
+      customerCard: findCol(['cccd', 'số thẻ', 'passport', 'số cmt']),
       address: findCol(['địa chỉ']),
-      itemCode: findCol(['mã hàng', 'mã số']),
-      itemName: findCol(['tên hàng', 'tên sản phẩm']),
+      itemCode: findCol(['mã hàng chi tiết', 'mã hàng']),
+      itemName: findCol(['tên hàng chi tiết', 'tên hàng', 'tên sản phẩm']),
       unit: findCol(['đvt', 'đơn vị tính']),
       qty: findCol(['số lượng', 'sl']),
       price: findCol(['đơn giá']),
       total: findCol(['thành tiền', 'tổng cộng'])
     };
+
+    setLogs(prev => [...prev, { 
+      msg: `Phát hiện các cột: Số HĐ(${colIdx.invoiceNum}), Khách hàng(${colIdx.customerName}), CCCD(${colIdx.customerCard})`, 
+      type: 'info' 
+    }]);
 
     if (colIdx.invoiceNum === -1 || colIdx.qty === -1) {
        setLogs(prev => [...prev, { msg: 'Không tìm thấy các cột bắt buộc (Số hóa đơn, Số lượng).', type: 'error' }]);
@@ -345,23 +342,37 @@ export default function ImportExport({ mode }: ImportExportProps) {
     const importDate = new Date().toISOString().split('T')[0];
 
     rows.forEach(row => {
+      // Prioritize Ký hiệu + Số if both available
       const rawSeries = colIdx.series !== -1 ? row[colIdx.series]?.toString().trim() : '';
       const rawNum = row[colIdx.invoiceNum]?.toString().trim();
-      const invoiceNum = rawSeries ? `${rawSeries}/${rawNum}` : rawNum;
+      
+      if (!rawNum) return;
+      
+      // If series is already present in rawNum (sometimes people put "AA/123" in number col), don't duplicate
+      const invoiceNum = rawSeries && !rawNum.includes(rawSeries) ? `${rawSeries}/${rawNum}` : rawNum;
       
       const quantity = parseVnNumber(row[colIdx.qty], true);
       const total = colIdx.total !== -1 ? parseVnNumber(row[colIdx.total], false) : (quantity * (colIdx.price !== -1 ? parseVnNumber(row[colIdx.price], false) : 0));
       
-      // Allow rows with quantity 0 if total is non-zero (fees, discounts)
-      if (!invoiceNum || (quantity === 0 && total === 0)) return; 
+      // Basic validation
+      if (quantity === 0 && total === 0) return; 
       
       let rawDate = (colIdx.date !== -1 ? row[colIdx.date] : '').toString().trim();
+      if (!rawDate && items.length > 0) {
+        // Handle merged cells for invoice metadata in some report formats
+        const last = items[items.length - 1];
+        if (last.invoiceNumber === invoiceNum) {
+          rawDate = last.invoiceDate || '';
+        }
+      }
+
       let invoiceDate = rawDate;
       if (rawDate.includes('/')) {
         const datePart = rawDate.split(' ')[0];
         const parts = datePart.split('/');
         if (parts.length === 3) {
-          const [d, m, y] = parts;
+          let [d, m, y] = parts;
+          if (y.length === 2) y = (parseInt(y) > 50 ? '19' : '20') + y;
           invoiceDate = `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
         }
       } else if (rawDate.includes('-')) {
@@ -369,16 +380,36 @@ export default function ImportExport({ mode }: ImportExportProps) {
         if (parts.length === 3) {
           if (parts[0].length === 4) invoiceDate = rawDate.split(' ')[0]; // YYYY-MM-DD
           else {
-            const [d, m, y] = parts;
+            let [d, m, y] = parts;
+            if (y.length === 2) y = (parseInt(y) > 50 ? '19' : '20') + y;
             invoiceDate = `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
           }
         }
       }
 
-      const customer = (colIdx.customer !== -1 && row[colIdx.customer]?.toString().trim()) 
+      // Customer name: Prefer Name (H) > Company (I) > fallback Code (G)
+      let customer = (colIdx.customerName !== -1 && row[colIdx.customerName]?.toString().trim())
                     || (colIdx.company !== -1 && row[colIdx.company]?.toString().trim())
-                    || 'Khách lẻ';
-      const customerCard = colIdx.customerCard !== -1 ? (row[colIdx.customerCard]?.toString().trim() || '') : '';
+                    || (colIdx.customerCode !== -1 && row[colIdx.customerCode]?.toString().trim());
+
+      // Handle merged cells for customer name
+      if (!customer && items.length > 0) {
+        const last = items[items.length - 1];
+        if (last.invoiceNumber === invoiceNum) {
+          customer = last.customer;
+        }
+      }
+      
+      if (!customer) customer = 'Khách lẻ';
+                    
+      let customerCard = colIdx.customerCard !== -1 ? (row[colIdx.customerCard]?.toString().trim() || '') : '';
+      if (!customerCard && items.length > 0) {
+        const last = items[items.length - 1];
+        if (last.invoiceNumber === invoiceNum) {
+          customerCard = last.customerCard || '';
+        }
+      }
+
       const address = colIdx.address !== -1 ? (row[colIdx.address]?.toString().trim() || '') : '';
       const itemCode = colIdx.itemCode !== -1 ? (row[colIdx.itemCode]?.toString().trim() || 'KHONG-MA') : 'KHONG-MA';
       const itemName = colIdx.itemName !== -1 ? (row[colIdx.itemName]?.toString().trim() || 'Hàng hóa') : 'Hàng hóa';
