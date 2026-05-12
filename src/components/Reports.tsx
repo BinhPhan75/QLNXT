@@ -27,6 +27,10 @@ export default function Reports({ mode }: ReportsProps) {
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
 
+  // Pagination
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(50);
+  
   const parseItemDate = (dateStr: string) => {
     // Expected formats: YYYY-MM-DD or DD/MM/YYYY
     if (!dateStr) return 0;
@@ -161,6 +165,20 @@ export default function Reports({ mode }: ReportsProps) {
     }
     return filteredData;
   }, [filteredData, revenueRows, mode, reportType, viewMode]);
+
+  // Pagination Logic
+  const dataToPaginate = viewMode === 'TRANSACTION' ? filteredDataDisplay : invoices;
+  const totalPages = Math.ceil(dataToPaginate.length / pageSize);
+  const startIndex = (currentPage - 1) * pageSize;
+  const paginatedData = filteredDataDisplay.slice(startIndex, startIndex + pageSize);
+  const paginatedInvoices = invoices.slice(startIndex, startIndex + pageSize);
+
+  const handlePageChange = (newPage: number) => {
+    if (newPage >= 1 && newPage <= totalPages) {
+      setCurrentPage(newPage);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  };
 
   const handleExport = () => {
     let exportData: any[] = [];
@@ -501,6 +519,73 @@ export default function Reports({ mode }: ReportsProps) {
           </div>
         </div>
 
+        <div className="bg-slate-50 border-b border-slate-100 p-3 flex flex-wrap items-center justify-between gap-4">
+          <div className="flex items-center gap-4">
+            <p className="text-xs font-bold text-slate-500 uppercase tracking-widest">
+              Hiển thị: <span className="text-slate-900">{startIndex + 1} - {Math.min(startIndex + pageSize, dataToPaginate.length)}</span> của <span className="text-blue-600">{dataToPaginate.length}</span> {viewMode === 'TRANSACTION' ? 'giao dịch' : 'hóa đơn'}
+            </p>
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Số dòng:</span>
+              <select 
+                value={pageSize}
+                onChange={(e) => {
+                  setPageSize(Number(e.target.value));
+                  setCurrentPage(1);
+                }}
+                className="text-xs font-bold text-slate-600 bg-white border border-slate-200 rounded-lg px-2 py-1 outline-none focus:ring-2 focus:ring-blue-500/10"
+              >
+                <option value={50}>50 bản ghi</option>
+                <option value={100}>100 bản ghi</option>
+                <option value={200}>200 bản ghi</option>
+                <option value={300}>300 bản ghi</option>
+                <option value={500}>500 bản ghi</option>
+              </select>
+            </div>
+          </div>
+
+          {totalPages > 1 && (
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => handlePageChange(currentPage - 1)}
+                disabled={currentPage === 1}
+                className="px-2 py-1 text-[10px] font-bold text-slate-500 disabled:opacity-30 hover:bg-white rounded border border-slate-200 transition-all cursor-pointer"
+              >
+                Trước
+              </button>
+              <div className="flex items-center gap-1">
+                {[...Array(Math.min(5, totalPages))].map((_, i) => {
+                  let pageNum: number;
+                  if (totalPages <= 5) pageNum = i + 1;
+                  else if (currentPage <= 3) pageNum = i + 1;
+                  else if (currentPage >= totalPages - 2) pageNum = totalPages - 4 + i;
+                  else pageNum = currentPage - 2 + i;
+
+                  return (
+                    <button
+                      key={pageNum}
+                      onClick={() => handlePageChange(pageNum)}
+                      className={`w-6 h-6 flex items-center justify-center rounded text-[10px] font-black transition-all cursor-pointer ${
+                        currentPage === pageNum 
+                          ? 'bg-slate-900 text-white shadow-sm' 
+                          : 'text-slate-500 hover:bg-white border border-transparent hover:border-slate-200'
+                      }`}
+                    >
+                      {pageNum}
+                    </button>
+                  );
+                })}
+              </div>
+              <button
+                onClick={() => handlePageChange(currentPage + 1)}
+                disabled={currentPage === totalPages}
+                className="px-2 py-1 text-[10px] font-bold text-slate-500 disabled:opacity-30 hover:bg-white rounded border border-slate-200 transition-all cursor-pointer"
+              >
+                Tiếp
+              </button>
+            </div>
+          )}
+        </div>
+
         <div className="overflow-x-auto rounded-xl border border-slate-200">
           <table className={`w-full text-left border-collapse ${mode === 'REVENUE' && reportType === 'SELL' ? 'min-w-[1100px]' : 'min-w-[950px]'}`}>
             {reportType === 'STOCK' ? (
@@ -657,7 +742,7 @@ export default function Reports({ mode }: ReportsProps) {
                         </div>
                       </td>
                     </tr>
-                  ) : filteredDataDisplay.length === 0 && (
+                  ) : filteredDataDisplay.length === 0 ? (
                     <tr>
                       <td colSpan={mode === 'REVENUE' ? 13 : 10} className="px-6 py-12 text-center">
                         <div className="bg-slate-50 border border-slate-200 p-6 rounded-2xl text-center">
@@ -680,8 +765,7 @@ export default function Reports({ mode }: ReportsProps) {
                         </div>
                       </td>
                     </tr>
-                  )}
-                  {filteredDataDisplay.length > 0 && filteredDataDisplay.map((row: any) => {
+                  ) : paginatedData.map((row: any) => {
                       if (mode === 'REVENUE' && reportType === 'SELL') {
                         const isExpanded = expandedRevenueKey === row.key;
                         return (
@@ -789,51 +873,60 @@ export default function Reports({ mode }: ReportsProps) {
                       );
                     })}
                 </tbody>
-                {filteredDataDisplay.length > 0 && (
+                {paginatedData.length > 0 && (
                   <tfoot className="border-t-2 border-slate-200">
                     {mode === 'REVENUE' ? (
                       <tr className="bg-slate-50 font-bold text-[11px] text-slate-900 border-t border-slate-300">
-                        <td colSpan={7} className="px-2 py-4 text-right uppercase text-slate-500">Tổng cộng:</td>
+                        <td colSpan={7} className="px-2 py-4 text-right uppercase text-slate-500">Tổng cộng (Trang {currentPage}):</td>
                         <td className="px-2 py-4 text-center">
-                          {formatQuantity(filteredDataDisplay.reduce((sum: number, r: any) => sum + (Number(r.quantity) || 0), 0))}
+                          {formatQuantity(paginatedData.reduce((sum: number, r: any) => sum + (Number(r.quantity) || 0), 0))}
                         </td>
                         <td className="px-2 py-4"></td>
-                        <td className="px-2 py-4 text-right text-slate-900 whitespace-nowrap">
-                          {formatCurrency(filteredDataDisplay.reduce((sum: number, r: any) => sum + (Number(r.itemTotal) || 0), 0))}
-                        </td>
-                        <td className="px-2 py-4 text-right text-green-600 whitespace-nowrap">
-                          {formatCurrency(filteredDataDisplay.reduce((sum: number, r: any) => sum + (Number(r.laborTotal) || 0), 0))}
-                        </td>
-                        <td className="px-2 py-4 text-right text-red-500 whitespace-nowrap">
-                          {formatCurrency(filteredDataDisplay.reduce((sum: number, r: any) => sum + (Number(r.discountTotal) || 0), 0))}
-                        </td>
-                        <td className="px-2 py-4 text-right font-bold text-blue-700 text-sm whitespace-nowrap">
-                          {formatCurrency(filteredDataDisplay.reduce((sum: number, r: any) => sum + (Number(r.finalTotal) || 0), 0))}
-                        </td>
+                        <td className="px-2 py-4 text-right">{formatCurrency(paginatedData.reduce((sum: number, r: any) => sum + (Number(r.itemTotal) || 0), 0))}</td>
+                        <td className="px-2 py-4 text-right text-green-600">{formatCurrency(paginatedData.reduce((sum: number, r: any) => sum + (Number(r.laborTotal) || 0), 0))}</td>
+                        <td className="px-2 py-4 text-right text-red-500">{formatCurrency(paginatedData.reduce((sum: number, r: any) => sum + (Number(r.discountTotal) || 0), 0))}</td>
+                        <td className="px-2 py-4 text-right text-blue-700">{formatCurrency(paginatedData.reduce((sum: number, r: any) => sum + (Number(r.finalTotal) || 0), 0))}</td>
                       </tr>
                     ) : (
-                      <tr className="bg-slate-50 font-bold text-[11px] text-slate-900 border-t border-slate-300">
-                        <td colSpan={6} className="px-2 py-4 text-right uppercase text-slate-500">Tổng cộng:</td>
-                        <td></td>
-                        <td className="px-2 py-4 text-center">
-                          {formatQuantity(filteredDataDisplay.reduce((sum: number, r: any) => sum + (Number(r.quantity) || 0), 0))}
-                        </td>
+                      <tr className="bg-slate-50 font-bold text-xs text-slate-900 border-t border-slate-300">
+                        <td colSpan={7} className="px-6 py-4 text-right uppercase text-slate-500">Tổng cộng (Trang {currentPage}):</td>
+                        <td className="px-2 py-4 text-center">{formatQuantity(paginatedData.reduce((sum: number, r: any) => sum + (Number(r.quantity) || 0), 0))}</td>
                         <td className="px-2 py-4"></td>
-                        <td className="px-2 py-4 text-right font-bold whitespace-nowrap">
-                          {formatCurrency(filteredDataDisplay.reduce((sum: number, r: any) => sum + (Number(r.total) || 0), 0))}
-                        </td>
+                        <td className="px-2 py-4 text-right">{formatCurrency(paginatedData.reduce((sum: number, r: any) => sum + (Number(r.total) || 0), 0))}</td>
                         {reportType === 'SELL' && (
                           <>
-                            <td className="px-2 py-4 text-right text-red-500 whitespace-nowrap">
-                              {formatCurrency(filteredDataDisplay.reduce((sum: number, r: any) => sum + (Number(r.cogs) || 0), 0))}
-                            </td>
-                            <td className="px-2 py-4 text-right text-green-600 whitespace-nowrap">
-                              {formatCurrency(filteredDataDisplay.reduce((sum: number, r: any) => sum + ((Number(r.total) || 0) - (Number(r.cogs) || 0)), 0))}
-                            </td>
+                            <td className="px-2 py-4 text-right text-red-500">{formatCurrency(paginatedData.reduce((sum: number, r: any) => sum + (Number(r.cogs) || 0), 0))}</td>
+                            <td className="px-2 py-4 text-right text-green-600">{formatCurrency(paginatedData.reduce((sum: number, r: any) => sum + ((Number(r.total) || 0) - (Number(r.cogs) || 0)), 0))}</td>
                           </>
                         )}
                       </tr>
                     )}
+                    {/* Grand Total Row */}
+                    <tr className="bg-blue-50/50 font-black text-[12px] text-blue-900 border-t-2 border-blue-100">
+                      <td colSpan={7} className="px-2 py-4 text-right uppercase text-blue-600/70">Tổng kết tất cả ({filteredDataDisplay.length}):</td>
+                      <td className="px-2 py-4 text-center">
+                        {formatQuantity(filteredDataDisplay.reduce((sum: number, r: any) => sum + (Number(r.quantity) || 0), 0))}
+                      </td>
+                      <td className="px-2 py-4"></td>
+                      {mode === 'REVENUE' ? (
+                        <>
+                          <td className="px-2 py-4 text-right">{formatCurrency(filteredDataDisplay.reduce((sum: number, r: any) => sum + (Number(r.itemTotal) || 0), 0))}</td>
+                          <td className="px-2 py-4 text-right">{formatCurrency(filteredDataDisplay.reduce((sum: number, r: any) => sum + (Number(r.laborTotal) || 0), 0))}</td>
+                          <td className="px-2 py-4 text-right">{formatCurrency(filteredDataDisplay.reduce((sum: number, r: any) => sum + (Number(r.discountTotal) || 0), 0))}</td>
+                          <td className="px-2 py-4 text-right text-blue-900 border-l border-blue-100">{formatCurrency(filteredDataDisplay.reduce((sum: number, r: any) => sum + (Number(r.finalTotal) || 0), 0))}</td>
+                        </>
+                      ) : (
+                        <>
+                          <td className="px-2 py-4 text-right">{formatCurrency(filteredDataDisplay.reduce((sum: number, r: any) => sum + (Number(r.total) || 0), 0))}</td>
+                          {reportType === 'SELL' && (
+                            <>
+                              <td className="px-2 py-4 text-right text-red-600">{formatCurrency(filteredDataDisplay.reduce((sum: number, r: any) => sum + (Number(r.cogs) || 0), 0))}</td>
+                              <td className="px-2 py-4 text-right text-green-700">{formatCurrency(filteredDataDisplay.reduce((sum: number, r: any) => sum + ((Number(r.total) || 0) - (Number(r.cogs) || 0)), 0))}</td>
+                            </>
+                          )}
+                        </>
+                      )}
+                    </tr>
                   </tfoot>
                 )}
               </>
@@ -865,7 +958,7 @@ export default function Reports({ mode }: ReportsProps) {
                       </td>
                     </tr>
                   ) : (
-                    invoices.map((inv) => (
+                    paginatedInvoices.map((inv) => (
                       <React.Fragment key={inv.number}>
                         <tr 
                           onClick={() => setExpandedInvoice(expandedInvoice === inv.number ? null : inv.number)}
@@ -956,9 +1049,25 @@ export default function Reports({ mode }: ReportsProps) {
                           </tr>
                         )}
                       </React.Fragment>
-                    )
-                  ))}
+                    ))
+                  )}
                 </tbody>
+                {paginatedInvoices.length > 0 && (
+                  <tfoot className="border-t-2 border-slate-200">
+                    <tr className="bg-slate-50 font-bold text-xs text-slate-900 border-t border-slate-300">
+                      <td colSpan={4} className="px-6 py-4 text-right uppercase text-slate-500">Tổng cộng (Trang {currentPage}):</td>
+                      <td className="px-6 py-4">{paginatedInvoices.reduce((sum, inv) => sum + inv.items, 0)} mặt hàng</td>
+                      <td className="px-6 py-4 text-blue-600">{formatCurrency(paginatedInvoices.reduce((sum, inv) => sum + inv.total, 0))}</td>
+                      <td className="px-6 py-4"></td>
+                    </tr>
+                    <tr className="bg-blue-50/50 font-black text-sm text-blue-900 border-t-2 border-blue-100">
+                      <td colSpan={4} className="px-6 py-4 text-right uppercase text-blue-600/70">Tổng kết tất cả ({invoices.length}):</td>
+                      <td className="px-6 py-4">{invoices.reduce((sum, inv) => sum + inv.items, 0)} mặt hàng</td>
+                      <td className="px-6 py-4 text-blue-900">{formatCurrency(invoices.reduce((sum, inv) => sum + inv.total, 0))}</td>
+                      <td className="px-6 py-4"></td>
+                    </tr>
+                  </tfoot>
+                )}
               </>
             )}
           </table>
