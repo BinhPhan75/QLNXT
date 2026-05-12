@@ -355,8 +355,8 @@ export default function ImportExport({ mode }: ImportExportProps) {
       
       if (!rawNum) return;
       
-      // Final formatting: Ký hiệu/Số
-      const invoiceNum = rawSeries && !rawNum.includes(rawSeries) && rawSeries.length > 1 ? `${rawSeries}/${rawNum}` : rawNum;
+      // Use only the invoice number, removing any series prefix
+      const invoiceNum = rawNum.includes('/') ? rawNum.split('/').pop() || rawNum : rawNum;
       
       const quantity = parseVnNumber(row[colIdx.qty], true);
       const price = colIdx.price !== -1 ? parseVnNumber(row[colIdx.price], false) : 0;
