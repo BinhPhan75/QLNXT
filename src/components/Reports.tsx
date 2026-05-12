@@ -166,12 +166,49 @@ export default function Reports({ mode }: ReportsProps) {
     return filteredData;
   }, [filteredData, revenueRows, mode, reportType, viewMode]);
 
+  const filteredProducts = useMemo(() => {
+    return products.filter(p => 
+      p.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+      p.code.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+  }, [products, searchTerm]);
+
+  const invoices = useMemo(() => {
+    const invMap = new Map<string, { id: string, date: string, customer: string, total: number, items: number, number: string, details: any[] }>();
+    
+    filteredData.forEach(tx => {
+      const key = tx.invoiceNumber || (tx as any).invoice_number || 'NO-NUM';
+      const existing = invMap.get(key);
+      if (existing) {
+        existing.total += tx.total;
+        existing.items += 1;
+        existing.details.push(tx);
+      } else {
+        invMap.set(key, {
+          id: tx.id,
+          number: key,
+          date: tx.invoiceDate || tx.date,
+          customer: tx.customer,
+          total: tx.total,
+          items: 1,
+          details: [tx]
+        });
+      }
+    });
+    return Array.from(invMap.values());
+  }, [filteredData]);
+
   // Pagination Logic
-  const dataToPaginate = viewMode === 'TRANSACTION' ? filteredDataDisplay : invoices;
+  const dataToPaginate = reportType === 'STOCK' 
+    ? filteredProducts 
+    : (viewMode === 'TRANSACTION' ? filteredDataDisplay : invoices);
+
   const totalPages = Math.ceil(dataToPaginate.length / pageSize);
   const startIndex = (currentPage - 1) * pageSize;
+
   const paginatedData = filteredDataDisplay.slice(startIndex, startIndex + pageSize);
   const paginatedInvoices = invoices.slice(startIndex, startIndex + pageSize);
+  const paginatedProducts = filteredProducts.slice(startIndex, startIndex + pageSize);
 
   const handlePageChange = (newPage: number) => {
     if (newPage >= 1 && newPage <= totalPages) {
@@ -236,38 +273,6 @@ export default function Reports({ mode }: ReportsProps) {
     XLSX.utils.book_append_sheet(wb, ws, "Sheet1");
     XLSX.writeFile(wb, filename);
   };
-
-  const filteredProducts = useMemo(() => {
-    return products.filter(p => 
-      p.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-      p.code.toLowerCase().includes(searchTerm.toLowerCase())
-    );
-  }, [products, searchTerm]);
-
-  const invoices = useMemo(() => {
-    const invMap = new Map<string, { id: string, date: string, customer: string, total: number, items: number, number: string, details: any[] }>();
-    
-    filteredData.forEach(tx => {
-      const key = tx.invoiceNumber || (tx as any).invoice_number || 'NO-NUM';
-      const existing = invMap.get(key);
-      if (existing) {
-        existing.total += tx.total;
-        existing.items += 1;
-        existing.details.push(tx);
-      } else {
-        invMap.set(key, {
-          id: tx.id,
-          number: key,
-          date: tx.invoiceDate || tx.date,
-          customer: tx.customer,
-          total: tx.total,
-          items: 1,
-          details: [tx]
-        });
-      }
-    });
-    return Array.from(invMap.values());
-  }, [filteredData]);
 
   const customers = useMemo(() => {
     const set = new Set<string>();
@@ -350,7 +355,7 @@ export default function Reports({ mode }: ReportsProps) {
       <header className="flex flex-col md:flex-row md:items-end justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">
-            {reportType === 'BUY' ? 'Báo Cáo Mua Hàng' : reportType === 'SELL' ? (mode === 'REVENUE' ? 'Báo Cáo Doanh Thu & Tiền công' : 'Báo Cáo Bán Hàng') : 'Báo Cáo Quản lý hàng hóa'}
+            {reportType === 'BUY' ? 'Báo Cáo Mua Hàng' : reportType === 'SELL' ? (mode === 'REVENUE' ? 'Báo Cáo Doanh Thu & Tiền công' : 'Báo Cáo Bán Hàng') : (reportType === 'STOCK' ? 'Báo cáo Tồn kho' : 'Báo Cáo Quản lý hàng hóa')}
           </h1>
           <p className="text-slate-500">
             {mode === 'REVENUE' ? 'Theo dõi doanh thu bán hàng & tiền công chi tiết' : 'Quản lý hàng hóa (970, 9999, 610, Bạc, Công...)'}
@@ -601,14 +606,14 @@ export default function Reports({ mode }: ReportsProps) {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {filteredProducts.length === 0 ? (
+                  {paginatedProducts.length === 0 ? (
                     <tr>
                       <td colSpan={6} className="px-6 py-12 text-center text-slate-400 italic">
                         Không có hàng hóa nào trong kho
                       </td>
                     </tr>
                   ) : (
-                    filteredProducts.map((p) => (
+                    paginatedProducts.map((p) => (
                       <React.Fragment key={p.key}>
                         <tr 
                           onClick={() => setExpandedProduct(expandedProduct === p.key ? null : p.key)}
@@ -685,6 +690,26 @@ export default function Reports({ mode }: ReportsProps) {
                     ))
                   )}
                 </tbody>
+                {filteredProducts.length > 0 && (
+                  <tfoot className="border-t-2 border-slate-200">
+                    <tr className="bg-slate-50 font-bold text-xs text-slate-900 border-t border-slate-300">
+                      <td colSpan={3} className="px-6 py-4 text-right uppercase text-slate-500">Tổng cộng (Trang {currentPage}):</td>
+                      <td className="px-6 py-4">
+                        {formatQuantity(paginatedProducts.reduce((sum, p) => sum + p.currentStock, 0))}
+                      </td>
+                      <td className="px-6 py-4"></td>
+                      <td className="px-6 py-4 text-right text-blue-600">
+                        {formatCurrency(paginatedProducts.reduce((sum, p) => sum + (p.currentStock * p.averageCost), 0))}
+                      </td>
+                    </tr>
+                    <tr className="bg-blue-50/50 font-black text-sm text-blue-900 border-t-2 border-blue-100">
+                      <td colSpan={3} className="px-6 py-4 text-right uppercase text-blue-600/70">Tổng kết tất cả ({filteredProducts.length} mặt hàng):</td>
+                      <td className="px-6 py-4">{formatQuantity(totals.qty)}</td>
+                      <td className="px-6 py-4"></td>
+                      <td className="px-6 py-4 text-right text-blue-900">{formatCurrency(totals.total)}</td>
+                    </tr>
+                  </tfoot>
+                )}
               </>
             ) : viewMode === 'TRANSACTION' ? (
               <>
@@ -698,11 +723,15 @@ export default function Reports({ mode }: ReportsProps) {
                         onChange={() => toggleSelectAll(currentVisibleInvoiceNumbers)}
                       />
                     </th>
-                    <th className="px-2 py-3 whitespace-nowrap">Ngày HĐ</th>
-                    <th className="px-2 py-3 whitespace-nowrap">Số HĐ</th>
-                    <th className="px-3 py-3 min-w-[110px]">Khách hàng</th>
-                    <th className="px-2 py-3">CCCD</th>
-                    <th className="px-2 py-3 min-w-[120px]">Địa chỉ</th>
+                    {reportType !== 'STOCK' && (
+                      <>
+                        <th className="px-2 py-3 whitespace-nowrap">Ngày HĐ</th>
+                        <th className="px-2 py-3 whitespace-nowrap">Số HĐ</th>
+                        <th className="px-3 py-3 min-w-[110px]">Khách hàng</th>
+                        <th className="px-2 py-3">CCCD</th>
+                        <th className="px-2 py-3 min-w-[120px]">Địa chỉ</th>
+                      </>
+                    )}
                     <th className="px-3 py-3 min-w-[140px]">Mặt hàng</th>
                     {mode === 'REVENUE' ? (
                       <>
@@ -829,6 +858,25 @@ export default function Reports({ mode }: ReportsProps) {
                         );
                       }
 
+                      if (reportType === 'STOCK') {
+                        const p = row;
+                        const rowTotal = (p.currentStock || 0) * (p.averageCost || 0);
+                        return (
+                          <tr key={p.key} className="hover:bg-slate-50/50 transition-colors text-[12px]">
+                            <td className="px-2 py-3 text-center">-</td>
+                            <td className="px-3 py-3">
+                              <div className="font-bold text-slate-900 leading-tight">{p.name}</div>
+                              <div className="text-[9px] text-slate-400 font-mono">CODE: {p.code}</div>
+                            </td>
+                            <td className="px-2 py-3 text-center text-slate-900 font-bold whitespace-nowrap">
+                              {formatQuantity(p.currentStock)} {p.unit}
+                            </td>
+                            <td className="px-2 py-3 text-right text-slate-600 whitespace-nowrap">{formatCurrency(p.averageCost)}</td>
+                            <td className="px-2 py-3 text-right font-bold text-blue-700 whitespace-nowrap">{formatCurrency(rowTotal)}</td>
+                          </tr>
+                        );
+                      }
+
                       // Original Row Rendering for NGHIATINGOLD
                       const tx = row;
                       return (
@@ -889,10 +937,18 @@ export default function Reports({ mode }: ReportsProps) {
                       </tr>
                     ) : (
                       <tr className="bg-slate-50 font-bold text-xs text-slate-900 border-t border-slate-300">
-                        <td colSpan={7} className="px-6 py-4 text-right uppercase text-slate-500">Tổng cộng (Trang {currentPage}):</td>
-                        <td className="px-2 py-4 text-center">{formatQuantity(paginatedData.reduce((sum: number, r: any) => sum + (Number(r.quantity) || 0), 0))}</td>
+                        <td colSpan={reportType === 'STOCK' ? 2 : 7} className="px-2 py-4 text-right uppercase text-slate-500">Tổng cộng (Trang {currentPage}):</td>
+                        <td className="px-2 py-4 text-center">
+                          {formatQuantity(paginatedData.reduce((sum: number, r: any) => 
+                            sum + (reportType === 'STOCK' ? (Number(r.currentStock) || 0) : (Number(r.quantity) || 0)), 0
+                          ))}
+                        </td>
                         <td className="px-2 py-4"></td>
-                        <td className="px-2 py-4 text-right">{formatCurrency(paginatedData.reduce((sum: number, r: any) => sum + (Number(r.total) || 0), 0))}</td>
+                        <td className="px-2 py-4 text-right">
+                          {formatCurrency(paginatedData.reduce((sum: number, r: any) => 
+                            sum + (reportType === 'STOCK' ? (Number(r.currentStock) * Number(r.averageCost) || 0) : (Number(r.total) || 0)), 0
+                          ))}
+                        </td>
                         {reportType === 'SELL' && (
                           <>
                             <td className="px-2 py-4 text-right text-red-500">{formatCurrency(paginatedData.reduce((sum: number, r: any) => sum + (Number(r.cogs) || 0), 0))}</td>
@@ -903,9 +959,11 @@ export default function Reports({ mode }: ReportsProps) {
                     )}
                     {/* Grand Total Row */}
                     <tr className="bg-blue-50/50 font-black text-[12px] text-blue-900 border-t-2 border-blue-100">
-                      <td colSpan={7} className="px-2 py-4 text-right uppercase text-blue-600/70">Tổng kết tất cả ({filteredDataDisplay.length}):</td>
+                      <td colSpan={reportType === 'STOCK' ? 2 : 7} className="px-2 py-4 text-right uppercase text-blue-600/70">Tổng kết tất cả ({filteredDataDisplay.length}):</td>
                       <td className="px-2 py-4 text-center">
-                        {formatQuantity(filteredDataDisplay.reduce((sum: number, r: any) => sum + (Number(r.quantity) || 0), 0))}
+                        {formatQuantity(filteredDataDisplay.reduce((sum: number, r: any) => 
+                          sum + (reportType === 'STOCK' ? (Number(r.currentStock) || 0) : (Number(r.quantity) || 0)), 0
+                        ))}
                       </td>
                       <td className="px-2 py-4"></td>
                       {mode === 'REVENUE' ? (
@@ -917,7 +975,11 @@ export default function Reports({ mode }: ReportsProps) {
                         </>
                       ) : (
                         <>
-                          <td className="px-2 py-4 text-right">{formatCurrency(filteredDataDisplay.reduce((sum: number, r: any) => sum + (Number(r.total) || 0), 0))}</td>
+                          <td className="px-2 py-4 text-right">
+                            {formatCurrency(filteredDataDisplay.reduce((sum: number, r: any) => 
+                              sum + (reportType === 'STOCK' ? (Number(r.currentStock) * Number(r.averageCost) || 0) : (Number(r.total) || 0)), 0
+                            ))}
+                          </td>
                           {reportType === 'SELL' && (
                             <>
                               <td className="px-2 py-4 text-right text-red-600">{formatCurrency(filteredDataDisplay.reduce((sum: number, r: any) => sum + (Number(r.cogs) || 0), 0))}</td>

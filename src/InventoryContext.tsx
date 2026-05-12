@@ -75,7 +75,7 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         ]);
         
         if (!Array.isArray(txRes) || !Array.isArray(obRes)) {
-          const errorMsg = txRes.error || obRes.error || "Phản hồi từ server không hợp lệ";
+          const errorMsg = (txRes && txRes.error) || (obRes && obRes.error) || "Phản hồi từ server không hợp lệ";
           console.error("API Error:", errorMsg);
           return;
         }
@@ -83,26 +83,33 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       const mappedTxs = txRes.map((t: any) => {
           let source = (t.source === 'REVENUE' ? 'REVENUE' : 'INVENTORY') as TransactionSource;
           
-          const itemCode = (t.item_code || t.itemCode || '').toString().trim();
-          const itemName = (t.item_name || t.itemName || t.item_code || t.itemCode || '').toString().trim();
+          const itemCode = (t.item_code || t.itemCode || t.product_id || 'KHONG-MA').toString().trim();
+          const itemName = (t.item_name || t.itemName || t.product_name || itemCode).toString().trim();
           const category = t.category || categorizeItem(itemCode, itemName);
           
+          // Enhanced date mapping: sales_app uses created_at, legacy uses date
+          const rawDate = t.invoice_date || t.invoiceDate || t.date || t.created_at || '';
+          const normalizedDate = rawDate.toString();
+
           return {
             ...t,
+            id: t.id.toString(),
+            type: (t.type || 'OUT').toUpperCase(),
             itemCode,
             itemName,
             category,
             invoiceNumber: (t.invoice_number || t.invoiceNumber || '').toString(),
-            invoiceDate: (t.invoice_date || t.invoiceDate || '').toString(),
-            customer: (t.customer || '').toString(),
-            customerCard: (t.customer_card || t.customerCard || '').toString(),
-            address: (t.address || '').toString(),
+            invoiceDate: normalizedDate,
+            date: normalizedDate,
+            customer: (t.customer || t.customer_name || 'Khách lẻ').toString(),
+            customerCard: (t.customer_card || t.customer_cccd || t.customerCard || '').toString(),
+            address: (t.address || t.dia_chi || '').toString(),
             note: (t.note || '').toString(),
             source,
             quantity: parseFloat(t.quantity || 0),
-            price: parseFloat(t.price || 0),
-            discount: parseFloat(t.discount || 0),
-            total: parseFloat(t.total || 0),
+            price: parseFloat(t.price || t.price_per_unit || 0),
+            discount: parseFloat(t.discount || t.chiet_khau || 0),
+            total: parseFloat(t.total || t.total_amount || 0),
             cogs: parseFloat(t.cogs || 0)
           };
         });

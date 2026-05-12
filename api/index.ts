@@ -348,12 +348,78 @@ router.get("/db-status", async (req, res) => {
 // 1. Get all transactions from both tables
 router.get("/transactions", async (req, res) => {
   try {
+    // 1. Trigger Sync from Supabase if configured
+    const supabaseUrl = process.env.VITE_SUPABASE_URL;
+    const supabaseKey = process.env.VITE_SUPABASE_ANON_KEY;
+
+    if (supabaseUrl && supabaseKey) {
+      try {
+        const supabase = getSupabaseClient();
+        const lastRecord = await pool.query('SELECT MAX(created_at) as last_date FROM sales_app_transactions');
+        const lastDate = lastRecord.rows[0].last_date;
+        
+        let syncQuery = supabase.from('transactions').select('*');
+        if (lastDate) {
+          syncQuery = syncQuery.gt('created_at', lastDate instanceof Date ? lastDate.toISOString() : new Date(lastDate).toISOString());
+        }
+        
+        const { data: newData, error: syncError } = await syncQuery.limit(10000);
+        
+        if (!syncError && newData && newData.length > 0) {
+          const syncClient = await pool.connect();
+          try {
+            await syncClient.query('BEGIN');
+            for (const row of newData) {
+              await syncClient.query(`
+                INSERT INTO sales_app_transactions (
+                  id, type, customer_name, customer_cccd, dia_chi, 
+                  product_id, product_name, quantity, unit, 
+                  price_per_unit, total_amount, tien_mat, chuyen_khoan, 
+                  chiet_khau, other_deduction, cong_them, giam_tru,
+                  created_by, created_at
+                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
+                ON CONFLICT (id) DO UPDATE SET
+                  type = EXCLUDED.type, customer_name = EXCLUDED.customer_name,
+                  customer_cccd = EXCLUDED.customer_cccd, dia_chi = EXCLUDED.dia_chi,
+                  product_name = EXCLUDED.product_name, quantity = EXCLUDED.quantity,
+                  unit = EXCLUDED.unit, price_per_unit = EXCLUDED.price_per_unit,
+                  total_amount = EXCLUDED.total_amount, tien_mat = EXCLUDED.tien_mat,
+                  chuyen_khoan = EXCLUDED.chuyen_khoan, 
+                  chiet_khau = EXCLUDED.chiet_khau,
+                  other_deduction = EXCLUDED.other_deduction,
+                  cong_them = EXCLUDED.cong_them,
+                  giam_tru = EXCLUDED.giam_tru,
+                  created_at = EXCLUDED.created_at,
+                  synced_at = NOW()
+              `, [
+                row.id, row.type, row.customer_name, row.customer_cccd, row.dia_chi,
+                row.product_id, row.product_name, row.quantity, row.unit,
+                row.price_per_unit, row.total_amount, row.tien_mat, row.chuyen_khoan,
+                row.chiet_khau || 0, row.other_deduction || 0, row.cong_them || 0, row.giam_tru || 0,
+                row.created_by, row.created_at
+              ]);
+            }
+            await syncClient.query('COMMIT');
+          } catch (e) {
+            await syncClient.query('ROLLBACK');
+          } finally {
+            syncClient.release();
+          }
+        }
+      } catch (syncErr) {
+        console.error("[Sync] Background sync during fetch failed:", syncErr);
+      }
+    }
+
+    // 2. Fetch from all sources
     const pnj = await pool.query('SELECT * FROM nghiatingold_transactions ORDER BY date DESC');
     const rev = await pool.query('SELECT * FROM revenue_transactions ORDER BY date DESC');
+    const sales = await pool.query('SELECT * FROM sales_app_transactions ORDER BY created_at DESC');
     
     const combined = [
       ...pnj.rows.map(r => ({ ...r, source: 'INVENTORY' })),
-      ...rev.rows.map(r => ({ ...r, source: 'REVENUE' }))
+      ...rev.rows.map(r => ({ ...r, source: 'REVENUE' })),
+      ...sales.rows.map(r => ({ ...r, source: 'REVENUE' }))
     ];
     
     res.json(combined);
@@ -390,7 +456,7 @@ router.get("/sales/transactions", async (req, res) => {
         syncQuery = syncQuery.gt('created_at', lastDate.toISOString());
       }
       
-      const { data: newData, error: syncError } = await syncQuery.limit(500);
+      const { data: newData, error: syncError } = await syncQuery.limit(10000);
       
       if (!syncError && newData && newData.length > 0) {
         console.log(`[Sync] Found ${newData.length} new records from Supabase. Saving to local DB...`);
