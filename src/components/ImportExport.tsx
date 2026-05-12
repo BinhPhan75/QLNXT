@@ -316,8 +316,9 @@ export default function ImportExport({ mode }: ImportExportProps) {
       date: findCol(['ngày, tháng', 'ngày lập', 'ngày']),
       customerName: findCol(['tên khách hàng', 'khách hàng']),
       customerCode: findCol(['mã khách hàng', 'mã kh']),
-      company: findCol(['tên đơn vị', 'đơn vị']),
-      customerCard: findCol(['cccd', 'số thẻ', 'passport', 'số cmt']),
+      company: findCol(['tên đơn vị', 'đơn vị']), // Column I
+      taxId: findCol(['mã số thuế', 'mst']), // Column J
+      customerCard: findCol(['cccd', 'số thẻ', 'passport', 'số cmt']), // Column L
       address: findCol(['địa chỉ']),
       itemCode: findCol(['mã hàng chi tiết', 'mã hàng']),
       itemName: findCol(['tên hàng chi tiết', 'tên hàng', 'tên sản phẩm']),
@@ -387,28 +388,38 @@ export default function ImportExport({ mode }: ImportExportProps) {
         }
       }
 
-      // Customer name: Prefer Name (H) > Company (I) > fallback Code (G)
-      let customer = (colIdx.customerName !== -1 && row[colIdx.customerName]?.toString().trim())
-                    || (colIdx.company !== -1 && row[colIdx.company]?.toString().trim())
-                    || (colIdx.customerCode !== -1 && row[colIdx.customerCode]?.toString().trim());
+      // Customer name & ID mapping based on your request:
+      // - Company (Col I) + Tax ID (Col J)
+      // - Individual (Col H) + CCCD (Col L)
+      let customer = '';
+      let customerCard = '';
 
-      // Handle merged cells for customer name
+      const rawCompany = colIdx.company !== -1 ? row[colIdx.company]?.toString().trim() : '';
+      const rawCustomerName = colIdx.customerName !== -1 ? row[colIdx.customerName]?.toString().trim() : '';
+      const rawTaxId = colIdx.taxId !== -1 ? row[colIdx.taxId]?.toString().trim() : '';
+      const rawCCCD = colIdx.customerCard !== -1 ? row[colIdx.customerCard]?.toString().trim() : '';
+
+      if (rawCompany) {
+        customer = rawCompany;
+        customerCard = rawTaxId;
+      } else if (rawCustomerName) {
+        customer = rawCustomerName;
+        customerCard = rawCCCD;
+      } else {
+        // Fallback to customer code if neither name is present
+        customer = (colIdx.customerCode !== -1 && row[colIdx.customerCode]?.toString().trim()) || '';
+      }
+
+      // Handle merged cells for customer metadata
       if (!customer && items.length > 0) {
         const last = items[items.length - 1];
         if (last.invoiceNumber === invoiceNum) {
           customer = last.customer;
+          customerCard = last.customerCard || '';
         }
       }
       
       if (!customer) customer = 'Khách lẻ';
-                    
-      let customerCard = colIdx.customerCard !== -1 ? (row[colIdx.customerCard]?.toString().trim() || '') : '';
-      if (!customerCard && items.length > 0) {
-        const last = items[items.length - 1];
-        if (last.invoiceNumber === invoiceNum) {
-          customerCard = last.customerCard || '';
-        }
-      }
 
       const address = colIdx.address !== -1 ? (row[colIdx.address]?.toString().trim() || '') : '';
       const itemCode = colIdx.itemCode !== -1 ? (row[colIdx.itemCode]?.toString().trim() || 'KHONG-MA') : 'KHONG-MA';
