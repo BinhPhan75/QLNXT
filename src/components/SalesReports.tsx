@@ -209,16 +209,14 @@ export default function SalesReports() {
                     <th className="px-6 py-4">Loại GD</th>
                     <th className="px-6 py-4">Khách hàng & Địa chỉ</th>
                     <th className="px-6 py-4">Mặt hàng</th>
-                    <th className="px-6 py-4 text-rose-500">Chiết khấu</th>
-                    <th className="px-6 py-4 text-emerald-500">Cộng thêm</th>
-                    <th className="px-6 py-4 text-rose-500">Giảm trừ</th>
+                    <th className="px-6 py-4">Điều chỉnh (+/-)</th>
                     <th className="px-6 py-4 text-right">Thành tiền</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 font-medium">
                   {loading ? (
                     <tr>
-                      <td colSpan={8} className="px-6 py-20 text-center">
+                      <td colSpan={6} className="px-6 py-20 text-center">
                         <div className="flex flex-col items-center gap-3">
                           <div className="w-8 h-8 border-4 border-orange-500 border-t-transparent rounded-full animate-spin"></div>
                           <p className="text-slate-400 italic text-sm">Đang truy xuất dữ liệu từ Supabase...</p>
@@ -227,7 +225,7 @@ export default function SalesReports() {
                     </tr>
                   ) : data.length === 0 ? (
                     <tr>
-                      <td colSpan={8} className="px-6 py-20 text-center text-slate-400 italic">
+                      <td colSpan={6} className="px-6 py-20 text-center text-slate-400 italic">
                         Không tìm thấy dữ liệu phù hợp.
                       </td>
                     </tr>
@@ -262,14 +260,24 @@ export default function SalesReports() {
                           </span>
                         </div>
                       </td>
-                      <td className="px-6 py-4 text-rose-600 font-bold">
-                        {Number(item.chiet_khau) > 0 ? `-${formatCurrency(item.chiet_khau)}` : '-'}
-                      </td>
-                      <td className="px-6 py-4 text-emerald-600 font-bold">
-                        {Number(item.cong_them) > 0 ? `+${formatCurrency(item.cong_them)}` : '-'}
-                      </td>
-                      <td className="px-6 py-4 text-rose-600 font-bold">
-                        {Number(item.giam_tru) > 0 ? `-${formatCurrency(item.giam_tru)}` : '-'}
+                      <td className="px-6 py-4">
+                        <div className="flex flex-col gap-0.5">
+                          {Number(item.chiet_khau) > 0 && (
+                            <div className="text-[10px] font-bold text-rose-600">CK: -{formatCurrency(item.chiet_khau)}</div>
+                          )}
+                          {Number(item.cong_them) > 0 && (
+                            <div className="text-[10px] font-bold text-emerald-600">Cộng: +{formatCurrency(item.cong_them)}</div>
+                          )}
+                          {Number(item.giam_tru) > 0 && (
+                            <div className="text-[10px] font-bold text-rose-600">Giảm: -{formatCurrency(item.giam_tru)}</div>
+                          )}
+                          {Number(item.other_deduction) > 0 && (
+                            <div className="text-[10px] font-bold text-rose-600">Khác: -{formatCurrency(item.other_deduction)}</div>
+                          )}
+                          {!(Number(item.chiet_khau) > 0 || Number(item.cong_them) > 0 || Number(item.giam_tru) > 0 || Number(item.other_deduction) > 0) && (
+                            <span className="text-slate-300">-</span>
+                          )}
+                        </div>
                       </td>
                       <td className="px-6 py-4 text-right">
                         <div className="text-[10px] text-slate-400 font-medium mb-1 opacity-50">
