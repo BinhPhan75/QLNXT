@@ -351,12 +351,22 @@ export default function Reports({ mode }: ReportsProps) {
         cogs: 0
       }), { qty: 0, total: 0, cogs: 0 });
     }
+    
+    // For Revenue reports, sum the final totals (including fees/discounts) from the grouped view
+    if (mode === 'REVENUE' && reportType === 'SELL' && viewMode === 'TRANSACTION') {
+      return revenueRows.reduce((acc, curr) => ({
+        qty: acc.qty + (curr.quantity || 0),
+        total: acc.total + (curr.finalTotal || 0),
+        cogs: acc.cogs + (curr.cogs || 0)
+      }), { qty: 0, total: 0, cogs: 0 });
+    }
+
     return filteredData.reduce((acc, curr) => ({
       qty: acc.qty + curr.quantity,
       total: acc.total + curr.total,
       cogs: acc.cogs + (curr.cogs || 0)
     }), { qty: 0, total: 0, cogs: 0 });
-  }, [filteredData, filteredProducts, reportType]);
+  }, [filteredData, filteredProducts, reportType, mode, viewMode, revenueRows]);
 
   const debugStats = useMemo(() => {
     const totalCount = transactions.length;

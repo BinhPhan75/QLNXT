@@ -40,11 +40,12 @@ const parseVnNumber = (val: string | number | undefined, isQuantity: boolean = f
       return parseFloat(str.replace(/,/g, '')) || 0;
     }
     // Single comma: 1,234
-    // If it's a quantity (weight) or a small value, it's likely decimal 1.234
-    if (isQuantity || parseFloat(str.replace(',', '.')) < 500) {
+    // If it's a quantity (weight) or a small value, it's likely decimal 1,234
+    const parts = str.split(',');
+    if (isQuantity || parts[1].length !== 3 || (parseFloat(str.replace(',', '.')) < 1000 && !isQuantity)) {
        return parseFloat(str.replace(',', '.')) || 0;
     }
-    // Otherwise it's likely 1234 (thousands)
+    // Otherwise it's likely 1.234 (thousands)
     return parseFloat(str.replace(/,/g, '')) || 0;
   }
 
@@ -58,33 +59,28 @@ const parseVnNumber = (val: string | number | undefined, isQuantity: boolean = f
       
       if (isQuantity) {
         // For quantity (gold weight), the last part is almost always the decimal part
-        // Example: 1.234.567 -> 1234.567 (1 lượng 2 chỉ 3 phân 4 ly...)
-        return parseFloat(parts.join('') + '.' + last) || 0;
+        return parseFloat(parts.join('').replace(/\./g, '') + '.' + last) || 0;
       }
       
       if (last.length === 3 && parts[parts.length-1].length === 3) {
          // Money/Large numbers: 1.234.000 -> 1234000
-         return parseFloat(parts.join('') + last) || 0;
+         return parseFloat(parts.join('').replace(/\./g, '') + last) || 0;
       }
-      return parseFloat(parts.join('') + '.' + last) || 0;
+      return parseFloat(parts.join('').replace(/\./g, '') + '.' + last) || 0;
     }
     
     // One dot: 1.234
-    // Ambiguous case. 
     if (isQuantity) {
-      // For gold weight, 1.234 is almost certainly 1 point 234.
-      // Even if it's 1,234 items, "one point something" items is impossible, 
-      // but in this gold app, quantity is mostly weight.
-      return parseFloat(str);
+      return parseFloat(str) || 0;
     }
     
     const parts = str.split('.');
     if (parts[1].length === 3) {
        // Price 5.000 -> 5000
-       const val = parseFloat(str.replace('.', ''));
+       const val = parseFloat(str.replace(/\./g, ''));
        if (val >= 1000) return val;
     }
-    return parseFloat(str);
+    return parseFloat(str) || 0;
   }
 
   return parseFloat(str) || 0;
@@ -329,7 +325,7 @@ export default function ImportExport({ mode }: ImportExportProps) {
     };
 
     setLogs(prev => [...prev, { 
-      msg: `Phát hiện các cột: Số HĐ(${colIdx.invoiceNum}), Khách hàng(${colIdx.customerName}), CCCD(${colIdx.customerCard})`, 
+      msg: `Cột phát hiện: Số HĐ(${colIdx.invoiceNum}), Khách hàng(${colIdx.customerName}), Số lượng(${colIdx.qty}), Đơn giá(${colIdx.price}), Thành tiền(${colIdx.total})`, 
       type: 'info' 
     }]);
 
@@ -340,6 +336,7 @@ export default function ImportExport({ mode }: ImportExportProps) {
 
     const items: Omit<Transaction, 'id'>[] = [];
     let successCount = 0;
+    let skipCount = 0;
     const importDate = new Date().toISOString().split('T')[0];
 
     rows.forEach(row => {
@@ -353,7 +350,13 @@ export default function ImportExport({ mode }: ImportExportProps) {
       const invoiceNum = rawSeries && !rawNum.includes(rawSeries) ? `${rawSeries}/${rawNum}` : rawNum;
       
       const quantity = parseVnNumber(row[colIdx.qty], true);
-      const total = colIdx.total !== -1 ? parseVnNumber(row[colIdx.total], false) : (quantity * (colIdx.price !== -1 ? parseVnNumber(row[colIdx.price], false) : 0));
+      const price = colIdx.price !== -1 ? parseVnNumber(row[colIdx.price], false) : 0;
+      
+      // Better total calculation: use value from sheet if present, otherwise calc from price/qty
+      let total = colIdx.total !== -1 ? parseVnNumber(row[colIdx.total], false) : 0;
+      if (total === 0 && quantity !== 0 && price !== 0) {
+        total = quantity * price;
+      }
       
       // Basic validation
       if (quantity === 0 && total === 0) return; 
@@ -429,7 +432,23 @@ export default function ImportExport({ mode }: ImportExportProps) {
       if (itemName.includes('Phần mềm quản lý')) return;
 
       const unit = colIdx.unit !== -1 ? (row[colIdx.unit]?.toString().trim() || 'Chỉ') : 'Chỉ';
-      const price = colIdx.price !== -1 ? parseVnNumber(row[colIdx.price], false) : 0;
+
+      // DUPLICATE CHECK: Prevent re-importing the same item on the same invoice
+      // If we find an existing record with total = 0, we treat it as non-duplicate to allow fixing it with the new import
+      const existingTx = transactions.find(t => 
+        t.invoiceNumber === invoiceNum && 
+        t.itemCode === itemCode && 
+        Math.abs(t.quantity - quantity) < 0.0001 &&
+        (t.invoiceDate === invoiceDate || t.date === invoiceDate) &&
+        t.source === 'REVENUE'
+      );
+      
+      const isDuplicate = existingTx && (existingTx.total > 0 || total === 0);
+
+      if (isDuplicate) {
+        skipCount++;
+        return;
+      }
 
       items.push({
         type: importType,
@@ -453,9 +472,11 @@ export default function ImportExport({ mode }: ImportExportProps) {
 
     if (items.length > 0) {
       importTransactions(items);
-      setLogs(prev => [...prev, { msg: `Đã nhập thành công ${successCount} dòng từ báo cáo chi tiết (Doanh thu).`, type: 'success' }]);
+      let msg = `Đã nhập thành công ${successCount} dòng.`;
+      if (skipCount > 0) msg += ` Bỏ qua ${skipCount} dòng trùng lặp.`;
+      setLogs(prev => [...prev, { msg, type: 'success' }]);
     } else {
-      setLogs(prev => [...prev, { msg: 'Không tìm thấy dữ liệu hợp lệ trong báo cáo chi tiết.', type: 'error' }]);
+      setLogs(prev => [...prev, { msg: skipCount > 0 ? `Tất cả ${skipCount} dòng đã tồn tại, không nhập thêm.` : 'Không tìm thấy dữ liệu hợp lệ.', type: 'error' }]);
     }
   };
 
