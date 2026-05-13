@@ -6,9 +6,20 @@ dotenv.config();
 
 const { Pool } = pg;
 import { createClient } from "@supabase/supabase-js";
+import { GoogleGenAI, Type } from "@google/genai";
 
 const app = express();
 app.use(express.json({ limit: '50mb' }));
+
+// Gemini AI configuration
+const ai = new GoogleGenAI({
+  apiKey: process.env.GEMINI_API_KEY,
+  httpOptions: {
+    headers: {
+      'User-Agent': 'aistudio-build',
+    }
+  }
+});
 
 // Database configuration
 const dbUrl = process.env.DATABASE_URL;
@@ -370,6 +381,57 @@ async function initDb() {
       );
     `);
 
+    // Tier 1: Raw statements (buffer for import)
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS raw_statements (
+        id TEXT PRIMARY KEY,
+        transaction_date TEXT,
+        effective_date TEXT,
+        debit FLOAT,
+        credit FLOAT,
+        balance FLOAT,
+        content TEXT,
+        classification TEXT,
+        customer_name TEXT,
+        customer_card TEXT,
+        item_info TEXT,
+        note TEXT,
+        processed BOOLEAN DEFAULT FALSE,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      );
+    `);
+
+    // Tier 2: Rules for keyword matching
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS bank_mapping_rules (
+        id SERIAL PRIMARY KEY,
+        keyword TEXT NOT NULL,
+        category TEXT NOT NULL,
+        is_active BOOLEAN DEFAULT TRUE,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      );
+    `);
+
+    // Tier 3: Final ledger
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS final_ledger (
+        id TEXT PRIMARY KEY,
+        transaction_date TEXT,
+        effective_date TEXT,
+        debit FLOAT,
+        credit FLOAT,
+        balance FLOAT,
+        content TEXT,
+        classification TEXT,
+        customer_name TEXT,
+        customer_card TEXT,
+        item_info TEXT,
+        note TEXT,
+        method TEXT, -- 'MAPPING' or 'AI' or 'MANUAL'
+        processed_at TIMESTAMPTZ DEFAULT NOW()
+      );
+    `);
+
     // Migration: ensure customer_card exists
     try {
       await client.query(`ALTER TABLE bank_statements ADD COLUMN IF NOT EXISTS customer_card TEXT`);
@@ -670,55 +732,32 @@ router.post("/reset", async (req, res) => {
   }
 });
 
-// 9. Bank Statements
+// 9. Bank Statements (Old - keeping for compatibility if needed, but app uses final-ledger)
 router.get("/bank-statements", async (req, res) => {
   try {
     const result = await pool.query('SELECT * FROM bank_statements ORDER BY transaction_date DESC');
     res.json(result.rows);
   } catch (err: any) {
-    console.error("[API] Get Bank Statements Error:", err.message);
-    res.status(500).json({ error: "Failed to fetch bank statements" });
+    res.status(500).json({ error: err.message });
   }
 });
 
-router.post("/bank-statements/bulk", async (req, res) => {
+// New 3-Tier Workflow Endpoints
+router.post("/api/raw-statements/bulk", async (req, res) => {
   const { items } = req.body;
-  if (!Array.isArray(items) || items.length === 0) {
-    return res.json({ success: true, count: 0 });
-  }
+  if (!items || !Array.isArray(items)) return res.status(400).json({ error: "Invalid data" });
   
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
     for (const item of items) {
       await client.query(
-        `INSERT INTO bank_statements (id, transaction_date, effective_date, debit, credit, balance, content, classification, customer_name, customer_card, item_info, note)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-         ON CONFLICT (id) DO UPDATE SET
-           transaction_date = EXCLUDED.transaction_date, 
-           effective_date = EXCLUDED.effective_date,
-           debit = EXCLUDED.debit,
-           credit = EXCLUDED.credit,
-           balance = EXCLUDED.balance,
-           content = EXCLUDED.content,
-           classification = EXCLUDED.classification,
-           customer_name = EXCLUDED.customer_name,
-           customer_card = EXCLUDED.customer_card,
-           item_info = EXCLUDED.item_info,
-           note = EXCLUDED.note`,
+        `INSERT INTO raw_statements (id, transaction_date, effective_date, debit, credit, balance, content, note)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+         ON CONFLICT (id) DO NOTHING`,
         [
-          item.id,
-          item.transaction_date || item.transactionDate,
-          item.effective_date || item.effectiveDate,
-          item.debit || 0,
-          item.credit || 0,
-          item.balance || 0,
-          item.content,
-          item.classification,
-          item.customer_name || item.customerName,
-          item.customer_card || item.customerCard,
-          item.item_info || item.itemInfo,
-          item.note
+          item.id, item.transactionDate, item.effectiveDate, 
+          item.debit, item.credit, item.balance, item.content, item.note
         ]
       );
     }
@@ -726,68 +765,164 @@ router.post("/bank-statements/bulk", async (req, res) => {
     res.json({ success: true, count: items.length });
   } catch (err: any) {
     await client.query('ROLLBACK');
-    console.error("[API] Bank Bulk Error:", err.message);
-    res.status(500).json({ error: "Failed to save bank statements" });
+    res.status(500).json({ error: err.message });
   } finally {
     client.release();
   }
 });
 
-// 8. Fix Metadata (Migration to new tables)
-router.post("/migrate-source", async (req, res) => {
-  const { from, to } = req.body;
-  const client = await pool.connect();
+router.get("/api/bank-mapping-rules", async (req, res) => {
   try {
-    await client.query('BEGIN');
-    
-    // Check if legacy 'transactions' table exists
-    const checkLegacy = await client.query(`
-      SELECT EXISTS (
-        SELECT FROM information_schema.tables 
-        WHERE table_name = 'transactions'
-      );
-    `);
+    const result = await pool.query('SELECT * FROM bank_mapping_rules WHERE is_active = true ORDER BY keyword ASC');
+    res.json(result.rows);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
 
-    if (checkLegacy.rows[0].exists) {
-      // Migrate from legacy table to specific tables
-      const legacyData = await client.query('SELECT * FROM transactions');
-      for (const row of legacyData.rows) {
-        const source = row.source || (row.id.startsWith('rev') ? 'REVENUE' : 'INVENTORY');
-        const targetTable = getTableName(source);
-        
-        await client.query(
-          `INSERT INTO ${targetTable} (id, type, date, item_code, item_name, unit, quantity, price, discount, total, invoice_number, invoice_date, customer, customer_card, address, note, cogs, source)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
-           ON CONFLICT (id) DO NOTHING`,
-          [row.id, row.type, row.date, row.item_code, row.item_name, row.unit, row.quantity, row.price, row.discount, row.total, row.invoice_number, row.invoice_date, row.customer, row.customer_card, row.address, row.note, row.cogs, source]
-        );
-      }
-      // Optional: DROP TABLE transactions;
-    }
+router.post("/api/bank-mapping-rules", async (req, res) => {
+  const { keyword, category } = req.body;
+  try {
+    const resRule = await pool.query(
+      'INSERT INTO bank_mapping_rules (keyword, category, is_active) VALUES ($1, $2, true) RETURNING id',
+      [keyword, category]
+    );
+    res.json({ success: true, id: resRule.rows[0].id });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
 
-    // Also support intra-table move if needed (though now we have separate tables)
-    // For now just migrate from INVENTORY table to REVENUE table if 'from' and 'to' are specified
-    if (from === 'INVENTORY' && to === 'REVENUE') {
-      const data = await client.query('SELECT * FROM nghiatingold_transactions');
-      for (const row of data.rows) {
-        await client.query(
-          `INSERT INTO revenue_transactions (id, type, date, item_code, item_name, unit, quantity, price, discount, total, invoice_number, invoice_date, customer, customer_card, address, note, cogs, source)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
-           ON CONFLICT (id) DO NOTHING`,
-          [row.id, row.type, row.date, row.item_code, row.item_name, row.unit, row.quantity, row.price, row.discount, row.total, row.invoice_number, row.invoice_date, row.customer, row.customer_card, row.address, row.note, row.cogs, 'REVENUE']
-        );
-        await client.query('DELETE FROM nghiatingold_transactions WHERE id = $1', [row.id]);
-      }
-    }
-
-    await client.query('COMMIT');
+router.delete("/api/bank-mapping-rules/:id", async (req, res) => {
+  try {
+    await pool.query('DELETE FROM bank_mapping_rules WHERE id = $1', [req.params.id]);
     res.json({ success: true });
   } catch (err: any) {
-    await client.query('ROLLBACK');
-    console.error("[API] Migration Error:", err.message);
-    res.status(500).json({ error: "Failed to migrate" });
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post("/api/bank-statements/process-tier", async (req, res) => {
+  const client = await pool.connect();
+  try {
+    // 1. Fetch Mapping Rules
+    const rulesRes = await client.query('SELECT * FROM bank_mapping_rules WHERE is_active = true');
+    const rules = rulesRes.rows;
+
+    // 2. Fetch Unprocessed Raw Statements (limit 500 per run)
+    const rawRes = await client.query('SELECT * FROM raw_statements WHERE processed = false LIMIT 500');
+    const statements = rawRes.rows;
+
+    if (statements.length === 0) return res.json({ count: 0, message: "No new statements" });
+
+    const processedIds: string[] = [];
+    const finalItems: any[] = [];
+    const toProcessWithAI: any[] = [];
+
+    // TIER 1: KEYWORD MAPPING (REGEX)
+    for (const stmt of statements) {
+      let matched = false;
+      for (const rule of rules) {
+        try {
+          const regex = new RegExp(rule.keyword, 'i');
+          if (regex.test(stmt.content)) {
+            finalItems.push({
+              ...stmt,
+              classification: rule.category,
+              method: 'MAPPING'
+            });
+            matched = true;
+            break;
+          }
+        } catch (e) {
+          // Fallback to simple includes if regex is invalid
+          if (stmt.content.toLowerCase().includes(rule.keyword.toLowerCase())) {
+            finalItems.push({
+              ...stmt,
+              classification: rule.category,
+              method: 'MAPPING'
+            });
+            matched = true;
+            break;
+          }
+        }
+      }
+      if (!matched) toProcessWithAI.push(stmt);
+    }
+
+    // TIER 2: BATCH AI PROCESSING (GEMINI)
+    if (toProcessWithAI.length > 0) {
+      const batchSize = 50;
+      for (let i = 0; i < toProcessWithAI.length; i += batchSize) {
+        const chunk = toProcessWithAI.slice(i, i + batchSize);
+        const prompt = `Phân loại ${chunk.length} giao dịch ngân hàng sau đây.
+Nghiệp vụ cho phép: SALE, PURCHASE, CHI PHI VAN HANH, LUONG, THUE, CASH_WITHDRAWAL, CASH_DEPOSIT, KHAC.
+
+Dữ liệu:
+${chunk.map(c => `ID: ${c.id} | Nội dung: ${c.content}`).join('\n')}
+
+Trả về JSON mảng đối tượng: { "id": "...", "classification": "...", "customerName": "...", "itemInfo": "..." }`;
+
+        try {
+          const result = await ai.models.generateContent({
+            model: "gemini-3.1-flash-lite",
+            contents: prompt
+          });
+          const text = result.text;
+          const cleanText = text.replace(/```json|```/g, '').trim();
+          const aiResults = JSON.parse(cleanText);
+
+          for (const item of chunk) {
+            const aiMatch = aiResults.find((r: any) => r.id === item.id);
+            finalItems.push({
+              ...item,
+              classification: aiMatch?.classification || 'KHAC',
+              customer_name: aiMatch?.customerName || null,
+              item_info: aiMatch?.itemInfo || null,
+              method: aiMatch ? 'AI' : 'AI-FAILED'
+            });
+          }
+        } catch (err) {
+          console.error("Gemini Batch Error:", err);
+          for (const item of chunk) {
+            finalItems.push({ ...item, classification: 'KHAC', method: 'AI-FAILED' });
+          }
+        }
+      }
+    }
+
+    // TIER 3: FINALIZE (Write to final_ledger and mark raw as processed)
+    await client.query('BEGIN');
+    for (const item of finalItems) {
+      await client.query(
+        `INSERT INTO final_ledger (id, transaction_date, effective_date, debit, credit, balance, content, classification, customer_name, item_info, method, note)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+         ON CONFLICT (id) DO UPDATE SET classification = EXCLUDED.classification`,
+        [
+          item.id, item.transaction_date, item.effective_date, item.debit, item.credit, item.balance,
+          item.content, item.classification, item.customer_name || null, item.item_info || null,
+          item.method, item.note
+        ]
+      );
+      await client.query('UPDATE raw_statements SET processed = true WHERE id = $1', [item.id]);
+    }
+    await client.query('COMMIT');
+
+    res.json({ success: true, count: finalItems.length });
+  } catch (err: any) {
+    if (client) await client.query('ROLLBACK');
+    res.status(500).json({ error: err.message });
   } finally {
     client.release();
+  }
+});
+
+router.get("/api/final-ledger", async (req, res) => {
+  try {
+    const result = await pool.query('SELECT * FROM final_ledger ORDER BY transaction_date DESC');
+    res.json(result.rows);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
   }
 });
 

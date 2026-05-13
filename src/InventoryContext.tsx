@@ -12,7 +12,8 @@ interface InventoryContextType {
   login: (username: string, pass: string) => boolean;
   logout: () => void;
   importTransactions: (newTransactions: Omit<Transaction, 'id'>[]) => void;
-  importBankStatements: (newStatements: Omit<BankStatement, 'id'>[]) => void;
+  importBankStatements: (newStatements: Omit<BankStatement, 'id'>[]) => Promise<void>;
+  processTieredBankStatements: () => Promise<{ success: boolean; count: number; message?: string }>;
   deleteInvoice: (invoiceNumber: string) => void;
   calculateMonthlyCOGS: (month: number, year: number, sourceFilter?: TransactionSource, itemKeyFilter?: string) => Promise<{ success: boolean; message: string }>;
   getNXTReportData: (itemKey: string, year: number, quarter: number) => {
@@ -71,7 +72,7 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         const [txRes, obRes, bankRes] = await Promise.all([
           fetch('/api/transactions').then(r => r.json()),
           fetch('/api/opening-balances').then(r => r.json()),
-          fetch('/api/bank-statements').then(r => r.json())
+          fetch('/api/final-ledger').then(r => r.json())
         ]);
         
         if (!Array.isArray(txRes) || !Array.isArray(obRes)) {
@@ -349,22 +350,49 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const importBankStatements = async (newItems: Omit<BankStatement, 'id'>[]) => {
     const keyedItems = newItems.map(item => ({ 
       ...item, 
-      id: Math.random().toString(36).substr(2, 9) 
+      id: (item as any).id || `bank-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`
     }));
     
     try {
-      const res = await fetch('/api/bank-statements/bulk', {
+      const res = await fetch('/api/raw-statements/bulk', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ items: keyedItems })
       });
       
       if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
-
-      setBankStatements(prev => [...prev, ...keyedItems]);
+      // We don't update local bankStatements immediately because they need to be processed
     } catch (err) {
       console.error(err);
-      alert("Lỗi khi lưu sao kê ngân hàng lên server.");
+      alert("Lỗi khi lưu sao kê ngân hàng (Bản nháp) lên server.");
+    }
+  };
+
+  const processTieredBankStatements = async () => {
+    try {
+      const res = await fetch('/api/bank-statements/process-tier', { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Lỗi xử lý 3 tầng");
+      
+      // Refresh final ledger
+      const bankRes = await fetch('/api/final-ledger').then(r => r.json());
+      const mappedBank = Array.isArray(bankRes) ? bankRes.map((b: any) => ({
+        ...b,
+        transactionDate: b.transaction_date || b.transactionDate,
+        effectiveDate: b.effective_date || b.effectiveDate,
+        customerName: b.customer_name || b.customerName,
+        customerCard: b.customer_card || b.customerCard,
+        itemInfo: b.item_info || b.itemInfo,
+        debit: parseFloat(b.debit || 0),
+        credit: parseFloat(b.credit || 0),
+        balance: parseFloat(b.balance || 0)
+      })) : [];
+      setBankStatements(mappedBank);
+      
+      return { success: true, count: data.count };
+    } catch (err: any) {
+      console.error(err);
+      return { success: false, count: 0, message: err.message };
     }
   };
 
@@ -775,13 +803,14 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       logout, 
       importTransactions, 
       importBankStatements,
+      processTieredBankStatements,
+      deleteInvoice,
       calculateMonthlyCOGS, 
       getNXTReportData,
       setManualOpeningBalance,
       lockMonth,
       unlockMonth,
       isMonthClosed,
-      deleteInvoice,
       deleteMultipleInvoices,
       resetData 
     }}>

@@ -46,7 +46,18 @@ export interface User {
   username: string;
 }
 
-export type BankClassification = 'PURCHASE' | 'SALE' | 'CASH_WITHDRAWAL' | 'CASH_DEPOSIT' | 'INTEREST' | 'FEE' | 'OTHER';
+export type BankClassification = 
+  | 'PURCHASE' 
+  | 'SALE' 
+  | 'CASH_WITHDRAWAL' 
+  | 'CASH_DEPOSIT' 
+  | 'INTEREST' 
+  | 'FEE' 
+  | 'OTHER'
+  | 'CHI PHI VAN HANH'
+  | 'LUONG'
+  | 'THUE'
+  | 'KHAC';
 
 export interface BankStatement {
   id: string;
