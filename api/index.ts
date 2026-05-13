@@ -35,6 +35,100 @@ function getSupabaseClient() {
   return supabaseClient;
 }
 
+// Global Sync Function to handle Deletions and Updates
+async function performSupabaseSync() {
+  const supabaseUrl = process.env.VITE_SUPABASE_URL;
+  const supabaseKey = process.env.VITE_SUPABASE_ANON_KEY;
+  if (!supabaseUrl || !supabaseKey) return;
+
+  try {
+    const supabase = getSupabaseClient();
+    console.log("[Sync] Starting synchronization with Supabase...");
+
+    // 1. Handle Deletions: Compare IDs
+    const { data: sbIds, error: idsErr } = await supabase.from('transactions').select('id');
+    if (!idsErr && sbIds) {
+      const remoteIds = sbIds.map(r => r.id);
+      if (remoteIds.length > 0) {
+        const delRes = await pool.query(
+          'DELETE FROM sales_app_transactions WHERE id NOT IN (SELECT unnest($1::uuid[]))',
+          [remoteIds]
+        );
+        if (delRes.rowCount && delRes.rowCount > 0) {
+          console.log(`[Sync] Deleted ${delRes.rowCount} orphaned records from local database.`);
+        }
+      } else {
+        // If Supabase is empty, Neon should be empty for sales_app (if desired)
+        const countRes = await pool.query('SELECT count(*) FROM sales_app_transactions');
+        if (parseInt(countRes.rows[0].count) > 0) {
+          await pool.query('DELETE FROM sales_app_transactions');
+          console.log("[Sync] Supabase is empty, cleared local sales_app_transactions.");
+        }
+      }
+    }
+
+    // 2. Handle Updates/New: Fetch recent window (last 2000 records)
+    // Fetching by created_at DESC to get new and recently updated (if created_at is anchor)
+    const { data: recentData, error: dataErr } = await supabase
+      .from('transactions')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .limit(2000);
+
+    if (dataErr) {
+      console.error("[Sync] Supabase data fetch error:", dataErr);
+      return;
+    }
+
+    if (recentData && recentData.length > 0) {
+      const syncClient = await pool.connect();
+      try {
+        await syncClient.query('BEGIN');
+        for (const row of recentData) {
+          await syncClient.query(`
+            INSERT INTO sales_app_transactions (
+              id, type, customer_name, customer_cccd, dia_chi, 
+              product_id, product_name, quantity, unit, 
+              price_per_unit, total_amount, tien_mat, chuyen_khoan, 
+              chiet_khau, other_deduction, cong_them, giam_tru,
+              created_by, created_at
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
+            ON CONFLICT (id) DO UPDATE SET
+              type = EXCLUDED.type, customer_name = EXCLUDED.customer_name,
+              customer_cccd = EXCLUDED.customer_cccd, dia_chi = EXCLUDED.dia_chi,
+              product_id = EXCLUDED.product_id,
+              product_name = EXCLUDED.product_name, quantity = EXCLUDED.quantity,
+              unit = EXCLUDED.unit, price_per_unit = EXCLUDED.price_per_unit,
+              total_amount = EXCLUDED.total_amount, tien_mat = EXCLUDED.tien_mat,
+              chuyen_khoan = EXCLUDED.chuyen_khoan, 
+              chiet_khau = EXCLUDED.chiet_khau,
+              other_deduction = EXCLUDED.other_deduction,
+              cong_them = EXCLUDED.cong_them,
+              giam_tru = EXCLUDED.giam_tru,
+              created_at = EXCLUDED.created_at,
+              synced_at = NOW()
+          `, [
+            row.id, row.type, row.customer_name, row.customer_cccd, row.dia_chi,
+            row.product_id, row.product_name, row.quantity, row.unit,
+            row.price_per_unit, row.total_amount, row.tien_mat, row.chuyen_khoan,
+            row.chiet_khau || 0, row.other_deduction || 0, row.cong_them || 0, row.giam_tru || 0,
+            row.created_by, row.created_at
+          ]);
+        }
+        await syncClient.query('COMMIT');
+        console.log(`[Sync] Upserted ${recentData.length} records to local database.`);
+      } catch (e) {
+        await syncClient.query('ROLLBACK');
+        console.error("[Sync] Bulk upsert failed:", e);
+      } finally {
+        syncClient.release();
+      }
+    }
+  } catch (err) {
+    console.error("[Sync] Fatal sync error:", err);
+  }
+}
+
 // Initialize database tables
 async function initDb() {
   if (!dbUrl) {
@@ -348,80 +442,8 @@ router.get("/db-status", async (req, res) => {
 // 1. Get all transactions from both tables
 router.get("/transactions", async (req, res) => {
   try {
-    // 1. Trigger Sync from Supabase if configured
-    const supabaseUrl = process.env.VITE_SUPABASE_URL;
-    const supabaseKey = process.env.VITE_SUPABASE_ANON_KEY;
-
-      if (supabaseUrl && supabaseKey) {
-        try {
-          const supabase = getSupabaseClient();
-          const lastRecord = await pool.query('SELECT MAX(created_at) as last_date FROM sales_app_transactions');
-          const lastDate = lastRecord.rows[0].last_date;
-          
-          let syncQuery = supabase.from('transactions').select('*');
-          if (lastDate) {
-            // Use gte with an overlap to ensure no records are missed due to same-second timestamps
-            // and use ON CONFLICT to avoid duplicates
-            syncQuery = syncQuery.gte('created_at', lastDate instanceof Date ? lastDate.toISOString() : new Date(lastDate).toISOString());
-          }
-          
-          const { data: newData, error: syncError } = await syncQuery.order('created_at', { ascending: true }).limit(10000);
-          
-          if (syncError) {
-            console.error("[Sync] Supabase fetch error:", syncError);
-          } else if (newData && newData.length > 0) {
-            console.log(`[Sync] Found ${newData.length} potential new records from Supabase...`);
-            const syncClient = await pool.connect();
-            let syncCount = 0;
-            try {
-              await syncClient.query('BEGIN');
-              for (const row of newData) {
-                const res = await syncClient.query(`
-                  INSERT INTO sales_app_transactions (
-                    id, type, customer_name, customer_cccd, dia_chi, 
-                    product_id, product_name, quantity, unit, 
-                    price_per_unit, total_amount, tien_mat, chuyen_khoan, 
-                    chiet_khau, other_deduction, cong_them, giam_tru,
-                    created_by, created_at
-                  ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
-                  ON CONFLICT (id) DO UPDATE SET
-                    type = EXCLUDED.type, customer_name = EXCLUDED.customer_name,
-                    customer_cccd = EXCLUDED.customer_cccd, dia_chi = EXCLUDED.dia_chi,
-                    product_id = EXCLUDED.product_id,
-                    product_name = EXCLUDED.product_name, quantity = EXCLUDED.quantity,
-                    unit = EXCLUDED.unit, price_per_unit = EXCLUDED.price_per_unit,
-                    total_amount = EXCLUDED.total_amount, tien_mat = EXCLUDED.tien_mat,
-                    chuyen_khoan = EXCLUDED.chuyen_khoan, 
-                    chiet_khau = EXCLUDED.chiet_khau,
-                    other_deduction = EXCLUDED.other_deduction,
-                    cong_them = EXCLUDED.cong_them,
-                    giam_tru = EXCLUDED.giam_tru,
-                    created_at = EXCLUDED.created_at,
-                    synced_at = NOW()
-                  WHERE sales_app_transactions.created_at IS DISTINCT FROM EXCLUDED.created_at
-                     OR sales_app_transactions.total_amount IS DISTINCT FROM EXCLUDED.total_amount
-                `, [
-                  row.id, row.type, row.customer_name, row.customer_cccd, row.dia_chi,
-                  row.product_id, row.product_name, row.quantity, row.unit,
-                  row.price_per_unit, row.total_amount, row.tien_mat, row.chuyen_khoan,
-                  row.chiet_khau || 0, row.other_deduction || 0, row.cong_them || 0, row.giam_tru || 0,
-                  row.created_by, row.created_at
-                ]);
-                if (res.rowCount && res.rowCount > 0) syncCount++;
-              }
-              await syncClient.query('COMMIT');
-              console.log(`[Sync] Successfully processed ${newData.length} records. Updated/Inserted ${syncCount} rows.`);
-            } catch (e) {
-              await syncClient.query('ROLLBACK');
-              console.error("[Sync] Transaction failed:", e);
-            } finally {
-              syncClient.release();
-            }
-          }
-        } catch (syncErr) {
-          console.error("[Sync] Background sync during fetch failed:", syncErr);
-        }
-      }
+    // Perform background sync (awaiting it here to ensure data is fresh for the subsequent query)
+    await performSupabaseSync();
 
     // 2. Fetch from all sources
     const pnj = await pool.query('SELECT * FROM nghiatingold_transactions ORDER BY date DESC');
@@ -457,66 +479,8 @@ router.get("/sales/transactions", async (req, res) => {
 
     const supabase = getSupabaseClient();
     
-    // 1. AUTO-SYNC LOGIC: Fetch NEW data from Supabase and save to local Neon DB
-    try {
-      // Find the last record synced locally
-      const lastRecord = await pool.query('SELECT MAX(created_at) as last_date FROM sales_app_transactions');
-      const lastDate = lastRecord.rows[0].last_date;
-      
-      let syncQuery = supabase.from('transactions').select('*');
-      if (lastDate) {
-        syncQuery = syncQuery.gt('created_at', lastDate.toISOString());
-      }
-      
-      const { data: newData, error: syncError } = await syncQuery.limit(10000);
-      
-      if (!syncError && newData && newData.length > 0) {
-        console.log(`[Sync] Found ${newData.length} new records from Supabase. Saving to local DB...`);
-        const syncClient = await pool.connect();
-        try {
-          await syncClient.query('BEGIN');
-          for (const row of newData) {
-            await syncClient.query(`
-              INSERT INTO sales_app_transactions (
-                id, type, customer_name, customer_cccd, dia_chi, 
-                product_id, product_name, quantity, unit, 
-                price_per_unit, total_amount, tien_mat, chuyen_khoan, 
-                chiet_khau, other_deduction, cong_them, giam_tru,
-                created_by, created_at
-              ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
-              ON CONFLICT (id) DO UPDATE SET
-                type = EXCLUDED.type, customer_name = EXCLUDED.customer_name,
-                customer_cccd = EXCLUDED.customer_cccd, dia_chi = EXCLUDED.dia_chi,
-                product_name = EXCLUDED.product_name, quantity = EXCLUDED.quantity,
-                unit = EXCLUDED.unit, price_per_unit = EXCLUDED.price_per_unit,
-                total_amount = EXCLUDED.total_amount, tien_mat = EXCLUDED.tien_mat,
-                chuyen_khoan = EXCLUDED.chuyen_khoan, 
-                chiet_khau = EXCLUDED.chiet_khau,
-                other_deduction = EXCLUDED.other_deduction,
-                cong_them = EXCLUDED.cong_them,
-                giam_tru = EXCLUDED.giam_tru,
-                created_at = EXCLUDED.created_at,
-                synced_at = NOW()
-            `, [
-              row.id, row.type, row.customer_name, row.customer_cccd, row.dia_chi,
-              row.product_id, row.product_name, row.quantity, row.unit,
-              row.price_per_unit, row.total_amount, row.tien_mat, row.chuyen_khoan,
-              row.chiet_khau || 0, row.other_deduction || 0, row.cong_them || 0, row.giam_tru || 0,
-              row.created_by, row.created_at
-            ]);
-          }
-          await syncClient.query('COMMIT');
-        } catch (e) {
-          await syncClient.query('ROLLBACK');
-          console.error("[Sync] Local Save Error:", e);
-        } finally {
-          syncClient.release();
-        }
-      }
-    } catch (syncErr) {
-      console.error("[Sync] Background Sync Error (skipping):", syncErr);
-      // We continue to fetch from local even if sync fails
-    }
+    // 1. AUTO-SYNC LOGIC: Fetch NEW/UPDATED and handle DELETIONS
+    await performSupabaseSync();
 
     // 2. QUERY FROM LOCAL DB (Neon) - Fast and searchable
     let localQuery = `SELECT * FROM sales_app_transactions WHERE 1=1`;
