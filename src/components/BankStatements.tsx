@@ -14,14 +14,14 @@ interface MappingRule {
 }
 
 export default function BankStatements() {
-  const { bankStatements, importBankStatements, processTieredBankStatements } = useInventory();
+  const { bankStatements, rawBankStatements, importBankStatements, processTieredBankStatements } = useInventory();
   const [logs, setLogs] = useState<{ msg: string; type: 'success' | 'error' | 'info' | 'loading' }[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
   const [filterType, setFilterType] = useState<BankClassification | 'ALL'>('ALL');
   const [searchTerm, setSearchSearchTerm] = useState('');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
-  const [activeTab, setActiveTab] = useState<'LEDGER' | 'RULES'>('LEDGER');
+  const [activeTab, setActiveTab] = useState<'ORIGINAL' | 'LEDGER' | 'RULES'>('LEDGER');
   
   // Mapping Rules State
   const [rules, setRules] = useState<MappingRule[]>([]);
@@ -31,6 +31,34 @@ export default function BankStatements() {
   useEffect(() => {
     fetchRules();
   }, []);
+
+  const handleProcessTiered = async () => {
+    setIsProcessing(true);
+    setLogs([{ msg: 'Bắt đầu quá trình phân loại 3 tầng (Keyword Mapping -> Gemini AI)...', type: 'loading' }]);
+    
+    try {
+      const result = await processTieredBankStatements();
+      if (result.success) {
+        setLogs(prev => [...prev.filter(l => l.type !== 'loading'), { 
+          msg: `Xử lý hoàn tất! Đã phân loại được ${result.count} giao dịch mới.`, 
+          type: 'success' 
+        }]);
+        setActiveTab('LEDGER');
+      } else {
+        setLogs(prev => [...prev.filter(l => l.type !== 'loading'), { 
+          msg: `Lỗi xử lý: ${result.message}`, 
+          type: 'error' 
+        }]);
+      }
+    } catch (err: any) {
+      setLogs(prev => [...prev.filter(l => l.type !== 'loading'), { 
+        msg: `Lỗi hệ thống: ${err.message}`, 
+        type: 'error' 
+      }]);
+    } finally {
+      setIsProcessing(false);
+    }
+  };
 
   const fetchRules = async () => {
     try {
@@ -82,24 +110,23 @@ export default function BankStatements() {
   };
 
   const handleExport = () => {
-    const dataToExport = filteredData.map(item => ({
-      'Ngày GD': item.transactionDate,
-      'Ngày HL': item.effectiveDate,
-      'Nghiệp vụ': getClassificationLabel(item.classification).text,
-      'Khách hàng': item.customerName || '',
-      'Số CCCD': item.customerCard || '',
-      'Thông tin mặt hàng': item.itemInfo || '',
+    const dataToExport = (activeTab === 'ORIGINAL' ? rawBankStatements : displayData).map(item => ({
+      'Ngày GD': item.transactionDate || item.transaction_date,
+      'Ngày HL': item.effectiveDate || item.effective_date,
+      'Nghiệp vụ': activeTab === 'ORIGINAL' ? 'Chưa phân loại' : getClassificationLabel(item.classification).text,
+      'Khách hàng': item.customerName || item.customer_name || '',
+      'Thông tin mặt hàng': item.itemInfo || item.item_info || '',
       'Nội dung': item.content,
       'Số tiền ghi nợ (Debit)': item.debit,
       'Số tiền ghi có (Credit)': item.credit,
-      'Phương thức': (item as any).method || 'AI',
+      'Phương thức': item.method || 'AI',
       'Chứng từ': item.note || ''
     }));
 
     const ws = XLSX.utils.json_to_sheet(dataToExport);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Sao kê');
-    XLSX.writeFile(wb, `Sao_ke_ngan_hang_3tang_${Date.now()}.xlsx`);
+    XLSX.writeFile(wb, `Sao_ke_ngan_hang_${activeTab}_${Date.now()}.xlsx`);
   };
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -172,51 +199,35 @@ export default function BankStatements() {
         credit: parseAmount(row[4]?.toString() || ''),
         balance: parseAmount(row[5]?.toString() || ''),
         content: row[6]?.toString().trim() || '',
-        classification: 'OTHER',
         note: docNo
       });
     });
 
     if (rawItems.length === 0) throw new Error("Không tìm thấy dữ liệu giao dịch hợp lệ.");
 
-    setLogs(prev => [...prev, { msg: `Đã tìm thấy ${rawItems.length} giao dịch. Đang lưu vào hàng chờ xử lý...`, type: 'loading' }]);
+    setLogs(prev => [...prev, { msg: `Đã tìm thấy ${rawItems.length} giao dịch. Đang lưu Bản Nguyên Gốc (Tầng 1)...`, type: 'loading' }]);
     
     // Step 1: Upload to raw table
     await importBankStatements(rawItems);
     
-    setLogs(prev => [...prev.filter(l => l.type !== 'loading'), { 
-      msg: `Đã tải lên hàng chờ. Bắt đầu xử lý 3 tầng (Mapping Rules -> Gemini AI)...`, 
-      type: 'loading' 
-    }]);
-
-    // Step 2 & 3: Trigger backend tiered processing
-    const result = await processTieredBankStatements();
-    
-    if (result.success) {
-      setLogs(prev => [...prev.filter(l => l.type !== 'loading'), { 
-        msg: `Xử lý hoàn tất! Đã phân loại được ${result.count} giao dịch mới.`, 
-        type: 'success' 
-      }]);
-    } else {
-      setLogs(prev => [...prev.filter(l => l.type !== 'loading'), { 
-        msg: `Lỗi xử lý: ${result.message}`, 
-        type: 'error' 
-      }]);
-    }
-    
+    setLogs([{ msg: `Đã nhập liệu thành công ${rawItems.length} dòng vào Bản Nguyên Gốc. Click "Phân loại nghiệp vụ" để tiếp tục.`, type: 'success' }]);
     setIsProcessing(false);
+    setActiveTab('ORIGINAL');
   };
 
-  const filteredData = useMemo(() => {
-    const data = bankStatements.filter(item => {
-      const matchesFilter = filterType === 'ALL' || item.classification === filterType;
+  const displayData = useMemo(() => {
+    const list = activeTab === 'ORIGINAL' ? rawBankStatements : bankStatements;
+    
+    const data = list.filter(item => {
+      const classification = item.classification || 'KHAC';
+      const matchesFilter = activeTab === 'ORIGINAL' || filterType === 'ALL' || classification === filterType;
       const matchesSearch = (item.content || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-                          (item.customerName || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-                          (item.itemInfo || '').toLowerCase().includes(searchTerm.toLowerCase());
+                          (item.customerName || item.customer_name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+                          (item.itemInfo || item.item_info || '').toLowerCase().includes(searchTerm.toLowerCase());
       
       let matchesDate = true;
       if (startDate || endDate) {
-        const itemTime = parseDate(item.transactionDate);
+        const itemTime = parseDate(item.transactionDate || item.transaction_date);
         if (startDate) {
           const start = new Date(startDate).setHours(0,0,0,0);
           if (itemTime < start) matchesDate = false;
@@ -230,14 +241,14 @@ export default function BankStatements() {
       return matchesFilter && matchesSearch && matchesDate;
     });
 
-    return data.sort((a, b) => parseDate(a.transactionDate) - parseDate(b.transactionDate));
-  }, [bankStatements, filterType, searchTerm, startDate, endDate]);
+    return data.sort((a, b) => parseDate(a.transactionDate || a.transaction_date) - parseDate(b.transactionDate || b.transaction_date));
+  }, [bankStatements, rawBankStatements, activeTab, filterType, searchTerm, startDate, endDate]);
 
   const summary = useMemo(() => {
-    const deb = filteredData.reduce((sum, item) => sum + item.debit, 0);
-    const cre = filteredData.reduce((sum, item) => sum + item.credit, 0);
+    const deb = displayData.reduce((sum, item) => sum + (parseFloat(item.debit) || 0), 0);
+    const cre = displayData.reduce((sum, item) => sum + (parseFloat(item.credit) || 0), 0);
     return { debit: deb, credit: cre, balance: cre - deb };
-  }, [filteredData]);
+  }, [displayData]);
 
   const formatCurrency = (val: number) => {
     return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(val);
@@ -245,10 +256,10 @@ export default function BankStatements() {
 
   const getClassificationLabel = (type: string) => {
     switch (type) {
-      case 'DOANH THU':
-      case 'SALE': return { text: 'Doanh thu/Bán', color: 'bg-green-100 text-green-700' };
-      case 'CHI PHI MUA HANG':
-      case 'PURCHASE': return { text: 'Mua hàng/Vàng', color: 'bg-red-100 text-red-700' };
+      case 'SALE':
+      case 'DOANH THU': return { text: 'Doanh thu/Bán', color: 'bg-green-100 text-green-700' };
+      case 'PURCHASE':
+      case 'CHI PHI MUA HANG': return { text: 'Mua hàng/Vàng', color: 'bg-red-100 text-red-700' };
       case 'CHI PHI VAN HANH': return { text: 'CP Vận hành', color: 'bg-orange-100 text-orange-700' };
       case 'LUONG': return { text: 'Lương NV', color: 'bg-purple-100 text-purple-700' };
       case 'THUE': return { text: 'Thuế/Phí', color: 'bg-slate-100 text-slate-700' };
@@ -263,41 +274,60 @@ export default function BankStatements() {
   ];
 
   return (
-    <div className="space-y-6">
-      <header className="flex items-center justify-between">
+    <div className="space-y-6 text-slate-900">
+      <header className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Sao kê & Sổ cái 3 tầng</h1>
-          <p className="text-slate-500">Quy trình: Keyword Mapping → Batch Gemini AI → Final Ledger</p>
+          <h1 className="text-2xl font-bold font-serif">Sổ cái Ngân hàng (3 Tầng)</h1>
+          <p className="text-slate-500 text-sm">Hệ thống phân loại: Keyword Mapping → Gemini AI → Final Ledger</p>
         </div>
-        <div className="flex gap-3">
-          <div className="flex p-1 bg-slate-100 rounded-lg mr-4">
+        <div className="flex flex-wrap gap-2">
+          <div className="flex p-1 bg-slate-100 rounded-lg shadow-inner">
+            <button 
+              onClick={() => setActiveTab('ORIGINAL')}
+              className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all ${activeTab === 'ORIGINAL' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}
+            >
+              1. Bản Gốc
+            </button>
             <button 
               onClick={() => setActiveTab('LEDGER')}
-              className={`px-4 py-1.5 rounded-md text-sm font-medium transition-all ${activeTab === 'LEDGER' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-600 hover:text-slate-900'}`}
+              className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all ${activeTab === 'LEDGER' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}
             >
-              <ListChecks size={16} className="inline mr-2" />
-              Sổ cái
+              2. Sổ cái Final
             </button>
             <button 
               onClick={() => setActiveTab('RULES')}
-              className={`px-4 py-1.5 rounded-md text-sm font-medium transition-all ${activeTab === 'RULES' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-600 hover:text-slate-900'}`}
+              className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all ${activeTab === 'RULES' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}
             >
-              <ShieldCheck size={16} className="inline mr-2" />
-              Quy tắc (Mapping)
+              Cấu hình Mapping
             </button>
           </div>
 
           <button 
             onClick={handleExport}
-            disabled={filteredData.length === 0}
-            className="flex items-center gap-2 px-4 py-2 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            disabled={displayData.length === 0}
+            className="flex items-center gap-2 px-3 py-2 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 transition-colors disabled:opacity-50 text-sm font-bold"
           >
-            <Download size={18} />
+            <Download size={16} />
             <span>Xuất Excel</span>
           </button>
-          <label className={`flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg cursor-pointer hover:bg-blue-700 transition-colors ${isProcessing ? 'opacity-50 cursor-not-allowed' : ''}`}>
+          
+          <button 
+            onClick={handleProcessTiered}
+            disabled={isProcessing || rawBankStatements.filter(s => !s.processed).length === 0}
+            className="flex items-center gap-2 px-4 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-colors disabled:opacity-50 text-sm font-black shadow-lg shadow-orange-200 uppercase tracking-tighter"
+          >
+            <BrainCircuit size={18} className={isProcessing ? "animate-pulse" : ""} />
+            <span>Phân loại nghiệp vụ</span>
+            {rawBankStatements.filter(s => !s.processed).length > 0 && (
+              <span className="bg-white text-orange-600 px-2 rounded-full text-[10px] ml-1">
+                {rawBankStatements.filter(s => !s.processed).length}
+              </span>
+            )}
+          </button>
+
+          <label className={`flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg cursor-pointer hover:bg-blue-700 transition-colors shadow-lg shadow-blue-200 text-sm font-bold ${isProcessing ? 'opacity-50 cursor-not-allowed' : ''}`}>
             <Upload size={18} />
-            <span>Nhập File Sao Kê</span>
+            <span>Nhập Sao Kê (T1)</span>
             <input type="file" className="hidden" accept=".csv,.xlsx,.xls" onChange={handleFileUpload} disabled={isProcessing} />
           </label>
         </div>
@@ -307,7 +337,7 @@ export default function BankStatements() {
         <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
           {logs.map((log, i) => (
             <div key={i} className={`flex items-center gap-2 text-sm mb-1 ${
-              log.type === 'success' ? 'text-green-600' : 
+              log.type === 'success' ? 'text-green-600 font-bold' : 
               log.type === 'error' ? 'text-red-600' : 
               log.type === 'loading' ? 'text-blue-600 animate-pulse' : 'text-slate-600'
             }`}>
@@ -322,40 +352,40 @@ export default function BankStatements() {
       {activeTab === 'RULES' ? (
         <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
           <div className="p-4 border-b border-slate-100 bg-slate-50/50">
-            <h3 className="font-bold text-slate-900 flex items-center gap-2">
+            <h3 className="font-bold text-slate-900 flex items-center gap-2 font-serif">
               <ShieldCheck size={18} className="text-blue-500" />
-              Quản lý quy tắc Keyword Mapping (Ưu tiên số 1 - Miễn phí Token)
+              Keyword Mapping Rules (Phân loại tầng 2)
             </h3>
           </div>
           
-          <div className="p-4 flex gap-4 items-end border-b border-slate-100">
-            <div className="flex-1 space-y-1">
-              <label className="text-[10px] uppercase font-bold text-slate-400 ml-1">Từ khóa (Regex / Keyword)</label>
+          <div className="p-4 flex flex-col md:flex-row gap-4 items-end border-b border-slate-100">
+            <div className="flex-1 w-full space-y-1">
+              <label className="text-[10px] uppercase font-bold text-slate-400 ml-1">Từ khóa khớp (Regex Case-Insensitive)</label>
               <input 
                 type="text" 
-                placeholder="Ví dụ: nop tien mặt, thanh toan..."
-                className="w-full px-4 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                placeholder="Ví dụ: nop tien mặt, thanh toan, chuyen khoan tu..."
+                className="w-full px-4 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none font-sans"
                 value={newRule.keyword}
                 onChange={e => setNewRule({...newRule, keyword: e.target.value})}
               />
             </div>
-            <div className="w-64 space-y-1">
+            <div className="w-full md:w-64 space-y-1">
               <label className="text-[10px] uppercase font-bold text-slate-400 ml-1">Nghiệp vụ gán</label>
               <select 
-                className="w-full px-4 py-2 border border-slate-200 rounded-lg text-sm outline-none"
+                className="w-full px-4 py-2 border border-slate-200 rounded-lg text-sm outline-none font-bold"
                 value={newRule.category}
                 onChange={e => setNewRule({...newRule, category: e.target.value})}
               >
-                {categories.map(c => <option key={c} value={c}>{c}</option>)}
+                {categories.map(c => <option key={c} value={c}>{getClassificationLabel(c).text}</option>)}
               </select>
             </div>
             <button 
               onClick={handleAddRule}
               disabled={isAddingRule || !newRule.keyword}
-              className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
+              className="w-full md:w-auto px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 font-bold"
             >
               <Plus size={18} className="inline mr-1" />
-              Thêm
+              Thêm Quy tắc
             </button>
           </div>
 
@@ -364,8 +394,8 @@ export default function BankStatements() {
               <thead>
                 <tr className="bg-slate-50 text-slate-500 text-[10px] font-semibold uppercase tracking-wider border-b border-slate-200">
                   <th className="px-6 py-3">ID</th>
-                  <th className="px-6 py-3 text-blue-600">Từ khóa đối soát</th>
-                  <th className="px-6 py-3">Phân loại tương ứng</th>
+                  <th className="px-6 py-3 text-blue-600">Từ khóa</th>
+                  <th className="px-6 py-3">Nghiệp vụ</th>
                   <th className="px-6 py-3 text-right">Thao tác</th>
                 </tr>
               </thead>
@@ -373,7 +403,7 @@ export default function BankStatements() {
                 {rules.map(rule => (
                   <tr key={rule.id} className="hover:bg-slate-50 transition-colors">
                     <td className="px-6 py-3 text-slate-400 text-xs font-mono">{rule.id}</td>
-                    <td className="px-6 py-3 font-medium text-slate-800">{rule.keyword}</td>
+                    <td className="px-6 py-3 font-bold text-slate-800 font-sans tracking-tight">{rule.keyword}</td>
                     <td className="px-6 py-3">
                       <span className={`px-2 py-1 rounded-full text-[10px] font-bold ${getClassificationLabel(rule.category).color}`}>
                         {getClassificationLabel(rule.category).text}
@@ -391,7 +421,7 @@ export default function BankStatements() {
                 ))}
                 {rules.length === 0 && (
                   <tr>
-                    <td colSpan={4} className="px-6 py-12 text-center text-slate-400 italic">Chưa có quy tắc nào. Hãy thêm từ khóa để tiết kiệm chi phí AI.</td>
+                    <td colSpan={4} className="px-6 py-12 text-center text-slate-400 italic">Chưa có quy tắc lọc. Hãy thêm từ khóa để tiết kiệm AI.</td>
                   </tr>
                 )}
               </tbody>
@@ -401,135 +431,153 @@ export default function BankStatements() {
       ) : (
         <>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm border-l-4 border-l-green-500">
-              <p className="text-slate-500 text-sm mb-1 uppercase font-bold tracking-tight">Thu vào (Credit)</p>
-              <p className="text-2xl font-black text-green-600">{formatCurrency(summary.credit)}</p>
+            <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm border-l-4 border-l-green-500">
+              <p className="text-slate-400 text-xs mb-1 uppercase font-black tracking-widest">Tiền Thu (CREDIT +)</p>
+              <p className="text-3xl font-black text-green-600 font-serif">{formatCurrency(summary.credit)}</p>
             </div>
-            <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm border-l-4 border-l-red-500">
-              <p className="text-slate-500 text-sm mb-1 uppercase font-bold tracking-tight">Chi ra (Debit)</p>
-              <p className="text-2xl font-black text-red-600">{formatCurrency(summary.debit)}</p>
+            <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm border-l-4 border-l-red-500">
+              <p className="text-slate-400 text-xs mb-1 uppercase font-black tracking-widest">Tiền Chi (DEBIT -)</p>
+              <p className="text-3xl font-black text-red-600 font-serif">{formatCurrency(summary.debit)}</p>
             </div>
-            <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm border-l-4 border-l-blue-500">
-              <p className="text-slate-500 text-sm mb-1 uppercase font-bold tracking-tight">Số dư kỳ báo cáo</p>
-              <p className={`text-2xl font-black ${summary.balance >= 0 ? 'text-blue-600' : 'text-orange-600'}`}>
+            <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm border-l-4 border-l-slate-900 bg-slate-900 group">
+              <p className="text-slate-400 text-xs mb-1 uppercase font-black tracking-widest">Số dư thuần (Balance)</p>
+              <p className={`text-3xl font-black font-serif ${summary.balance >= 0 ? 'text-gold' : 'text-red-400'}`}>
                 {formatCurrency(summary.balance)}
               </p>
+              <style dangerouslySetInnerHTML={{ __html: `.text-gold { color: #D4AF37; }` }} />
             </div>
           </div>
 
           <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col">
             <div className="p-4 border-b border-slate-100 flex flex-wrap gap-4 items-center justify-between bg-slate-50/50">
-              <div className="flex flex-wrap gap-3 items-center">
+              <div className="flex flex-wrap gap-2 items-center">
                 <div className="relative">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
                   <input 
                     type="text"
                     placeholder="Tìm trong nội dung chi tiết..."
-                    className="pl-10 pr-4 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 w-72 outline-none shadow-sm"
+                    className="pl-9 pr-4 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 w-64 outline-none shadow-sm font-sans"
                     value={searchTerm}
                     onChange={(e) => setSearchSearchTerm(e.target.value)}
                   />
                 </div>
                 
-                <div className="flex items-center gap-2 text-sm text-slate-600 border border-slate-200 rounded-lg px-3 py-2 bg-white shadow-sm">
-                  <Filter size={16} />
-                  <select 
-                    className="focus:outline-none bg-transparent"
-                    value={filterType}
-                    onChange={(e) => setFilterType(e.target.value as any)}
-                  >
-                    <option value="ALL">Tất cả nghiệp vụ</option>
-                    {categories.map(c => <option key={c} value={c}>{getClassificationLabel(c).text}</option>)}
-                  </select>
-                </div>
+                {activeTab === 'LEDGER' && (
+                  <div className="flex items-center gap-2 text-sm text-slate-600 border border-slate-200 rounded-lg px-3 py-2 bg-white shadow-sm">
+                    <Filter size={14} className="text-slate-400" />
+                    <select 
+                      className="focus:outline-none bg-transparent font-bold"
+                      value={filterType}
+                      onChange={(e) => setFilterType(e.target.value as any)}
+                    >
+                      <option value="ALL">Tất cả nghiệp vụ</option>
+                      {categories.map(c => <option key={c} value={c}>{getClassificationLabel(c).text}</option>)}
+                    </select>
+                  </div>
+                )}
 
-                <div className="flex items-center gap-2 text-sm text-slate-600 border border-slate-200 rounded-lg px-3 py-2 bg-white shadow-sm">
-                  <span className="text-[10px] uppercase font-black text-slate-300">Từ</span>
-                  <input type="date" className="bg-transparent outline-none" value={startDate} onChange={e => setStartDate(e.target.value)} />
-                  <span className="text-[10px] uppercase font-black text-slate-300">Đến</span>
-                  <input type="date" className="bg-transparent outline-none" value={endDate} onChange={e => setEndDate(e.target.value)} />
+                <div className="flex items-center gap-2 text-sm text-slate-600 border border-slate-200 rounded-lg px-3 py-2 bg-white shadow-sm font-sans">
+                  <span className="text-[9px] uppercase font-black text-slate-300">Từ</span>
+                  <input type="date" className="bg-transparent outline-none scale-90" value={startDate} onChange={e => setStartDate(e.target.value)} />
+                  <span className="text-[9px] uppercase font-black text-slate-300">Đến</span>
+                  <input type="date" className="bg-transparent outline-none scale-90" value={endDate} onChange={e => setEndDate(e.target.value)} />
                 </div>
               </div>
               
-              <div className="text-sm font-medium text-slate-500">
-                Hiển thị <span className="font-bold text-slate-900">{filteredData.length}</span> / {bankStatements.length} giao dịch
+              <div className="text-xs font-bold text-slate-400 uppercase tracking-tight">
+                {activeTab === 'ORIGINAL' ? 'Dữ liệu nguyên bản' : 'Dữ liệu đã phân loại'} : <span className="text-slate-900 font-black">{displayData.length}</span> Giao dịch
               </div>
             </div>
 
             <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse min-w-[1100px]">
+              <table className="w-full text-left border-collapse min-w-[1000px]">
                 <thead>
-                  <tr className="bg-slate-50 text-slate-500 text-[10px] font-bold uppercase tracking-wider border-b border-slate-200">
-                    <th className="px-4 py-3">Ngày</th>
-                    <th className="px-4 py-3">Nghiệp vụ</th>
-                    <th className="px-4 py-3">Khách / CCCD / Phương pháp</th>
-                    <th className="px-4 py-3">Nội dung chuyển khoản</th>
-                    <th className="px-4 py-3 text-right text-red-500">Ghi nợ (-)</th>
-                    <th className="px-4 py-3 text-right text-green-600">Ghi có (+)</th>
+                  <tr className="bg-slate-50 text-slate-500 text-[10px] font-black uppercase tracking-widest border-b border-slate-200">
+                    <th className="px-4 py-3">Ngày GD</th>
+                    {activeTab === 'LEDGER' && <th className="px-4 py-3">Loại Nghiệp Vụ</th>}
+                    <th className="px-4 py-3">Nội dung chi tiết</th>
+                    <th className="px-4 py-3 text-right">Chi (-)</th>
+                    <th className="px-4 py-3 text-right">Thu (+)</th>
+                    {activeTab === 'ORIGINAL' && <th className="px-4 py-3 text-center">Trạng thái</th>}
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100 font-serif">
-                  {filteredData.length === 0 ? (
+                <tbody className="divide-y divide-slate-100 font-sans">
+                  {displayData.length === 0 ? (
                     <tr>
-                      <td colSpan={6} className="px-4 py-16 text-center text-slate-400 italic font-sans flex flex-col items-center gap-2">
-                        <Loader2 size={32} className="animate-spin text-slate-200" />
-                        Dữ liệu trống hoặc đang trong hàng chờ 3 tầng...
+                      <td colSpan={6} className="px-4 py-20 text-center text-slate-300 italic font-sans">
+                        {isProcessing ? (
+                          <div className="flex flex-col items-center gap-3">
+                            <Loader2 size={32} className="animate-spin text-blue-500" />
+                            <p className="font-bold">Đang xử lý dữ liệu 3 tầng...</p>
+                          </div>
+                        ) : "Không có dữ liệu trong danh sách này."}
                       </td>
                     </tr>
                   ) : (
-                    filteredData.map((item) => {
+                    displayData.map((item) => {
+                      const transactionDate = item.transactionDate || item.transaction_date;
+                      const effectiveDate = item.effectiveDate || item.effective_date;
                       const cls = getClassificationLabel(item.classification);
-                      const method = (item as any).method || 'AI';
+                      const method = item.method || 'AI';
+                      const isProcessed = item.processed;
+
                       return (
-                        <tr key={item.id} className="hover:bg-slate-50/80 transition-colors text-xs">
-                          <td className="px-4 py-3 border-r border-slate-50 w-24">
-                            <div className="font-bold text-slate-900">{item.transactionDate}</div>
-                            <div className="text-[9px] text-slate-400 font-sans">HL: {item.effectiveDate}</div>
+                        <tr key={item.id} className={`hover:bg-slate-50/80 transition-colors text-xs ${activeTab === 'ORIGINAL' && !isProcessed ? 'bg-orange-50/30' : ''}`}>
+                          <td className="px-4 py-4 border-r border-slate-50 w-28">
+                            <div className="font-black text-slate-900">{transactionDate}</div>
+                            <div className="text-[9px] text-slate-400 font-sans uppercase">HL: {effectiveDate}</div>
                           </td>
-                          <td className="px-4 py-3 border-r border-slate-50 w-36">
-                            <span className={`px-2 py-0.5 rounded-sm text-[9px] font-bold uppercase ${cls.color} block text-center shadow-sm`}>
-                              {cls.text}
-                            </span>
+                          
+                          {activeTab === 'LEDGER' && (
+                            <td className="px-4 py-4 border-r border-slate-50 w-44">
+                              <span className={`px-2 py-1 rounded text-[10px] font-black uppercase ${cls.color} block text-center shadow-sm mb-1`}>
+                                {cls.text}
+                              </span>
+                              <div className="flex items-center justify-center gap-1">
+                                {method === 'MAPPING' ? (
+                                  <span className="text-[8px] font-bold text-green-600 flex items-center gap-0.5"><ShieldCheck size={8} /> Keyword Mapping</span>
+                                ) : (
+                                  <span className="text-[8px] font-bold text-blue-600 flex items-center gap-0.5"><BrainCircuit size={8} /> Gemini Flash</span>
+                                )}
+                              </div>
+                            </td>
+                          )}
+
+                          <td className="px-4 py-4 border-r border-slate-50">
+                            <p className="text-slate-700 leading-relaxed font-medium mb-1 line-clamp-2" title={item.content}>{item.content}</p>
+                            {(item.customerName || item.customer_name) && (
+                              <div className="text-[10px] text-blue-800 font-bold flex items-center gap-1">
+                                <Search size={10} /> {item.customerName || item.customer_name}
+                              </div>
+                            )}
+                            {item.note && <div className="text-[9px] text-slate-400 italic">Số CT: {item.note}</div>}
                           </td>
-                          <td className="px-4 py-3 border-r border-slate-50 max-w-[200px] font-sans">
-                            <div className="font-bold text-slate-700 truncate">{item.customerName || '-'}</div>
-                            <div className="text-[10px] text-blue-600 line-clamp-1">{item.customerCard || '-'}</div>
-                            <div className="flex items-center gap-1 mt-1">
-                              {method === 'MAPPING' ? (
-                                <span className="flex items-center gap-0.5 text-[8px] font-black text-green-600 bg-green-50 px-1 rounded uppercase">
-                                  <ShieldCheck size={8} /> Keyword Match
+
+                          <td className="px-4 py-4 text-right font-black text-red-600 border-r border-slate-50">
+                            {parseFloat(item.debit) > 0 ? formatCurrency(parseFloat(item.debit)) : '-'}
+                          </td>
+                          <td className="px-4 py-4 text-right font-black text-green-600 border-r border-slate-50">
+                            {parseFloat(item.credit) > 0 ? formatCurrency(parseFloat(item.credit)) : '-'}
+                          </td>
+
+                          {activeTab === 'ORIGINAL' && (
+                            <td className="px-4 py-4 text-center">
+                              {isProcessed ? (
+                                <span className="text-[9px] text-green-600 font-black uppercase flex items-center justify-center gap-1">
+                                  <CheckCircle2 size={12} /> Đã phân loại
                                 </span>
                               ) : (
-                                <span className="flex items-center gap-0.5 text-[8px] font-black text-blue-600 bg-blue-50 px-1 rounded uppercase">
-                                  <BrainCircuit size={8} /> Gemini Flash
+                                <span className="text-[9px] text-orange-400 font-black uppercase flex items-center justify-center gap-1">
+                                  <AlertCircle size={12} /> Chờ xử lý
                                 </span>
                               )}
-                            </div>
-                          </td>
-                          <td className="px-4 py-3 border-r border-slate-50 font-sans">
-                            <p className="text-slate-500 leading-snug line-clamp-2" title={item.content}>{item.content}</p>
-                            {item.note && <div className="text-[9px] text-slate-300 italic">Số CT: {item.note}</div>}
-                          </td>
-                          <td className="px-4 py-3 text-right font-bold text-red-600 border-r border-slate-50 bg-red-50/10">
-                            {item.debit > 0 ? formatCurrency(item.debit) : '-'}
-                          </td>
-                          <td className="px-4 py-3 text-right font-bold text-green-600 bg-green-50/10">
-                            {item.credit > 0 ? formatCurrency(item.credit) : '-'}
-                          </td>
+                            </td>
+                          )}
                         </tr>
                       );
                     })
                   )}
                 </tbody>
-                {filteredData.length > 0 && (
-                  <tfoot className="bg-slate-50 border-t-2 border-slate-200 font-sans">
-                    <tr className="font-bold text-xs text-slate-900">
-                      <td colSpan={4} className="px-4 py-4 text-right uppercase text-slate-400 tracking-wider">Tổng cộng trang hiện tại:</td>
-                      <td className="px-4 py-4 text-right text-red-600">{formatCurrency(summary.debit)}</td>
-                      <td className="px-4 py-4 text-right text-green-600">{formatCurrency(summary.credit)}</td>
-                    </tr>
-                  </tfoot>
-                )}
               </table>
             </div>
           </div>

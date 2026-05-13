@@ -6,6 +6,7 @@ interface InventoryContextType {
   products: Product[];
   transactions: Transaction[];
   bankStatements: BankStatement[];
+  rawBankStatements: any[];
   manualOpeningBalances: OpeningBalance[];
   closedMonths: string[]; // Format: MM-YYYY
   user: User | null;
@@ -40,6 +41,7 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const [products, setProducts] = useState<Product[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [bankStatements, setBankStatements] = useState<BankStatement[]>([]);
+  const [rawBankStatements, setRawBankStatements] = useState<any[]>([]);
   const [manualOpeningBalances, setManualOpeningBalances] = useState<OpeningBalance[]>([]);
   const [closedMonths, setClosedMonths] = useState<string[]>([]);
   const [user, setUser] = useState<User | null>(null);
@@ -69,10 +71,11 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [txRes, obRes, bankRes] = await Promise.all([
+        const [txRes, obRes, bankRes, rawRes] = await Promise.all([
           fetch('/api/transactions').then(r => r.json()),
           fetch('/api/opening-balances').then(r => r.json()),
-          fetch('/api/final-ledger').then(r => r.json())
+          fetch('/api/final-bank-ledger').then(r => r.json()),
+          fetch('/api/raw-bank-statements').then(r => r.json())
         ]);
         
         if (!Array.isArray(txRes) || !Array.isArray(obRes)) {
@@ -129,7 +132,6 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
           transactionDate: b.transaction_date || b.transactionDate,
           effectiveDate: b.effective_date || b.effectiveDate,
           customerName: b.customer_name || b.customerName,
-          customerCard: b.customer_card || b.customerCard,
           itemInfo: b.item_info || b.itemInfo,
           debit: parseFloat(b.debit || 0),
           credit: parseFloat(b.credit || 0),
@@ -139,6 +141,7 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         setTransactions(mappedTxs);
         setManualOpeningBalances(mappedOBs);
         setBankStatements(mappedBank);
+        setRawBankStatements(Array.isArray(rawRes) ? rawRes : []);
         
         // Calculate products list from transactions
         const productMap = new Map<string, Product>();
@@ -361,10 +364,12 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       });
       
       if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
-      // We don't update local bankStatements immediately because they need to be processed
+      // Refresh raw statements to see the "Original Document"
+      const rawRes = await fetch('/api/raw-bank-statements').then(r => r.json());
+      setRawBankStatements(Array.isArray(rawRes) ? rawRes : []);
     } catch (err) {
       console.error(err);
-      alert("Lỗi khi lưu sao kê ngân hàng (Bản nháp) lên server.");
+      alert("Lỗi khi lưu sao kê ngân hàng (Bản nguyên gốc) lên server.");
     }
   };
 
@@ -375,19 +380,22 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       if (!res.ok) throw new Error(data.error || "Lỗi xử lý 3 tầng");
       
       // Refresh final ledger
-      const bankRes = await fetch('/api/final-ledger').then(r => r.json());
+      const bankRes = await fetch('/api/final-bank-ledger').then(r => r.json());
       const mappedBank = Array.isArray(bankRes) ? bankRes.map((b: any) => ({
         ...b,
         transactionDate: b.transaction_date || b.transactionDate,
         effectiveDate: b.effective_date || b.effectiveDate,
         customerName: b.customer_name || b.customerName,
-        customerCard: b.customer_card || b.customerCard,
         itemInfo: b.item_info || b.itemInfo,
         debit: parseFloat(b.debit || 0),
         credit: parseFloat(b.credit || 0),
         balance: parseFloat(b.balance || 0)
       })) : [];
       setBankStatements(mappedBank);
+
+      // Refresh raw to see processed status
+      const rawRes = await fetch('/api/raw-bank-statements').then(r => r.json());
+      setRawBankStatements(Array.isArray(rawRes) ? rawRes : []);
       
       return { success: true, count: data.count };
     } catch (err: any) {
@@ -796,6 +804,7 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       products, 
       transactions, 
       bankStatements,
+      rawBankStatements,
       manualOpeningBalances, 
       closedMonths,
       user, 
