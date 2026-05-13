@@ -391,12 +391,19 @@ async function initDb() {
       );
     `);
 
-    // Tier 3: Mapping processed data (Middle tier)
+    // Tier 3: Mapping processed data (Middle tier / Editable Draft)
     await client.query(`
       CREATE TABLE IF NOT EXISTS mapping_processed_data (
-        id TEXT PRIMARY KEY REFERENCES raw_bank_statements(id),
-        classification TEXT, -- Can be null if not matched
-        match_method TEXT, -- 'MAPPING' or NULL
+        id TEXT PRIMARY KEY,
+        transaction_date TEXT,
+        effective_date TEXT,
+        debit FLOAT,
+        credit FLOAT,
+        balance FLOAT,
+        content TEXT,
+        note TEXT,
+        classification TEXT, -- Editable by user
+        match_method TEXT, -- 'MAPPING', 'MANUAL'
         processed_at TIMESTAMPTZ DEFAULT NOW()
       );
     `);
@@ -715,23 +722,45 @@ router.post("/reset", async (req, res) => {
 
 // New 3-Tier Workflow Endpoints
 
-// Tier 1: Import Raw Statements
+// Tier 1: Import Raw Statements -> Automatically populates T2 Editable Draft
 router.post("/api/raw-statements/bulk", async (req, res) => {
   const { items } = req.body;
   if (!items || !Array.isArray(items)) return res.status(400).json({ error: "Invalid data" });
   
   const client = await pool.connect();
   try {
+    const rulesRes = await client.query('SELECT keyword, category FROM bank_mapping_rules WHERE is_active = true');
+    const rules = rulesRes.rows;
+
     await client.query('BEGIN');
     for (const item of items) {
+      // 1. Raw T1
       await client.query(
         `INSERT INTO raw_bank_statements (id, transaction_date, effective_date, debit, credit, balance, content, note)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
          ON CONFLICT (id) DO NOTHING`,
-        [
-          item.id, item.transactionDate, item.effectiveDate, 
-          item.debit, item.credit, item.balance, item.content, item.note
-        ]
+        [item.id, item.transactionDate, item.effectiveDate, item.debit || 0, item.credit || 0, item.balance || 0, item.content, item.note]
+      );
+
+      // 2. Initial Mapping for T2
+      let classification = null;
+      let method = null;
+      for (const rule of rules) {
+        if (item.content?.toLowerCase().includes(rule.keyword.toLowerCase())) {
+          classification = rule.category;
+          method = 'MAPPING';
+          break;
+        }
+      }
+
+      // 3. Draft T2
+      await client.query(
+        `INSERT INTO mapping_processed_data (id, transaction_date, effective_date, debit, credit, balance, content, note, classification, match_method)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+         ON CONFLICT (id) DO UPDATE SET
+           classification = COALESCE(mapping_processed_data.classification, EXCLUDED.classification),
+           match_method = COALESCE(mapping_processed_data.match_method, EXCLUDED.match_method)`,
+        [item.id, item.transactionDate, item.effectiveDate, item.debit || 0, item.credit || 0, item.balance || 0, item.content, item.note, classification, method]
       );
     }
     await client.query('COMMIT');
@@ -741,6 +770,30 @@ router.post("/api/raw-statements/bulk", async (req, res) => {
     res.status(500).json({ error: err.message });
   } finally {
     client.release();
+  }
+});
+
+// View Draft (Tier 2)
+router.get("/api/mapping-processed-data", async (req, res) => {
+  try {
+    const result = await pool.query('SELECT * FROM mapping_processed_data ORDER BY transaction_date DESC');
+    res.json(result.rows);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Manual Edit Draft (Tier 2)
+router.patch("/api/mapping-processed-data/:id", async (req, res) => {
+  const { classification } = req.body;
+  try {
+    await pool.query(
+      'UPDATE mapping_processed_data SET classification = $1, match_method = $2 WHERE id = $3',
+      [classification, 'MANUAL', req.params.id]
+    );
+    res.json({ success: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
   }
 });
 
@@ -785,131 +838,74 @@ router.delete("/api/bank-mapping-rules/:id", async (req, res) => {
   }
 });
 
-// 3-Tier Processing: T1 -> T2 (Mapping) -> T3 (Final Ledger with AI)
-router.post("/api/bank-statements/process-tier", async (req, res) => {
+// Finalize: T2 -> T3 (AI for NULLs)
+router.post("/api/bank-statements/finalize-ledger", async (req, res) => {
   const client = await pool.connect();
   try {
-    // 1. Fetch Mapping Rules
-    const rulesRes = await client.query('SELECT * FROM bank_mapping_rules WHERE is_active = true');
-    const rules = rulesRes.rows;
+    const draftRes = await client.query('SELECT * FROM mapping_processed_data');
+    const drafts = draftRes.rows;
+    if (drafts.length === 0) return res.json({ count: 0, message: "Không có dữ liệu trong nháp" });
 
-    // 2. Fetch Unprocessed Raw Statements (limit 500 per run)
-    const rawRes = await client.query('SELECT * FROM raw_bank_statements WHERE processed = false LIMIT 500');
-    const statements = rawRes.rows;
+    const finalRecords: any[] = [];
+    const aiPending: any[] = [];
 
-    if (statements.length === 0) return res.json({ count: 0, message: "Không có dữ liệu mới trong hàng chờ" });
-
-    // STEP 1: KEYWORD MAPPING (Save to mapping_processed_data)
-    const mappingResults: any[] = [];
-    const aiPendingItems: any[] = [];
-
-    for (const stmt of statements) {
-      let matched = false;
-      let classification = null;
-
-      for (const rule of rules) {
-        try {
-          const regex = new RegExp(rule.keyword, 'i');
-          if (regex.test(stmt.content)) {
-            classification = rule.category;
-            matched = true;
-            break;
-          }
-        } catch (e) {
-          if (stmt.content.toLowerCase().includes(rule.keyword.toLowerCase())) {
-            classification = rule.category;
-            matched = true;
-            break;
-          }
-        }
+    for (const d of drafts) {
+      if (d.classification) {
+        finalRecords.push({ ...d, method: d.match_method });
+      } else {
+        aiPending.push(d);
       }
-
-      mappingResults.push({ id: stmt.id, classification, method: matched ? 'MAPPING' : null });
-      if (!matched) aiPendingItems.push(stmt);
     }
 
-    // Save T2 Results (Mapping Tier)
-    await client.query('BEGIN');
-    for (const res of mappingResults) {
-      await client.query(
-        'INSERT INTO mapping_processed_data (id, classification, match_method) VALUES ($1, $2, $3) ON CONFLICT (id) DO UPDATE SET classification = EXCLUDED.classification, match_method = EXCLUDED.match_method',
-        [res.id, res.classification, res.method]
-      );
-    }
-    await client.query('COMMIT');
-
-    // STEP 2: BATCH AI PROCESSING (For null entries in T2)
-    const finalItems: any[] = [];
-    
-    // Map matched items directly to final ledger list
-    statements.filter(s => mappingResults.find(m => m.id === s.id && m.method === 'MAPPING')).forEach(s => {
-      const mapping = mappingResults.find(m => m.id === s.id);
-      finalItems.push({ ...s, classification: mapping.classification, method: 'MAPPING' });
-    });
-
-    if (aiPendingItems.length > 0) {
-      const batchSize = 50;
-      for (let i = 0; i < aiPendingItems.length; i += batchSize) {
-        const chunk = aiPendingItems.slice(i, i + batchSize);
+    if (aiPending.length > 0) {
+      const batchSize = 30;
+      for (let i = 0; i < aiPending.length; i += batchSize) {
+        const chunk = aiPending.slice(i, i + batchSize);
         const prompt = `Phân loại ${chunk.length} giao dịch ngân hàng sau đây.
-Nghiệp vụ cho phép: SALE, PURCHASE, CHI PHI VAN HANH, LUONG, THUE, CASH_WITHDRAWAL, CASH_DEPOSIT, KHAC.
-
+Nghiệp vụ: SALE, PURCHASE, CHI PHI VAN HANH, LUONG, THUE, CASH_WITHDRAWAL, CASH_DEPOSIT, KHAC.
+JSON array: [{"id": "...", "classification": "...", "customerName": "...", "itemInfo": "..."}]
 Dữ liệu:
-${chunk.map(c => `ID: ${c.id} | Nội dung: ${c.content}`).join('\n')}
-
-Chỉ trả về JSON array: [{"id": "...", "classification": "...", "customerName": "...", "itemInfo": "..."}]`;
+${chunk.map(c => `ID: ${c.id} | Nội dung: ${c.content}`).join('\n')}`;
 
         try {
           const result = await ai.models.generateContent({
             model: "gemini-1.5-flash-latest",
             contents: [{ role: 'user', parts: [{ text: prompt }] }]
           });
-          
-          const text = result.text;
-          const cleanText = text.replace(/```json|```/g, '').trim();
-          const aiResults = JSON.parse(cleanText);
+          const aiResults = JSON.parse(result.text.replace(/```json|```/g, '').trim());
+          const resultMap = new Map(aiResults.map((r: any) => [r.id, r]));
 
           for (const item of chunk) {
-            const aiMatch = aiResults.find((r: any) => r.id === item.id);
-            finalItems.push({
+            const aiData: any = resultMap.get(item.id) || {};
+            finalRecords.push({
               ...item,
-              classification: aiMatch?.classification || 'KHAC',
-              customer_name: aiMatch?.customerName || null,
-              item_info: aiMatch?.itemInfo || null,
-              method: aiMatch ? 'AI' : 'AI-FAILED'
+              classification: aiData.classification || 'KHAC',
+              customer_name: aiData.customerName,
+              item_info: aiData.itemInfo,
+              method: 'AI'
             });
           }
         } catch (err) {
-          console.error("Gemini Multi-Tier Error:", err);
-          for (const item of chunk) {
-            finalItems.push({ ...item, classification: 'KHAC', method: 'AI-FAILED' });
-          }
+          console.error("AI Error:", err);
+          for (const item of chunk) finalRecords.push({ ...item, classification: 'KHAC', method: 'AI-FAILED' });
         }
       }
     }
 
-    // STEP 3: FINALIZE (Write to final_bank_ledger and mark original as processed)
     await client.query('BEGIN');
-    for (const item of finalItems) {
+    for (const item of finalRecords) {
       await client.query(
         `INSERT INTO final_bank_ledger (id, transaction_date, effective_date, debit, credit, balance, content, classification, customer_name, item_info, method, note)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-         ON CONFLICT (id) DO UPDATE SET 
-           classification = EXCLUDED.classification,
-           method = EXCLUDED.method`,
-        [
-          item.id, item.transaction_date, item.effective_date, item.debit, item.credit, item.balance,
-          item.content, item.classification, item.customer_name || null, item.item_info || null,
-          item.method, item.note
-        ]
+         ON CONFLICT (id) DO UPDATE SET classification = EXCLUDED.classification, method = EXCLUDED.method`,
+        [item.id, item.transaction_date, item.effective_date, item.debit, item.credit, item.balance, item.content, item.classification, item.customer_name, item.item_info, item.method, item.note]
       );
       await client.query('UPDATE raw_bank_statements SET processed = true WHERE id = $1', [item.id]);
     }
     await client.query('COMMIT');
-
-    res.json({ success: true, count: finalItems.length });
+    res.json({ success: true, count: finalRecords.length });
   } catch (err: any) {
-    if (client) await client.query('ROLLBACK');
+    await client.query('ROLLBACK');
     res.status(500).json({ error: err.message });
   } finally {
     client.release();

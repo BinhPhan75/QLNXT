@@ -7,6 +7,7 @@ interface InventoryContextType {
   transactions: Transaction[];
   bankStatements: BankStatement[];
   rawBankStatements: any[];
+  mappingDraft: any[];
   manualOpeningBalances: OpeningBalance[];
   closedMonths: string[]; // Format: MM-YYYY
   user: User | null;
@@ -14,6 +15,7 @@ interface InventoryContextType {
   logout: () => void;
   importTransactions: (newTransactions: Omit<Transaction, 'id'>[]) => void;
   importBankStatements: (newStatements: Omit<BankStatement, 'id'>[]) => Promise<void>;
+  updateDraftClassification: (id: string, classification: string) => Promise<{ success: boolean }>;
   processTieredBankStatements: () => Promise<{ success: boolean; count: number; message?: string }>;
   deleteInvoice: (invoiceNumber: string) => void;
   calculateMonthlyCOGS: (month: number, year: number, sourceFilter?: TransactionSource, itemKeyFilter?: string) => Promise<{ success: boolean; message: string }>;
@@ -42,6 +44,7 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [bankStatements, setBankStatements] = useState<BankStatement[]>([]);
   const [rawBankStatements, setRawBankStatements] = useState<any[]>([]);
+  const [mappingDraft, setMappingDraft] = useState<any[]>([]);
   const [manualOpeningBalances, setManualOpeningBalances] = useState<OpeningBalance[]>([]);
   const [closedMonths, setClosedMonths] = useState<string[]>([]);
   const [user, setUser] = useState<User | null>(null);
@@ -71,11 +74,12 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [txRes, obRes, bankRes, rawRes] = await Promise.all([
+        const [txRes, obRes, bankRes, rawRes, draftRes] = await Promise.all([
           fetch('/api/transactions').then(r => r.json()),
           fetch('/api/opening-balances').then(r => r.json()),
           fetch('/api/final-bank-ledger').then(r => r.json()),
-          fetch('/api/raw-bank-statements').then(r => r.json())
+          fetch('/api/raw-bank-statements').then(r => r.json()),
+          fetch('/api/mapping-processed-data').then(r => r.json())
         ]);
         
         if (!Array.isArray(txRes) || !Array.isArray(obRes)) {
@@ -84,7 +88,7 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
           return;
         }
 
-      const mappedTxs = txRes.map((t: any) => {
+        const mappedTxs = txRes.map((t: any) => {
           let source = (t.source === 'REVENUE' ? 'REVENUE' : 'INVENTORY') as TransactionSource;
           
           const itemCode = (t.item_code || t.itemCode || t.product_id || 'KHONG-MA').toString().trim();
@@ -142,6 +146,7 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         setManualOpeningBalances(mappedOBs);
         setBankStatements(mappedBank);
         setRawBankStatements(Array.isArray(rawRes) ? rawRes : []);
+        setMappingDraft(Array.isArray(draftRes) ? draftRes : []);
         
         // Calculate products list from transactions
         const productMap = new Map<string, Product>();
@@ -364,23 +369,49 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       });
       
       if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
-      // Refresh raw statements to see the "Original Document"
-      const rawRes = await fetch('/api/raw-bank-statements').then(r => r.json());
+      // Refresh raw statements and mapping draft
+      const [rawRes, draftRes] = await Promise.all([
+        fetch('/api/raw-bank-statements').then(r => r.json()),
+        fetch('/api/mapping-processed-data').then(r => r.json())
+      ]);
       setRawBankStatements(Array.isArray(rawRes) ? rawRes : []);
+      setMappingDraft(Array.isArray(draftRes) ? draftRes : []);
     } catch (err) {
       console.error(err);
       alert("Lỗi khi lưu sao kê ngân hàng (Bản nguyên gốc) lên server.");
     }
   };
 
+  const updateDraftClassification = async (id: string, classification: string) => {
+    try {
+      const res = await fetch(`/api/mapping-processed-data/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ classification })
+      });
+      if (!res.ok) throw new Error("Failed to update draft");
+      
+      setMappingDraft(prev => prev.map(d => d.id === id ? { ...d, classification, match_method: 'MANUAL' } : d));
+      return { success: true };
+    } catch (err) {
+      console.error(err);
+      return { success: false };
+    }
+  };
+
   const processTieredBankStatements = async () => {
     try {
-      const res = await fetch('/api/bank-statements/process-tier', { method: 'POST' });
+      const res = await fetch('/api/bank-statements/finalize-ledger', { method: 'POST' });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Lỗi xử lý 3 tầng");
       
-      // Refresh final ledger
-      const bankRes = await fetch('/api/final-bank-ledger').then(r => r.json());
+      // Refresh final ledger and other tables
+      const [bankRes, draftRes, rawRes] = await Promise.all([
+        fetch('/api/final-bank-ledger').then(r => r.json()),
+        fetch('/api/mapping-processed-data').then(r => r.json()),
+        fetch('/api/raw-bank-statements').then(r => r.json())
+      ]);
+
       const mappedBank = Array.isArray(bankRes) ? bankRes.map((b: any) => ({
         ...b,
         transactionDate: b.transaction_date || b.transactionDate,
@@ -392,9 +423,7 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         balance: parseFloat(b.balance || 0)
       })) : [];
       setBankStatements(mappedBank);
-
-      // Refresh raw to see processed status
-      const rawRes = await fetch('/api/raw-bank-statements').then(r => r.json());
+      setMappingDraft(Array.isArray(draftRes) ? draftRes : []);
       setRawBankStatements(Array.isArray(rawRes) ? rawRes : []);
       
       return { success: true, count: data.count };
@@ -805,6 +834,7 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       transactions, 
       bankStatements,
       rawBankStatements,
+      mappingDraft,
       manualOpeningBalances, 
       closedMonths,
       user, 
@@ -812,6 +842,7 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       logout, 
       importTransactions, 
       importBankStatements,
+      updateDraftClassification,
       processTieredBankStatements,
       deleteInvoice,
       calculateMonthlyCOGS, 

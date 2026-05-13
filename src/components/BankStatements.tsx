@@ -14,14 +14,22 @@ interface MappingRule {
 }
 
 export default function BankStatements() {
-  const { bankStatements, rawBankStatements, importBankStatements, processTieredBankStatements } = useInventory();
+  const { 
+    bankStatements, 
+    rawBankStatements, 
+    mappingDraft,
+    importBankStatements, 
+    processTieredBankStatements,
+    updateDraftClassification
+  } = useInventory();
   const [logs, setLogs] = useState<{ msg: string; type: 'success' | 'error' | 'info' | 'loading' }[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
   const [filterType, setFilterType] = useState<BankClassification | 'ALL'>('ALL');
   const [searchTerm, setSearchSearchTerm] = useState('');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
-  const [activeTab, setActiveTab] = useState<'ORIGINAL' | 'LEDGER' | 'RULES'>('LEDGER');
+  const [activeTab, setActiveTab] = useState<'ORIGINAL' | 'DRAFT' | 'LEDGER' | 'RULES'>('DRAFT');
+  const [editingId, setEditingId] = useState<string | null>(null);
   
   // Mapping Rules State
   const [rules, setRules] = useState<MappingRule[]>([]);
@@ -216,18 +224,22 @@ export default function BankStatements() {
   };
 
   const displayData = useMemo(() => {
-    const list = activeTab === 'ORIGINAL' ? rawBankStatements : bankStatements;
+    let list: any[] = [];
+    if (activeTab === 'ORIGINAL') list = rawBankStatements;
+    else if (activeTab === 'DRAFT') list = mappingDraft;
+    else list = bankStatements;
     
     const data = list.filter(item => {
       const classification = item.classification || 'KHAC';
-      const matchesFilter = activeTab === 'ORIGINAL' || filterType === 'ALL' || classification === filterType;
+      const matchesFilter = (activeTab === 'ORIGINAL' || activeTab === 'DRAFT') || filterType === 'ALL' || classification === filterType;
       const matchesSearch = (item.content || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
                           (item.customerName || item.customer_name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
                           (item.itemInfo || item.item_info || '').toLowerCase().includes(searchTerm.toLowerCase());
       
       let matchesDate = true;
       if (startDate || endDate) {
-        const itemTime = parseDate(item.transactionDate || item.transaction_date);
+        const dateStr = item.transactionDate || item.transaction_date;
+        const itemTime = parseDate(dateStr);
         if (startDate) {
           const start = new Date(startDate).setHours(0,0,0,0);
           if (itemTime < start) matchesDate = false;
@@ -242,7 +254,7 @@ export default function BankStatements() {
     });
 
     return data.sort((a, b) => parseDate(a.transactionDate || a.transaction_date) - parseDate(b.transactionDate || b.transaction_date));
-  }, [bankStatements, rawBankStatements, activeTab, filterType, searchTerm, startDate, endDate]);
+  }, [bankStatements, rawBankStatements, mappingDraft, activeTab, filterType, searchTerm, startDate, endDate]);
 
   const summary = useMemo(() => {
     const deb = displayData.reduce((sum, item) => sum + (parseFloat(item.debit) || 0), 0);
@@ -286,13 +298,19 @@ export default function BankStatements() {
               onClick={() => setActiveTab('ORIGINAL')}
               className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all ${activeTab === 'ORIGINAL' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}
             >
-              1. Bản Gốc
+              1. Bản Gốc (T1)
+            </button>
+            <button 
+              onClick={() => setActiveTab('DRAFT')}
+              className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all ${activeTab === 'DRAFT' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}
+            >
+              2. Xử lý & Chỉnh sửa (T2)
             </button>
             <button 
               onClick={() => setActiveTab('LEDGER')}
               className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all ${activeTab === 'LEDGER' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}
             >
-              2. Sổ cái Final
+              3. Sổ cái Final (T3)
             </button>
             <button 
               onClick={() => setActiveTab('RULES')}
@@ -313,16 +331,11 @@ export default function BankStatements() {
           
           <button 
             onClick={handleProcessTiered}
-            disabled={isProcessing || rawBankStatements.filter(s => !s.processed).length === 0}
+            disabled={isProcessing || mappingDraft.length === 0}
             className="flex items-center gap-2 px-4 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-colors disabled:opacity-50 text-sm font-black shadow-lg shadow-orange-200 uppercase tracking-tighter"
           >
             <BrainCircuit size={18} className={isProcessing ? "animate-pulse" : ""} />
-            <span>Phân loại nghiệp vụ</span>
-            {rawBankStatements.filter(s => !s.processed).length > 0 && (
-              <span className="bg-white text-orange-600 px-2 rounded-full text-[10px] ml-1">
-                {rawBankStatements.filter(s => !s.processed).length}
-              </span>
-            )}
+            <span>Phân loại tự động (AI)</span>
           </button>
 
           <label className={`flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg cursor-pointer hover:bg-blue-700 transition-colors shadow-lg shadow-blue-200 text-sm font-bold ${isProcessing ? 'opacity-50 cursor-not-allowed' : ''}`}>
@@ -494,21 +507,22 @@ export default function BankStatements() {
                 <thead>
                   <tr className="bg-slate-50 text-slate-500 text-[10px] font-black uppercase tracking-widest border-b border-slate-200">
                     <th className="px-4 py-3">Ngày GD</th>
-                    {activeTab === 'LEDGER' && <th className="px-4 py-3">Loại Nghiệp Vụ</th>}
+                    {activeTab !== 'ORIGINAL' && <th className="px-4 py-3">Nghiệp Vụ</th>}
                     <th className="px-4 py-3">Nội dung chi tiết</th>
                     <th className="px-4 py-3 text-right">Chi (-)</th>
                     <th className="px-4 py-3 text-right">Thu (+)</th>
                     {activeTab === 'ORIGINAL' && <th className="px-4 py-3 text-center">Trạng thái</th>}
+                    {activeTab === 'DRAFT' && <th className="px-4 py-3 text-center">Mapping</th>}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 font-sans">
                   {displayData.length === 0 ? (
                     <tr>
-                      <td colSpan={6} className="px-4 py-20 text-center text-slate-300 italic font-sans">
+                      <td colSpan={7} className="px-4 py-20 text-center text-slate-300 italic font-sans">
                         {isProcessing ? (
                           <div className="flex flex-col items-center gap-3">
                             <Loader2 size={32} className="animate-spin text-blue-500" />
-                            <p className="font-bold">Đang xử lý dữ liệu 3 tầng...</p>
+                            <p className="font-bold">Đang phân loại dữ liệu qua AI...</p>
                           </div>
                         ) : "Không có dữ liệu trong danh sách này."}
                       </td>
@@ -518,7 +532,7 @@ export default function BankStatements() {
                       const transactionDate = item.transactionDate || item.transaction_date;
                       const effectiveDate = item.effectiveDate || item.effective_date;
                       const cls = getClassificationLabel(item.classification);
-                      const method = item.method || 'AI';
+                      const method = item.method || item.match_method;
                       const isProcessed = item.processed;
 
                       return (
@@ -528,18 +542,54 @@ export default function BankStatements() {
                             <div className="text-[9px] text-slate-400 font-sans uppercase">HL: {effectiveDate}</div>
                           </td>
                           
-                          {activeTab === 'LEDGER' && (
+                          {activeTab !== 'ORIGINAL' && (
                             <td className="px-4 py-4 border-r border-slate-50 w-44">
-                              <span className={`px-2 py-1 rounded text-[10px] font-black uppercase ${cls.color} block text-center shadow-sm mb-1`}>
-                                {cls.text}
-                              </span>
-                              <div className="flex items-center justify-center gap-1">
-                                {method === 'MAPPING' ? (
-                                  <span className="text-[8px] font-bold text-green-600 flex items-center gap-0.5"><ShieldCheck size={8} /> Keyword Mapping</span>
-                                ) : (
-                                  <span className="text-[8px] font-bold text-blue-600 flex items-center gap-0.5"><BrainCircuit size={8} /> Gemini Flash</span>
-                                )}
-                              </div>
+                              {activeTab === 'DRAFT' ? (
+                                <div className="space-y-1">
+                                  {editingId === item.id ? (
+                                    <select 
+                                      className="w-full text-[10px] p-1 border border-blue-300 rounded font-bold"
+                                      autoFocus
+                                      onBlur={() => setEditingId(null)}
+                                      value={item.classification || ''}
+                                      onChange={async (e) => {
+                                        await updateDraftClassification(item.id, e.target.value);
+                                        setEditingId(null);
+                                      }}
+                                    >
+                                      <option value="">-- Trống --</option>
+                                      {categories.map(c => <option key={c} value={c}>{getClassificationLabel(c).text}</option>)}
+                                    </select>
+                                  ) : (
+                                    <button 
+                                      onClick={() => setEditingId(item.id)}
+                                      className={`w-full px-2 py-1 rounded text-[10px] font-black uppercase ${cls.color} block text-center shadow-sm border border-transparent hover:border-blue-400 transition-all`}
+                                    >
+                                      {item.classification ? cls.text : 'Gán nghiệp vụ'}
+                                    </button>
+                                  )}
+                                  <div className="flex items-center justify-center gap-1">
+                                    {item.match_method === 'MAPPING' && <span className="text-[8px] font-bold text-green-600 flex items-center gap-0.5"><ShieldCheck size={8} /> Khớp Keyword</span>}
+                                    {item.match_method === 'MANUAL' && <span className="text-[8px] font-bold text-orange-600 flex items-center gap-0.5"><ListChecks size={8} /> Sửa thủ công</span>}
+                                    {!item.match_method && <span className="text-[8px] font-bold text-slate-400 flex items-center gap-0.5 italic">Chờ AI phân loại</span>}
+                                  </div>
+                                </div>
+                              ) : (
+                                <>
+                                  <span className={`px-2 py-1 rounded text-[10px] font-black uppercase ${cls.color} block text-center shadow-sm mb-1`}>
+                                    {cls.text}
+                                  </span>
+                                  <div className="flex items-center justify-center gap-1">
+                                    {item.method === 'MAPPING' ? (
+                                      <span className="text-[8px] font-bold text-green-600 flex items-center gap-0.5"><ShieldCheck size={8} /> Keyword Mapping</span>
+                                    ) : item.method === 'MANUAL' ? (
+                                      <span className="text-[8px] font-bold text-orange-600 flex items-center gap-0.5"><ListChecks size={8} /> Sửa thủ công</span>
+                                    ) : (
+                                      <span className="text-[8px] font-bold text-blue-600 flex items-center gap-0.5"><BrainCircuit size={8} /> Gemini Flash</span>
+                                    )}
+                                  </div>
+                                </>
+                              )}
                             </td>
                           )}
 
@@ -570,6 +620,30 @@ export default function BankStatements() {
                                 <span className="text-[9px] text-orange-400 font-black uppercase flex items-center justify-center gap-1">
                                   <AlertCircle size={12} /> Chờ xử lý
                                 </span>
+                              )}
+                            </td>
+                          )}
+
+                          {activeTab === 'DRAFT' && (
+                            <td className="px-4 py-4 text-center">
+                              {!item.classification && (
+                                <button 
+                                  onClick={async () => {
+                                    const keyword = confirm("Nhập từ khóa gợi ý để tạo Mapping tự động (Ví dụ: 'Nop tien mat')");
+                                    if (keyword) {
+                                      await fetch('/api/bank-mapping-rules', {
+                                        method: 'POST',
+                                        headers: { 'Content-Type': 'application/json' },
+                                        body: JSON.stringify({ keyword, category: 'KHAC' })
+                                      });
+                                      fetchRules();
+                                    }
+                                  }}
+                                  className="p-1 hover:bg-slate-100 rounded text-slate-300 hover:text-blue-500 transition-all"
+                                  title="Tạo quy tắc mapping mới"
+                                >
+                                  <Plus size={14} />
+                                </button>
                               )}
                             </td>
                           )}
