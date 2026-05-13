@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useInventory } from '../InventoryContext';
 import { Lock, User as UserIcon, Loader2 } from 'lucide-react';
 import { motion } from 'motion/react';
+import { APP_LOGO_URL } from '../constants';
 
 export default function Login() {
   const [username, setUsername] = useState('');
@@ -41,7 +42,7 @@ export default function Login() {
         <div className="text-center mb-10">
           <div className="inline-flex items-center justify-center w-20 h-20 rounded-2xl bg-gold-500 text-luxury-black mb-6 shadow-xl shadow-gold-500/20 p-4 transform -rotate-3 transition-transform hover:rotate-0 duration-500">
             <img 
-               src="https://raw.githubusercontent.com/BinhPhan75/nghiatingold/refs/heads/main/icon.png?token=GHSAT0AAAAAAD25RX774URG63UENSNTJPKS2QD3BGQ" 
+               src={APP_LOGO_URL} 
                alt="NGHIATINGOLD Logo" 
                className="w-full h-full object-contain"
                referrerPolicy="no-referrer"

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useInventory } from '../InventoryContext';
 import { LayoutDashboard, FileUp, BarChart3, Settings, LogOut, Menu, X, DollarSign, ChevronDown, ChevronUp, FileSearch } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { APP_LOGO_URL } from '../constants';
 
 // Subcomponents
 import ImportExport from './ImportExport';
@@ -123,7 +124,7 @@ export default function Layout() {
             <div className="flex items-center gap-3">
               <div className="p-1.5 bg-gold-500 rounded-lg shadow-lg shadow-gold-500/20">
                 <img 
-                  src="https://raw.githubusercontent.com/BinhPhan75/nghiatingold/refs/heads/main/icon.png?token=GHSAT0AAAAAAD25RX774URG63UENSNTJPKS2QD3BGQ" 
+                  src={APP_LOGO_URL} 
                   alt="NGHIATINGOLD Logo" 
                   className="w-8 h-8 object-contain"
                   referrerPolicy="no-referrer"
