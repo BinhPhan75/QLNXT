@@ -896,7 +896,7 @@ router.post("/api/bank-statements/re-map-draft", async (req, res) => {
     const rulesRes = await client.query('SELECT keyword, category FROM bank_mapping_rules WHERE is_active = true');
     const rules = rulesRes.rows;
     
-    const draftRes = await client.query("SELECT * FROM mapping_processed_data WHERE match_method != 'MANUAL'");
+    const draftRes = await client.query("SELECT * FROM mapping_processed_data WHERE match_method IS NULL OR match_method != 'MANUAL'");
     const items = draftRes.rows;
 
     await client.query('BEGIN');

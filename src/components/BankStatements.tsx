@@ -34,7 +34,7 @@ export default function BankStatements() {
   
   // Pagination State
   const [currentPage, setCurrentPage] = useState(1);
-  const [rowsPerPage, setRowsPerPage] = useState(500);
+  const [rowsPerPage, setRowsPerPage] = useState(200);
   
   // Mapping Rules State
   const [rules, setRules] = useState<MappingRule[]>([]);
