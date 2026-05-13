@@ -364,23 +364,6 @@ async function initDb() {
       console.error("[Database] Failed to ensure opening_balances PK:", err.message);
     }
 
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS bank_statements (
-        id TEXT PRIMARY KEY,
-        transaction_date TEXT,
-        effective_date TEXT,
-        debit FLOAT,
-        credit FLOAT,
-        balance FLOAT,
-        content TEXT,
-        classification TEXT,
-        customer_name TEXT,
-        customer_card TEXT,
-        item_info TEXT,
-        note TEXT
-      );
-    `);
-
     // Tier 1: Raw bank statements (Original document)
     await client.query(`
       CREATE TABLE IF NOT EXISTS raw_bank_statements (
@@ -436,13 +419,6 @@ async function initDb() {
         finalized_at TIMESTAMPTZ DEFAULT NOW()
       );
     `);
-
-    // Migration: ensure customer_card exists
-    try {
-      await client.query(`ALTER TABLE bank_statements ADD COLUMN IF NOT EXISTS customer_card TEXT`);
-    } catch (e) {
-      console.log("[Database] Migration: customer_card column might already exist.");
-    }
 
     console.log("[Database] Table schema verified.");
   } catch (err: any) {
@@ -729,21 +705,11 @@ router.post("/opening-balances", async (req, res) => {
 // 7. Reset
 router.post("/reset", async (req, res) => {
   try {
-    await pool.query('TRUNCATE nghiatingold_transactions, revenue_transactions, opening_balances, bank_statements');
+    await pool.query('TRUNCATE nghiatingold_transactions, revenue_transactions, opening_balances, raw_bank_statements, mapping_processed_data, final_bank_ledger');
     res.json({ success: true });
   } catch (err: any) {
     console.error("[API] Reset Error:", err.message);
     res.status(500).json({ error: "Failed to reset" });
-  }
-});
-
-// 9. Bank Statements (Old - keeping for compatibility if needed, but app uses final-ledger)
-router.get("/bank-statements", async (req, res) => {
-  try {
-    const result = await pool.query('SELECT * FROM bank_statements ORDER BY transaction_date DESC');
-    res.json(result.rows);
-  } catch (err: any) {
-    res.status(500).json({ error: err.message });
   }
 });
 
@@ -894,10 +860,12 @@ ${chunk.map(c => `ID: ${c.id} | Nội dung: ${c.content}`).join('\n')}
 Chỉ trả về JSON array: [{"id": "...", "classification": "...", "customerName": "...", "itemInfo": "..."}]`;
 
         try {
-          const model = ai.getGenerativeModel({ model: "gemini-1.5-flash-latest" });
-          const result = await model.generateContent(prompt);
+          const result = await ai.models.generateContent({
+            model: "gemini-1.5-flash-latest",
+            contents: [{ role: 'user', parts: [{ text: prompt }] }]
+          });
           
-          const text = result.response.text();
+          const text = result.text;
           const cleanText = text.replace(/```json|```/g, '').trim();
           const aiResults = JSON.parse(cleanText);
 

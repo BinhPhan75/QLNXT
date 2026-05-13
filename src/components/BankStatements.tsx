@@ -257,14 +257,14 @@ export default function BankStatements() {
   const getClassificationLabel = (type: string) => {
     switch (type) {
       case 'SALE':
-      case 'DOANH THU': return { text: 'Doanh thu/Bán', color: 'bg-green-100 text-green-700' };
+      case 'DOANH THU': return { text: 'Bán hàng', color: 'bg-green-100 text-green-700' };
       case 'PURCHASE':
-      case 'CHI PHI MUA HANG': return { text: 'Mua hàng/Vàng', color: 'bg-red-100 text-red-700' };
+      case 'CHI PHI MUA HANG': return { text: 'Mua hàng', color: 'bg-red-100 text-red-700' };
       case 'CHI PHI VAN HANH': return { text: 'CP Vận hành', color: 'bg-orange-100 text-orange-700' };
       case 'LUONG': return { text: 'Lương NV', color: 'bg-purple-100 text-purple-700' };
       case 'THUE': return { text: 'Thuế/Phí', color: 'bg-slate-100 text-slate-700' };
-      case 'CASH_WITHDRAWAL': return { text: 'Rút mặt', color: 'bg-orange-100 text-orange-700' };
-      case 'CASH_DEPOSIT': return { text: 'Nộp mặt', color: 'bg-blue-100 text-blue-700' };
+      case 'CASH_WITHDRAWAL': return { text: 'Rút TM', color: 'bg-orange-100 text-orange-700' };
+      case 'CASH_DEPOSIT': return { text: 'Nộp TM', color: 'bg-blue-100 text-blue-700' };
       default: return { text: type || 'Khác', color: 'bg-slate-100 text-slate-400' };
     }
   };
