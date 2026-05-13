@@ -425,7 +425,7 @@ export default function Layout() {
 
       {/* Main Content */}
       <main className="flex-1 p-4 lg:p-8 overflow-y-auto">
-        <div className="max-w-7xl mx-auto">
+        <div className={`${(activeTab === 'bank' || activeTab === 'inv_nxt' || activeTab === 'sales_purchase' || activeTab === 'rev_report') ? 'w-full' : 'max-w-7xl mx-auto'}`}>
           <header className="flex items-center justify-between mb-8 pb-4 border-b border-zinc-200/50">
             <button 
               onClick={() => setSidebarOpen(!isSidebarOpen)}

@@ -780,12 +780,21 @@ router.post("/api/raw-statements/bulk", async (req, res) => {
 
     // For T2 processing, we still need to calculate classifications
     // To keep it simple but faster than individually inserting, we build arrays for T2 as well
-    const tier2Classifications = items.map(item => {
+    const tier2Classifications = items.map((item, idx) => {
       let classification = null;
-      for (const rule of rules) {
-        if (item.content?.toLowerCase().includes(rule.keyword.toLowerCase())) {
-          classification = rule.category;
-          break;
+
+      // Pattern: Credit > 0 AND content contains ID card (9-12 digits)
+      const isCredit = credits[idx] > 0;
+      const hasIDCard = /\b\d{9,12}\b/.test(item.content || "");
+
+      if (isCredit && hasIDCard) {
+        classification = 'SALE';
+      } else {
+        for (const rule of rules) {
+          if (item.content?.toLowerCase().includes(rule.keyword.toLowerCase())) {
+            classification = rule.category;
+            break;
+          }
         }
       }
       return classification;
