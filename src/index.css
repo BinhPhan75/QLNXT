@@ -1,1 +1,38 @@
+@import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;500;600;700&family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&display=swap');
 @import "tailwindcss";
+
+@theme {
+  --font-sans: "Montserrat", ui-sans-serif, system-ui, sans-serif;
+  --font-serif: "Cormorant+Garamond", Georgia, serif;
+  
+  --color-gold-50: #fdfaf1;
+  --color-gold-100: #fbf5e2;
+  --color-gold-200: #f5e4b3;
+  --color-gold-300: #eed07d;
+  --color-gold-400: #e5b64d;
+  --color-gold-500: #d4af37; /* Primary Gold */
+  --color-gold-600: #bd912b;
+  --color-gold-700: #9e7325;
+  --color-gold-800: #815d23;
+  --color-gold-900: #6a4d21;
+  
+  --color-luxury-black: #0F0F0F;
+  --color-luxury-dark: #1A1A1A;
+  --color-luxury-gray: #2A2A2A;
+}
+
+@layer base {
+  body {
+    @apply bg-zinc-50 text-luxury-black;
+  }
+}
+
+.gold-gradient {
+  background: linear-gradient(135deg, #d4af37 0%, #f5e4b3 50%, #bd912b 100%);
+}
+
+.gold-text-gradient {
+  background: linear-gradient(135deg, #d4af37 0%, #f5e4b3 50%, #bd912b 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}

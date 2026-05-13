@@ -423,172 +423,183 @@ export default function Reports({ mode }: ReportsProps) {
     <div className="space-y-6">
       <header className="flex flex-col md:flex-row md:items-end justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">
-            {reportType === 'BUY' ? 'Báo Cáo Mua Hàng' : reportType === 'SELL' ? (mode === 'REVENUE' ? 'Báo Cáo Doanh Thu & Tiền công' : 'Báo Cáo Bán Hàng') : (reportType === 'STOCK' ? 'Báo cáo Tồn kho' : 'Báo Cáo Quản lý hàng hóa')}
+          <h1 className="text-3xl font-bold text-luxury-black font-serif tracking-tight">
+            {reportType === 'BUY' ? 'Báo cáo Mua hàng' : reportType === 'SELL' ? (mode === 'REVENUE' ? 'Doanh thu & Tiền công' : 'Báo cáo Bán hàng') : (reportType === 'STOCK' ? 'Tồn kho thực tế' : 'Quản lý hàng hóa')}
           </h1>
-          <p className="text-slate-500">
-            {mode === 'REVENUE' ? 'Theo dõi doanh thu bán hàng & tiền công chi tiết' : 'Quản lý hàng hóa (970, 9999, 610, Bạc, Công...)'}
+          <p className="text-zinc-500 text-sm mt-1">
+            {mode === 'REVENUE' ? 'Phân tích hiệu quả kinh doanh & dịch vụ chế tác' : 'Kiểm soát dòng hàng 24k, 18k, Trang sức & Kim loại quý'}
           </p>
         </div>
         <div className="flex flex-col gap-2 md:items-end">
-          <div className="flex p-1 bg-slate-100 rounded-lg">
+          <div className="flex p-1 bg-zinc-100 rounded-xl">
             {mode === 'INVENTORY' && (
               <button 
                 onClick={() => setReportType('BUY')}
-                className={`px-4 py-1.5 text-sm font-medium rounded-md transition-all ${reportType === 'BUY' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500'}`}
+                className={`px-4 py-2 text-xs font-bold uppercase tracking-widest rounded-lg transition-all ${reportType === 'BUY' ? 'bg-white text-gold-600 shadow-sm' : 'text-zinc-500'}`}
               >
-                Báo cáo Mua
+                Mua vào
               </button>
             )}
             <button 
               onClick={() => setReportType('SELL')}
-              className={`px-4 py-1.5 text-sm font-medium rounded-md transition-all ${reportType === 'SELL' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500'}`}
+              className={`px-4 py-2 text-xs font-bold uppercase tracking-widest rounded-lg transition-all ${reportType === 'SELL' ? 'bg-white text-gold-600 shadow-sm' : 'text-zinc-500'}`}
             >
-              {mode === 'REVENUE' ? 'Doanh thu' : 'Báo cáo Bán'}
+              {mode === 'REVENUE' ? 'Doanh thu' : 'Bán ra'}
             </button>
             {mode === 'INVENTORY' && (
               <button 
                 onClick={() => setReportType('STOCK')}
-                className={`px-4 py-1.5 text-sm font-medium rounded-md transition-all ${reportType === 'STOCK' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500'}`}
+                className={`px-4 py-2 text-xs font-bold uppercase tracking-widest rounded-lg transition-all ${reportType === 'STOCK' ? 'bg-white text-gold-600 shadow-sm' : 'text-zinc-500'}`}
               >
-                Báo cáo Tồn
+                Tồn kho
               </button>
             )}
           </div>
           {reportType !== 'STOCK' && (
-            <div className="flex p-1 bg-slate-100 rounded-lg">
+            <div className="flex p-1 bg-zinc-100/50 rounded-lg">
               <button 
                 onClick={() => setViewMode('TRANSACTION')}
-                className={`px-3 py-1 text-xs font-medium rounded-md transition-all ${viewMode === 'TRANSACTION' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500'}`}
+                className={`px-3 py-1 text-[10px] font-bold uppercase tracking-wider rounded-md transition-all ${viewMode === 'TRANSACTION' ? 'bg-white text-luxury-black shadow-sm' : 'text-zinc-400'}`}
               >
-                Chi tiết hàng
+                Giao dịch
               </button>
               <button 
                 onClick={() => setViewMode('INVOICE')}
-                className={`px-3 py-1 text-xs font-medium rounded-md transition-all ${viewMode === 'INVOICE' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500'}`}
+                className={`px-3 py-1 text-[10px] font-bold uppercase tracking-wider rounded-md transition-all ${viewMode === 'INVOICE' ? 'bg-white text-luxury-black shadow-sm' : 'text-zinc-400'}`}
               >
-                Theo hóa đơn
+                Hóa đơn
               </button>
             </div>
           )}
         </div>
       </header>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
-          <p className="text-slate-500 text-sm mb-1">Tổng số lượng {reportType === 'STOCK' ? 'tồn' : ''}</p>
-          <p className="text-2xl font-bold text-slate-900">{formatQuantity(totals.qty || 0)} <span className="text-sm font-normal text-slate-400">sản phẩm</span></p>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="bg-white p-6 rounded-3xl border border-zinc-200 shadow-sm">
+          <p className="text-zinc-400 text-[10px] font-bold mb-2 uppercase tracking-[0.2em]">Tổng số lượng {reportType === 'STOCK' ? 'tồn' : ''}</p>
+          <div className="flex items-baseline gap-2">
+            <p className="text-3xl font-bold text-luxury-black font-serif">{formatQuantity(totals.qty || 0)}</p>
+            <p className="text-xs text-zinc-400 font-medium">Sản phẩm</p>
+          </div>
         </div>
-        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
-          <p className="text-slate-500 text-sm mb-1">
+        <div className="bg-white p-6 rounded-3xl border border-zinc-200 shadow-sm ring-1 ring-gold-500/10">
+          <p className="text-zinc-400 text-[10px] font-bold mb-2 uppercase tracking-[0.2em]">
             {reportType === 'SELL' ? 'Tổng doanh thu' : reportType === 'BUY' ? 'Tổng giá trị mua' : 'Tổng giá trị kho'}
           </p>
-          <p className="text-2xl font-bold text-blue-600">{formatCurrency(totals.total)}</p>
+          <p className="text-3xl font-bold text-gold-600 font-serif">{formatCurrency(totals.total)}</p>
         </div>
         {reportType === 'SELL' && (
-          <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
-            <p className="text-slate-500 text-sm mb-1">Tổng giá vốn</p>
-            <p className="text-2xl font-bold text-red-500">{formatCurrency(totals.cogs)}</p>
+          <div className="bg-white p-6 rounded-3xl border border-zinc-200 shadow-sm">
+            <p className="text-zinc-400 text-[10px] font-bold mb-2 uppercase tracking-[0.2em]">Tổng giá vốn</p>
+            <p className="text-3xl font-bold text-rose-500 font-serif">{formatCurrency(totals.cogs)}</p>
           </div>
         )}
         {reportType === 'STOCK' && (
-          <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
-            <p className="text-slate-500 text-sm mb-1">Mặt hàng trong kho</p>
-            <p className="text-2xl font-bold text-slate-900">{filteredProducts.length}</p>
+          <div className="bg-white p-6 rounded-3xl border border-zinc-200 shadow-sm">
+            <p className="text-zinc-400 text-[10px] font-bold mb-2 uppercase tracking-[0.2em]">Danh mục hàng</p>
+            <p className="text-3xl font-bold text-luxury-black font-serif">{filteredProducts.length}</p>
           </div>
         )}
       </div>
 
-      <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
-        <div className="p-4 border-b border-slate-100 flex flex-col md:flex-row gap-4">
-          <div className="flex flex-wrap gap-2 min-w-fit items-center">
-            <select 
-              className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-blue-500/20 text-sm font-medium"
-              value={selectedMonth}
-              onChange={(e) => {
-                setSelectedMonth(e.target.value === 'ALL' ? 'ALL' : parseInt(e.target.value));
-                setStartDate('');
-                setEndDate('');
-              }}
-            >
-              <option value="ALL">Tất cả tháng</option>
-              {Array.from({ length: 12 }, (_, i) => (
-                <option key={i} value={i}>Tháng {i + 1}</option>
-              ))}
-            </select>
-            <select 
-              className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-blue-500/20 text-sm font-medium"
-              value={selectedYear}
-              onChange={(e) => {
-                setSelectedYear(parseInt(e.target.value));
-                setStartDate('');
-                setEndDate('');
-              }}
-            >
-              {[2024, 2025, 2026].map(y => (
-                <option key={y} value={y}>Năm {y}</option>
-              ))}
-            </select>
-
-            <div className="h-6 w-px bg-slate-200 mx-1 hidden md:block"></div>
-
-            <div className="flex items-center gap-2 text-sm text-slate-600 border border-slate-200 rounded-lg px-3 py-1.5 bg-slate-50">
-              <span className="text-[10px] uppercase font-bold text-slate-400">Từ</span>
-              <input 
-                type="date"
-                className="focus:outline-none bg-transparent"
-                value={startDate}
+      <div className="bg-white border border-zinc-200 rounded-3xl shadow-sm overflow-hidden">
+        <div className="p-6 border-b border-zinc-100 flex flex-col lg:flex-row gap-4">
+          <div className="flex flex-wrap gap-3 items-center">
+            <div className="flex items-center gap-2 bg-zinc-50 border border-zinc-200 rounded-2xl px-4 py-2">
+              <Calendar size={16} className="text-gold-600" />
+              <select 
+                className="bg-transparent border-none outline-none text-sm font-bold text-zinc-700 cursor-pointer"
+                value={selectedMonth}
                 onChange={(e) => {
-                  setStartDate(e.target.value);
-                  setSelectedMonth('ALL');
+                  setSelectedMonth(e.target.value === 'ALL' ? 'ALL' : parseInt(e.target.value));
+                  setStartDate('');
+                  setEndDate('');
                 }}
-              />
-              <span className="text-[10px] uppercase font-bold text-slate-400">Đến</span>
-              <input 
-                type="date"
-                className="focus:outline-none bg-transparent"
-                value={endDate}
+              >
+                <option value="ALL">Tất cả tháng</option>
+                {Array.from({ length: 12 }, (_, i) => (
+                  <option key={i} value={i}>Tháng {i + 1}</option>
+                ))}
+              </select>
+            </div>
+            <div className="flex items-center gap-2 bg-zinc-50 border border-zinc-200 rounded-2xl px-4 py-2">
+              <select 
+                className="bg-transparent border-none outline-none text-sm font-bold text-zinc-700 cursor-pointer"
+                value={selectedYear}
                 onChange={(e) => {
-                  setEndDate(e.target.value);
-                  setSelectedMonth('ALL');
+                  setSelectedYear(parseInt(e.target.value));
+                  setStartDate('');
+                  setEndDate('');
                 }}
-              />
+              >
+                {[2024, 2025, 2026].map(y => (
+                  <option key={y} value={y}>Năm {y}</option>
+                ))}
+              </select>
+            </div>
+
+            <div className="flex items-center gap-3 text-sm text-zinc-600 border border-zinc-200 rounded-2xl px-5 py-2 bg-zinc-50/50">
+              <div className="flex items-center gap-2">
+                <span className="text-[9px] uppercase font-black text-zinc-400 tracking-wider">Từ</span>
+                <input 
+                  type="date"
+                  className="focus:outline-none bg-transparent font-bold text-xs"
+                  value={startDate}
+                  onChange={(e) => {
+                    setStartDate(e.target.value);
+                    setSelectedMonth('ALL');
+                  }}
+                />
+              </div>
+              <div className="w-px h-4 bg-zinc-200" />
+              <div className="flex items-center gap-2">
+                <span className="text-[9px] uppercase font-black text-zinc-400 tracking-wider">Đến</span>
+                <input 
+                  type="date"
+                  className="focus:outline-none bg-transparent font-bold text-xs"
+                  value={endDate}
+                  onChange={(e) => {
+                    setEndDate(e.target.value);
+                    setSelectedMonth('ALL');
+                  }}
+                />
+              </div>
             </div>
           </div>
           <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-400" size={18} />
             <input 
               type="text" 
-              placeholder={reportType === 'STOCK' ? "Tìm theo mã hoặc tên hàng..." : "Tìm theo mã, tên hoặc số HĐ..."}
-              className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-blue-500/20"
+              placeholder={reportType === 'STOCK' ? "Tìm kiếm sản phẩm..." : "Tìm mã, tên, khách hàng hoặc số HĐ..."}
+              className="w-full pl-12 pr-4 py-3 bg-zinc-50 border border-zinc-200 rounded-2xl outline-none focus:ring-2 focus:ring-gold-500/10 placeholder:text-zinc-400 text-sm"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
             />
           </div>
-          <div className="flex gap-2">
+          <div className="flex gap-3">
             {selectedInvoices.length > 0 && (
               <button 
                 onClick={handleBulkDelete}
-                className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors text-sm font-bold shadow-lg"
+                className="flex items-center gap-2 px-6 py-3 bg-rose-600 text-white rounded-2xl hover:bg-rose-700 transition-all text-xs font-bold shadow-lg shadow-rose-600/20 active:scale-95"
               >
                 <Trash2 size={16} /> Xóa {selectedInvoices.length} HĐ
               </button>
             )}
             {reportType !== 'STOCK' && (
               <select 
-                className="px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-blue-500/20 text-sm"
+                className="px-4 py-3 bg-zinc-50 border border-zinc-200 rounded-2xl outline-none focus:ring-2 focus:ring-gold-500/10 text-sm font-medium cursor-pointer"
                 value={customerFilter}
                 onChange={(e) => setCustomerFilter(e.target.value)}
               >
-                <option value="">Tất cả khách/nhà CC</option>
+                <option value="">Tất cả khách hàng</option>
                 {customers.map(c => <option key={c} value={c}>{c}</option>)}
               </select>
             )}
             <button 
               onClick={handleExport}
-              className="flex items-center gap-2 px-4 py-2 bg-slate-900 text-white rounded-lg hover:bg-slate-800 transition-colors text-sm"
+              className="flex items-center gap-2 px-6 py-3 bg-luxury-black text-gold-500 rounded-2xl hover:bg-luxury-dark transition-all text-xs font-bold shadow-lg active:scale-95 border border-gold-500/20"
             >
-              <Download size={16} /> Export
+              <Download size={16} /> EXPORT
             </button>
           </div>
         </div>
