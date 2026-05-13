@@ -783,11 +783,11 @@ router.post("/api/raw-statements/bulk", async (req, res) => {
     const tier2Classifications = items.map((item, idx) => {
       let classification = null;
 
-      // Pattern: Credit > 0 AND content contains ID card (exactly 9 or 12 digits for CMND/CCCD)
+      // Logic Mapping Thông minh: Thu tiền + có dãy số CMND/CCCD (Chính xác 9 hoặc 12 số)
       const isCredit = credits[idx] > 0;
-      // Many banking systems use spaces, hyphens or just number strings. 
-      // We look for sequences of 9 or 12 digits that are likely IDs.
-      const hasIDCard = /\b\d{9}\b|\b\d{12}\b/.test(item.content || "");
+      const content = item.content || "";
+      // Sử dụng regex để tìm đúng cụm 9 hoặc 12 chữ số không bị dính vào số khác (tránh nhầm số điện thoại 10 số)
+      const hasIDCard = /(?:^|\D)(\d{9}|\d{12})(?:\D|$)/.test(content);
 
       if (isCredit && hasIDCard) {
         classification = 'SALE';
@@ -886,6 +886,56 @@ router.delete("/api/bank-mapping-rules/:id", async (req, res) => {
     res.json({ success: true });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
+  }
+});
+
+// Re-apply Mapping to T2 (For data already imported)
+router.post("/api/bank-statements/re-map-draft", async (req, res) => {
+  const client = await pool.connect();
+  try {
+    const rulesRes = await client.query('SELECT keyword, category FROM bank_mapping_rules WHERE is_active = true');
+    const rules = rulesRes.rows;
+    
+    const draftRes = await client.query("SELECT * FROM mapping_processed_data WHERE match_method != 'MANUAL'");
+    const items = draftRes.rows;
+
+    await client.query('BEGIN');
+    for (const item of items) {
+      let classification = null;
+      let method = null;
+
+      // Smart Mapping: Credit + ID Card
+      const isCredit = (parseFloat(item.credit) || 0) > 0;
+      const content = item.content || "";
+      const hasIDCard = /(?:^|\D)(\d{9}|\d{12})(?:\D|$)/.test(content);
+
+      if (isCredit && hasIDCard) {
+        classification = 'SALE';
+        method = 'MAPPING';
+      } else {
+        for (const rule of rules) {
+          if (content.toLowerCase().includes(rule.keyword.toLowerCase())) {
+            classification = rule.category;
+            method = 'MAPPING';
+            break;
+          }
+        }
+      }
+
+      if (classification) {
+        await client.query(
+          'UPDATE mapping_processed_data SET classification = $1, match_method = $2 WHERE id = $3',
+          [classification, method, item.id]
+        );
+      }
+    }
+    await client.query('COMMIT');
+    res.json({ success: true, count: items.length });
+  } catch (err: any) {
+    if (client) await client.query('ROLLBACK');
+    res.status(500).json({ error: err.message });
+  } finally {
+    client.release();
   }
 });
 

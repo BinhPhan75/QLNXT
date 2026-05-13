@@ -410,6 +410,19 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     }
   };
 
+  const reMapDraft = async () => {
+    try {
+      const res = await fetch('/api/bank-statements/re-map-draft', { method: 'POST' });
+      if (!res.ok) throw new Error("Lỗi khi áp dụng Mapping thông minh");
+      
+      const draftRes = await fetch('/api/mapping-processed-data').then(r => r.json());
+      setMappingDraft(Array.isArray(draftRes) ? draftRes : []);
+    } catch (err) {
+      console.error(err);
+      alert("Lỗi khi cập nhật Mapping.");
+    }
+  };
+
   const processTieredBankStatements = async () => {
     try {
       const res = await fetch('/api/bank-statements/finalize-ledger', { method: 'POST' });
@@ -853,6 +866,7 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       logout, 
       importTransactions, 
       importBankStatements,
+      reMapDraft,
       updateDraftClassification,
       processTieredBankStatements,
       deleteInvoice,

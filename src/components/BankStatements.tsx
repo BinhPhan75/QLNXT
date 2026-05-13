@@ -19,6 +19,7 @@ export default function BankStatements() {
     rawBankStatements, 
     mappingDraft,
     importBankStatements, 
+    reMapDraft,
     processTieredBankStatements,
     updateDraftClassification
   } = useInventory();
@@ -366,6 +367,22 @@ export default function BankStatements() {
             <BrainCircuit size={18} className={isProcessing ? "animate-pulse" : ""} />
             <span>Phân loại tự động (AI)</span>
           </button>
+
+          {activeTab === 'DRAFT' && (
+            <button 
+              onClick={async () => {
+                setIsProcessing(true);
+                await reMapDraft();
+                setIsProcessing(false);
+              }}
+              disabled={isProcessing || mappingDraft.length === 0}
+              className="flex items-center gap-2 px-4 py-2 bg-indigo-500 text-white rounded-lg hover:bg-indigo-600 transition-colors disabled:opacity-50 text-sm font-black shadow-lg shadow-indigo-200 uppercase tracking-tighter"
+              title="Áp dụng lại luật Mapping và Regex thông minh cho dữ liệu T2"
+            >
+              <ShieldCheck size={18} className={isProcessing ? "animate-pulse" : ""} />
+              <span>Cập nhật Mapping</span>
+            </button>
+          )}
 
           <label className={`flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg cursor-pointer hover:bg-blue-700 transition-colors shadow-lg shadow-blue-200 text-sm font-bold ${isProcessing ? 'opacity-50 cursor-not-allowed' : ''}`}>
             <Upload size={18} />
