@@ -175,52 +175,65 @@ export default function BankStatements() {
   };
 
   const processBankData = async (data: string[][]) => {
-    const headerRowIdx = data.findIndex(row => row.some(cell => cell?.toString().toLowerCase().includes('stt')));
-    if (headerRowIdx === -1) throw new Error("Không tìm thấy dòng tiêu đề 'STT' trong file.");
+    // Look for header row more flexibly
+    const headerKeywords = ['stt', 'số tt', 'số thứ tự', 'ngay gd', 'ngày gd'];
+    const headerRowIdx = data.findIndex(row => row.some(cell => 
+      cell && headerKeywords.some(kw => cell.toString().toLowerCase().includes(kw))
+    ));
+    
+    if (headerRowIdx === -1) throw new Error("Không tìm thấy dòng tiêu đề (STT, Ngày GD) trong file. Vui lòng kiểm tra lại định dạng file.");
 
     const rows = data.slice(headerRowIdx + 1);
     const rawItems: any[] = [];
 
     const parseAmount = (val: string): number => {
-      if (!val) return 0;
+      if (val === undefined || val === null || val === '') return 0;
+      // Handle numeric type from XLSX directly
+      if (typeof val === 'number') return val;
       return parseFloat(val.toString().replace(/,/g, '').replace(/[^\d.-]/g, '')) || 0;
     };
 
     rows.forEach((row, idx) => {
       if (row.length < 5) return;
       const stt = row[0]?.toString().trim();
-      if (!stt || isNaN(parseInt(stt))) return;
+      // Basic check to see if this row has transaction data (STT or Date should exist)
+      if (!stt && !row[1]) return;
+      if (stt && isNaN(parseInt(stt)) && !row[1]) return;
 
       const dateColB = row[1]?.toString().trim() || '';
       const dateColC = row[2]?.toString().trim() || '';
+      // Support formats like "DD/MM/YYYY / DOC_NO"
       const datePartB = dateColB.includes(' / ') ? dateColB.split(' / ')[0].trim() : dateColB;
       const docNo = dateColB.includes(' / ') ? dateColB.split(' / ')[1]?.trim() : '';
       const mainDate = dateColC || datePartB;
 
+      // Mandatory fields: Date and Content
       if (!mainDate || !row[6]) return;
       
       rawItems.push({
-        id: `raw-${Date.now()}-${idx}-${Math.random().toString(36).substr(2, 5)}`,
         transactionDate: mainDate,
         effectiveDate: dateColC || mainDate,
-        debit: parseAmount(row[3]?.toString() || ''),
-        credit: parseAmount(row[4]?.toString() || ''),
-        balance: parseAmount(row[5]?.toString() || ''),
+        debit: parseAmount(row[3]),
+        credit: parseAmount(row[4]),
+        balance: parseAmount(row[5]),
         content: row[6]?.toString().trim() || '',
-        note: docNo
+        note: docNo || ''
       });
     });
 
-    if (rawItems.length === 0) throw new Error("Không tìm thấy dữ liệu giao dịch hợp lệ.");
+    if (rawItems.length === 0) throw new Error("Không tìm thấy dữ liệu giao dịch hợp lệ sau dòng tiêu đề.");
 
-    setLogs(prev => [...prev, { msg: `Đã tìm thấy ${rawItems.length} giao dịch. Đang lưu Bản Nguyên Gốc (Tầng 1)...`, type: 'loading' }]);
+    setLogs(prev => [...prev, { msg: `Đã tìm thấy ${rawItems.length} giao dịch. Đang lưu Bản Nguyên Gốc...`, type: 'loading' }]);
     
-    // Step 1: Upload to raw table
-    await importBankStatements(rawItems);
-    
-    setLogs([{ msg: `Đã nhập liệu thành công ${rawItems.length} dòng vào Bản Nguyên Gốc. Click "Phân loại nghiệp vụ" để tiếp tục.`, type: 'success' }]);
-    setIsProcessing(false);
-    setActiveTab('ORIGINAL');
+    try {
+      await importBankStatements(rawItems);
+      setLogs([{ msg: `Đã nhập liệu thành công ${rawItems.length} dòng vào Bản Nguyên Gốc. Dữ liệu đã được phân loại sơ bộ qua Mapping Rules.`, type: 'success' }]);
+      setActiveTab('ORIGINAL');
+    } catch (err: any) {
+      setLogs(prev => [...prev, { msg: `Lỗi khi lưu dữ liệu: ${err.message}`, type: 'error' }]);
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
   const displayData = useMemo(() => {

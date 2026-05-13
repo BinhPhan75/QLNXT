@@ -732,41 +732,54 @@ router.post("/api/raw-statements/bulk", async (req, res) => {
     const rulesRes = await client.query('SELECT keyword, category FROM bank_mapping_rules WHERE is_active = true');
     const rules = rulesRes.rows;
 
-    await client.query('BEGIN');
-    for (const item of items) {
-      // 1. Raw T1
-      await client.query(
-        `INSERT INTO raw_bank_statements (id, transaction_date, effective_date, debit, credit, balance, content, note)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-         ON CONFLICT (id) DO NOTHING`,
-        [item.id, item.transactionDate, item.effectiveDate, item.debit || 0, item.credit || 0, item.balance || 0, item.content, item.note]
-      );
+    // We use unnest for Tier 1 to be fast
+    const ids = items.map(i => i.id);
+    const txDates = items.map(i => i.transactionDate);
+    const effDates = items.map(i => i.effectiveDate);
+    const debits = items.map(i => parseFloat(i.debit || 0));
+    const credits = items.map(i => parseFloat(i.credit || 0));
+    const balances = items.map(i => parseFloat(i.balance || 0));
+    const contents = items.map(i => i.content || '');
+    const notes = items.map(i => i.note || '');
 
-      // 2. Initial Mapping for T2
+    await client.query('BEGIN');
+
+    // Fast Batch Insert for T1
+    await client.query(`
+      INSERT INTO raw_bank_statements (id, transaction_date, effective_date, debit, credit, balance, content, note)
+      SELECT * FROM unnest($1::text[], $2::text[], $3::text[], $4::float8[], $5::float8[], $6::float8[], $7::text[], $8::text[])
+      ON CONFLICT (id) DO NOTHING
+    `, [ids, txDates, effDates, debits, credits, balances, contents, notes]);
+
+    // For T2 processing, we still need to calculate classifications
+    // To keep it simple but faster than individually inserting, we build arrays for T2 as well
+    const tier2Classifications = items.map(item => {
       let classification = null;
-      let method = null;
       for (const rule of rules) {
         if (item.content?.toLowerCase().includes(rule.keyword.toLowerCase())) {
           classification = rule.category;
-          method = 'MAPPING';
           break;
         }
       }
+      return classification;
+    });
 
-      // 3. Draft T2
-      await client.query(
-        `INSERT INTO mapping_processed_data (id, transaction_date, effective_date, debit, credit, balance, content, note, classification, match_method)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-         ON CONFLICT (id) DO UPDATE SET
-           classification = COALESCE(mapping_processed_data.classification, EXCLUDED.classification),
-           match_method = COALESCE(mapping_processed_data.match_method, EXCLUDED.match_method)`,
-        [item.id, item.transactionDate, item.effectiveDate, item.debit || 0, item.credit || 0, item.balance || 0, item.content, item.note, classification, method]
-      );
-    }
+    const tier2Methods = tier2Classifications.map(c => c ? 'MAPPING' : null);
+
+    // Fast Batch Insert for T2
+    await client.query(`
+      INSERT INTO mapping_processed_data (id, transaction_date, effective_date, debit, credit, balance, content, note, classification, match_method)
+      SELECT * FROM unnest($1::text[], $2::text[], $3::text[], $4::float8[], $5::float8[], $6::float8[], $7::text[], $8::text[], $9::text[], $10::text[])
+      ON CONFLICT (id) DO UPDATE SET 
+        classification = COALESCE(mapping_processed_data.classification, EXCLUDED.classification),
+        match_method = COALESCE(mapping_processed_data.match_method, EXCLUDED.match_method)
+    `, [ids, txDates, effDates, debits, credits, balances, contents, notes, tier2Classifications, tier2Methods]);
+
     await client.query('COMMIT');
     res.json({ success: true, count: items.length });
   } catch (err: any) {
-    await client.query('ROLLBACK');
+    if (client) await client.query('ROLLBACK');
+    console.error("[API] Bulk Import Error:", err.message);
     res.status(500).json({ error: err.message });
   } finally {
     client.release();

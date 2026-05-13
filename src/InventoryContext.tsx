@@ -355,20 +355,30 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     }
   };
 
-  const importBankStatements = async (newItems: Omit<BankStatement, 'id'>[]) => {
-    const keyedItems = newItems.map(item => ({ 
+  const importBankStatements = async (newItems: Omit<BankStatement, 'id'>[]): Promise<void> => {
+    const keyedItems = newItems.map((item, idx) => ({ 
       ...item, 
-      id: (item as any).id || `bank-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`
+      id: (item as any).id || `bank-${Date.now()}-${idx}-${Math.random().toString(36).substr(2, 9)}`
     }));
     
     try {
-      const res = await fetch('/api/raw-statements/bulk', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ items: keyedItems })
-      });
+      const batchSize = 800; // Smaller batches for reliability
+      for (let i = 0; i < keyedItems.length; i += batchSize) {
+        const batch = keyedItems.slice(i, i + batchSize);
+        console.log(`[Import] Processing batch ${Math.floor(i/batchSize) + 1}/${Math.ceil(keyedItems.length/batchSize)}`);
+        
+        const res = await fetch('/api/raw-statements/bulk', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ items: batch })
+        });
+        
+        if (!res.ok) {
+          const errorData = await res.json().catch(() => ({}));
+          throw new Error(errorData.error || `HTTP error! status: ${res.status}`);
+        }
+      }
       
-      if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
       // Refresh raw statements and mapping draft
       const [rawRes, draftRes] = await Promise.all([
         fetch('/api/raw-bank-statements').then(r => r.json()),
@@ -376,9 +386,10 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       ]);
       setRawBankStatements(Array.isArray(rawRes) ? rawRes : []);
       setMappingDraft(Array.isArray(draftRes) ? draftRes : []);
-    } catch (err) {
-      console.error(err);
-      alert("Lỗi khi lưu sao kê ngân hàng (Bản nguyên gốc) lên server.");
+    } catch (err: any) {
+      console.error("[Import Error]", err);
+      alert(`Lỗi khi lưu sao kê ngân hàng lên server: ${err.message}`);
+      throw err;
     }
   };
 
