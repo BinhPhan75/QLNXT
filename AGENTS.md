@@ -2,7 +2,7 @@
 
 ## Assets
 - **Logo/Icon URL**: The following URL MUST be used for all logo and favicon instances. DO NOT change this URL in future edits.
-  - URL: `https://raw.githubusercontent.com/BinhPhan75/nghiatingold/refs/heads/main/icon.png?token=GHSAT0AAAAAAD25RX774URG63UENSNTJPKS2QD3BGQ`
+  - URL: `https://raw.githubusercontent.com/BinhPhan75/nghiatingold/refs/heads/main/icon.png`
 
 ## Design Principles
 - **Luxury Aesthetic**: Maintain the "Luxury Black & Gold" theme.
