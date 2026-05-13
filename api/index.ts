@@ -395,18 +395,27 @@ async function initDb() {
     await client.query(`
       CREATE TABLE IF NOT EXISTS mapping_processed_data (
         id TEXT PRIMARY KEY,
-        transaction_date TEXT,
-        effective_date TEXT,
-        debit FLOAT,
-        credit FLOAT,
-        balance FLOAT,
-        content TEXT,
-        note TEXT,
         classification TEXT, -- Editable by user
         match_method TEXT, -- 'MAPPING', 'MANUAL'
         processed_at TIMESTAMPTZ DEFAULT NOW()
       );
     `);
+
+    // Migration for mapping_processed_data (Add missing columns if table existed previously)
+    const mCols = [
+      ['transaction_date', 'TEXT'],
+      ['effective_date', 'TEXT'],
+      ['debit', 'FLOAT'],
+      ['credit', 'FLOAT'],
+      ['balance', 'FLOAT'],
+      ['content', 'TEXT'],
+      ['note', 'TEXT']
+    ];
+    for (const [col, type] of mCols) {
+      try {
+        await client.query(`ALTER TABLE mapping_processed_data ADD COLUMN IF NOT EXISTS ${col} ${type}`);
+      } catch (e) {}
+    }
 
     // Tier 4: Final bank ledger (Final clean version)
     await client.query(`
@@ -426,6 +435,24 @@ async function initDb() {
         finalized_at TIMESTAMPTZ DEFAULT NOW()
       );
     `);
+
+    // Migration for final_bank_ledger
+    const fCols = [
+      ['transaction_date', 'TEXT'],
+      ['effective_date', 'TEXT'],
+      ['debit', 'FLOAT'],
+      ['credit', 'FLOAT'],
+      ['balance', 'FLOAT'],
+      ['content', 'TEXT'],
+      ['note', 'TEXT'],
+      ['customer_name', 'TEXT'],
+      ['item_info', 'TEXT']
+    ];
+    for (const [col, type] of fCols) {
+      try {
+        await client.query(`ALTER TABLE final_bank_ledger ADD COLUMN IF NOT EXISTS ${col} ${type}`);
+      } catch (e) {}
+    }
 
     console.log("[Database] Table schema verified.");
   } catch (err: any) {
