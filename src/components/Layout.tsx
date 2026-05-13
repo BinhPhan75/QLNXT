@@ -498,8 +498,8 @@ function DashboardView({ setActiveTab }: { setActiveTab: (tab: any) => void }) {
         ))}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        <div className="lg:col-span-2 space-y-6">
+      <div className="grid grid-cols-1 gap-8">
+        <div className="space-y-6">
           <div className="bg-white border border-zinc-200 rounded-3xl shadow-sm overflow-hidden">
             <div className="p-6 border-b border-zinc-100 flex items-center justify-between">
               <h2 className="font-bold text-luxury-black tracking-tight font-serif text-lg">Hàng hóa trong kho</h2>
@@ -541,34 +541,6 @@ function DashboardView({ setActiveTab }: { setActiveTab: (tab: any) => void }) {
                 </tbody>
               </table>
             </div>
-          </div>
-        </div>
-
-        <div className="bg-luxury-black rounded-3xl p-8 text-white shadow-2xl flex flex-col justify-between border border-gold-500/20 relative overflow-hidden group">
-          <div className="absolute top-0 right-0 w-32 h-32 bg-gold-500/10 blur-3xl -mr-16 -mt-16 rounded-full group-hover:bg-gold-500/20 transition-all duration-500" />
-          <div className="relative z-10">
-            <div className="w-12 h-12 bg-gold-500/10 rounded-2xl flex items-center justify-center mb-6 border border-gold-500/30">
-               <Settings className="text-gold-500" size={24} />
-            </div>
-            <h2 className="text-2xl font-bold mb-4 font-serif tracking-tight">Hệ thống <span className="text-gold-500">Gold Logic</span></h2>
-            <p className="text-zinc-400 text-sm mb-8 leading-relaxed font-light">
-              Quy trình tính toán giá vốn bình quân gia quyền tự động, giúp tối ưu hóa lợi nhuận và kiểm soát thất thoát chính xác đến từng phân ly.
-            </p>
-          </div>
-          <div className="space-y-4 relative z-10">
-            <div className="p-4 bg-white/5 rounded-2xl border border-white/5">
-              <p className="text-[9px] text-zinc-500 mb-1 uppercase tracking-widest font-bold">Trạng thái vận hành</p>
-              <div className="flex items-center gap-2">
-                <div className="w-2 h-2 rounded-full bg-gold-500 animate-pulse" />
-                <p className="font-semibold text-gold-500 text-sm">Sẵn sàng tính toán</p>
-              </div>
-            </div>
-            <button 
-              onClick={() => setActiveTab('system')}
-              className="w-full py-4 bg-gold-500 text-luxury-black font-bold rounded-2xl hover:bg-gold-400 transition-all shadow-lg shadow-gold-500/20 active:scale-[0.98] uppercase text-xs tracking-widest"
-            >
-              Cấu hình hệ thống
-            </button>
           </div>
         </div>
       </div>

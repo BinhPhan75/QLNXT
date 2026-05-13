@@ -211,6 +211,7 @@ export default function Reports({ mode }: ReportsProps) {
           }
         } else {
           productMap.set(key, {
+            key,
             code: (code && code !== 'KHONG-MA') ? code : 'KHONG-MA',
             name,
             unit: tx.unit,
@@ -743,7 +744,7 @@ export default function Reports({ mode }: ReportsProps) {
                                       })
                                       .sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime())
                                       .map((tx, idx) => (
-                                      <tr key={idx} className="hover:bg-slate-50 border-b border-slate-50 last:border-0">
+                                      <tr key={tx.id || idx} className="hover:bg-slate-50 border-b border-slate-50 last:border-0">
                                         <td className="px-4 py-2 text-slate-600 text-xs whitespace-nowrap">{formatDate(tx.date)}</td>
                                         <td className="px-4 py-2 text-slate-400 text-[10px] italic whitespace-nowrap">{tx.invoiceDate ? formatDate(tx.invoiceDate) : '-'}</td>
                                         <td className="px-4 py-2 font-bold">
@@ -920,7 +921,7 @@ export default function Reports({ mode }: ReportsProps) {
                                       </thead>
                                       <tbody className="divide-y divide-slate-100">
                                         {row.details.map((item: any, idx: number) => (
-                                          <tr key={idx} className="hover:bg-slate-50/50">
+                                          <tr key={item.id || idx} className="hover:bg-slate-50/50">
                                             <td className="px-4 py-2 font-mono text-slate-400">{item.itemCode || '-'}</td>
                                             <td className="px-4 py-2 font-medium text-slate-700">{item.itemName}</td>
                                             <td className="px-4 py-2 text-center text-slate-600">{formatQuantity(item.quantity)} {item.unit}</td>
@@ -1155,7 +1156,7 @@ export default function Reports({ mode }: ReportsProps) {
                                   </thead>
                                   <tbody className="divide-y divide-slate-50">
                                     {inv.details.map((item, idx) => (
-                                      <tr key={idx} className="hover:bg-slate-50/30">
+                                      <tr key={item.id || idx} className="hover:bg-slate-50/30">
                                         <td className="px-4 py-2 font-mono font-medium text-[10px]">{item.itemCode}</td>
                                         <td className="px-4 py-2 text-slate-700 max-w-[200px] truncate">{item.itemName}</td>
                                         <td className="px-4 py-2 text-center font-medium">{item.quantity} {item.unit}</td>
