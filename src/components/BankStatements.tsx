@@ -31,6 +31,10 @@ export default function BankStatements() {
   const [activeTab, setActiveTab] = useState<'ORIGINAL' | 'DRAFT' | 'LEDGER' | 'RULES'>('DRAFT');
   const [editingId, setEditingId] = useState<string | null>(null);
   
+  // Pagination State
+  const [currentPage, setCurrentPage] = useState(1);
+  const [rowsPerPage, setRowsPerPage] = useState(500);
+  
   // Mapping Rules State
   const [rules, setRules] = useState<MappingRule[]>([]);
   const [newRule, setNewRule] = useState({ keyword: '', category: 'SALE' });
@@ -269,6 +273,18 @@ export default function BankStatements() {
     return data.sort((a, b) => parseDate(a.transactionDate || a.transaction_date) - parseDate(b.transactionDate || b.transaction_date));
   }, [bankStatements, rawBankStatements, mappingDraft, activeTab, filterType, searchTerm, startDate, endDate]);
 
+  const paginatedData = useMemo(() => {
+    const startIndex = (currentPage - 1) * rowsPerPage;
+    return displayData.slice(startIndex, startIndex + rowsPerPage);
+  }, [displayData, currentPage, rowsPerPage]);
+
+  const totalPages = Math.ceil(displayData.length / rowsPerPage);
+
+  // Reset to first page when filters or tab change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [activeTab, filterType, searchTerm, startDate, endDate, rowsPerPage]);
+
   const summary = useMemo(() => {
     const deb = displayData.reduce((sum, item) => sum + (parseFloat(item.debit) || 0), 0);
     const cre = displayData.reduce((sum, item) => sum + (parseFloat(item.credit) || 0), 0);
@@ -299,7 +315,7 @@ export default function BankStatements() {
   ];
 
   return (
-    <div className="space-y-6 text-slate-900">
+    <div className="w-full space-y-6 text-slate-900 overflow-x-hidden">
       <header className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold font-serif">Sổ cái Ngân hàng (3 Tầng)</h1>
@@ -376,7 +392,7 @@ export default function BankStatements() {
       )}
 
       {activeTab === 'RULES' ? (
-        <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+        <div className="w-full bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
           <div className="p-4 border-b border-slate-100 bg-slate-50/50">
             <h3 className="font-bold text-slate-900 flex items-center gap-2 font-serif">
               <ShieldCheck size={18} className="text-blue-500" />
@@ -456,7 +472,7 @@ export default function BankStatements() {
         </div>
       ) : (
         <>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm border-l-4 border-l-green-500">
               <p className="text-slate-400 text-xs mb-1 uppercase font-black tracking-widest">Tiền Thu (CREDIT +)</p>
               <p className="text-3xl font-black text-green-600 font-serif">{formatCurrency(summary.credit)}</p>
@@ -515,8 +531,8 @@ export default function BankStatements() {
               </div>
             </div>
 
-            <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse min-w-[1000px]">
+            <div className="overflow-x-auto scrollbar-thin scrollbar-thumb-slate-200">
+              <table className="w-full text-left border-collapse min-w-[1200px]">
                 <thead>
                   <tr className="bg-slate-50 text-slate-500 text-[10px] font-black uppercase tracking-widest border-b border-slate-200">
                     <th className="px-4 py-3">Ngày GD</th>
@@ -529,7 +545,7 @@ export default function BankStatements() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 font-sans">
-                  {displayData.length === 0 ? (
+                  {paginatedData.length === 0 ? (
                     <tr>
                       <td colSpan={7} className="px-4 py-20 text-center text-slate-300 italic font-sans">
                         {isProcessing ? (
@@ -541,7 +557,7 @@ export default function BankStatements() {
                       </td>
                     </tr>
                   ) : (
-                    displayData.map((item) => {
+                    paginatedData.map((item) => {
                       const transactionDate = item.transactionDate || item.transaction_date;
                       const effectiveDate = item.effectiveDate || item.effective_date;
                       const cls = getClassificationLabel(item.classification);
@@ -667,6 +683,69 @@ export default function BankStatements() {
                 </tbody>
               </table>
             </div>
+
+            {/* Pagination Controls */}
+            {displayData.length > 0 && (
+              <div className="p-4 border-t border-slate-100 bg-white flex flex-col sm:flex-row items-center justify-between gap-4">
+                <div className="flex items-center gap-4">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-slate-500 font-bold uppercase tracking-tighter">Hiển thị</span>
+                    <select 
+                      className="px-2 py-1 border border-slate-200 rounded text-xs font-bold outline-none focus:ring-1 focus:ring-blue-500"
+                      value={rowsPerPage}
+                      onChange={(e) => setRowsPerPage(Number(e.target.value))}
+                    >
+                      <option value={100}>100 dòng</option>
+                      <option value={200}>200 dòng</option>
+                      <option value={300}>300 dòng</option>
+                      <option value={500}>500 dòng</option>
+                    </select>
+                  </div>
+                  <div className="text-xs text-slate-400">
+                    Bản ghi <span className="font-bold text-slate-600">{(currentPage - 1) * rowsPerPage + 1}</span> - <span className="font-bold text-slate-600">{Math.min(currentPage * rowsPerPage, displayData.length)}</span> trên <span className="font-bold text-slate-600">{displayData.length}</span>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-1">
+                  <button 
+                    onClick={() => setCurrentPage(1)}
+                    disabled={currentPage === 1}
+                    className="px-2 py-1 border border-slate-200 rounded text-[10px] font-black uppercase hover:bg-slate-50 disabled:opacity-30 transition-colors"
+                  >
+                    Đầu
+                  </button>
+                  <button 
+                    onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                    disabled={currentPage === 1}
+                    className="px-2 py-1 border border-slate-200 rounded text-[10px] font-black uppercase hover:bg-slate-50 disabled:opacity-30 transition-colors"
+                  >
+                    Trước
+                  </button>
+                  
+                  <div className="flex items-center gap-1 mx-2">
+                    <span className="text-xs font-bold text-slate-500 mr-1">Trang</span>
+                    <span className="px-3 py-1 bg-blue-600 text-white rounded text-xs font-black shadow-sm">{currentPage}</span>
+                    <span className="text-xs font-bold text-slate-400 mx-1">/</span>
+                    <span className="text-xs font-bold text-slate-500">{totalPages}</span>
+                  </div>
+
+                  <button 
+                    onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                    disabled={currentPage === totalPages}
+                    className="px-2 py-1 border border-slate-200 rounded text-[10px] font-black uppercase hover:bg-slate-50 disabled:opacity-30 transition-colors"
+                  >
+                    Sau
+                  </button>
+                  <button 
+                    onClick={() => setCurrentPage(totalPages)}
+                    disabled={currentPage === totalPages}
+                    className="px-2 py-1 border border-slate-200 rounded text-[10px] font-black uppercase hover:bg-slate-50 disabled:opacity-30 transition-colors"
+                  >
+                    Cuối
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </>
       )}

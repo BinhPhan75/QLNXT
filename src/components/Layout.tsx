@@ -424,9 +424,13 @@ export default function Layout() {
       </motion.aside>
 
       {/* Main Content */}
-      <main className="flex-1 p-4 lg:p-8 overflow-y-auto">
-        <div className={`${(activeTab === 'bank' || activeTab === 'inv_nxt' || activeTab === 'sales_purchase' || activeTab === 'rev_report') ? 'w-full' : 'max-w-7xl mx-auto'}`}>
-          <header className="flex items-center justify-between mb-8 pb-4 border-b border-zinc-200/50">
+      <main className={`flex-1 overflow-y-auto transition-all duration-300 ${
+        ['bank', 'inv_nxt', 'sales_purchase', 'rev_report'].includes(activeTab) 
+        ? 'p-2 lg:p-4' 
+        : 'p-4 lg:p-8'
+      }`}>
+        <div className={`${(['bank', 'inv_nxt', 'sales_purchase', 'rev_report'].includes(activeTab)) ? 'w-full px-2' : 'max-w-7xl mx-auto'}`}>
+          <header className={`flex items-center justify-between mb-8 pb-4 border-b border-zinc-200/50 ${(['bank', 'inv_nxt', 'sales_purchase', 'rev_report'].includes(activeTab)) ? 'px-2' : ''}`}>
             <button 
               onClick={() => setSidebarOpen(!isSidebarOpen)}
               className="p-2 bg-white rounded-lg border border-zinc-200 text-zinc-500 hover:text-zinc-700 lg:hidden"

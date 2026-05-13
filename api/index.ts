@@ -783,9 +783,11 @@ router.post("/api/raw-statements/bulk", async (req, res) => {
     const tier2Classifications = items.map((item, idx) => {
       let classification = null;
 
-      // Pattern: Credit > 0 AND content contains ID card (9-12 digits)
+      // Pattern: Credit > 0 AND content contains ID card (exactly 9 or 12 digits for CMND/CCCD)
       const isCredit = credits[idx] > 0;
-      const hasIDCard = /\b\d{9,12}\b/.test(item.content || "");
+      // Many banking systems use spaces, hyphens or just number strings. 
+      // We look for sequences of 9 or 12 digits that are likely IDs.
+      const hasIDCard = /\b\d{9}\b|\b\d{12}\b/.test(item.content || "");
 
       if (isCredit && hasIDCard) {
         classification = 'SALE';
