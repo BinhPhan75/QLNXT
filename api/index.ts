@@ -712,7 +712,7 @@ router.post("/opening-balances", async (req, res) => {
 // 7. Reset
 router.post("/reset", async (req, res) => {
   try {
-    await pool.query('TRUNCATE nghiatingold_transactions, revenue_transactions, opening_balances, raw_bank_statements, mapping_processed_data, final_bank_ledger');
+    await pool.query('TRUNCATE nghiatingold_transactions, revenue_transactions, opening_balances, raw_bank_statements, mapping_processed_data, final_bank_ledger CASCADE');
     res.json({ success: true });
   } catch (err: any) {
     console.error("[API] Reset Error:", err.message);
