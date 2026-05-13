@@ -782,23 +782,23 @@ router.post("/api/raw-statements/bulk", async (req, res) => {
     // To keep it simple but faster than individually inserting, we build arrays for T2 as well
     const tier2Classifications = items.map((item, idx) => {
       let classification = null;
-
-      // Logic Mapping Thông minh: Thu tiền + có dãy số CMND/CCCD (Chính xác 9 hoặc 12 số)
+      const content = (item.content || "").toLowerCase();
       const isCredit = credits[idx] > 0;
-      const content = item.content || "";
-      // Sử dụng regex để tìm đúng cụm 9 hoặc 12 chữ số không bị dính vào số khác (tránh nhầm số điện thoại 10 số)
-      const hasIDCard = /(?:^|\D)(\d{9}|\d{12})(?:\D|$)/.test(content);
 
-      if (isCredit && hasIDCard) {
-        classification = 'SALE';
-      } else {
-        for (const rule of rules) {
-          if (item.content?.toLowerCase().includes(rule.keyword.toLowerCase())) {
-            classification = rule.category;
-            break;
-          }
+      // 1. Ưu tiên các quy tắc từ khóa trước (để loại trừ "Nộp tiền mặt", "Khác", v.v.)
+      for (const rule of rules) {
+        if (content.includes(rule.keyword.toLowerCase())) {
+          classification = rule.category;
+          break;
         }
       }
+
+      // 2. Nếu không khớp quy tắc nào và là giao dịch THU TIỀN -> Mặc định là Bán hàng (SALE)
+      // Bao gồm cả logic CCCD đã yêu cầu trước đó (vì CCCD cũng là thu tiền)
+      if (!classification && isCredit) {
+        classification = 'SALE';
+      }
+      
       return classification;
     });
 
@@ -904,22 +904,22 @@ router.post("/api/bank-statements/re-map-draft", async (req, res) => {
       let classification = null;
       let method = null;
 
-      // Smart Mapping: Credit + ID Card
+      const content = (item.content || "").toLowerCase();
       const isCredit = (parseFloat(item.credit) || 0) > 0;
-      const content = item.content || "";
-      const hasIDCard = /(?:^|\D)(\d{9}|\d{12})(?:\D|$)/.test(content);
 
-      if (isCredit && hasIDCard) {
+      // 1. Check keyword rules first
+      for (const rule of rules) {
+        if (content.includes(rule.keyword.toLowerCase())) {
+          classification = rule.category;
+          method = 'MAPPING';
+          break;
+        }
+      }
+
+      // 2. Default Credit to SALE if no rule matched
+      if (!classification && isCredit) {
         classification = 'SALE';
         method = 'MAPPING';
-      } else {
-        for (const rule of rules) {
-          if (content.toLowerCase().includes(rule.keyword.toLowerCase())) {
-            classification = rule.category;
-            method = 'MAPPING';
-            break;
-          }
-        }
       }
 
       if (classification) {
