@@ -462,7 +462,7 @@ export default function BankStatements() {
                 {rules.map(rule => (
                   <tr key={rule.id} className="hover:bg-slate-50 transition-colors">
                     <td className="px-6 py-3 text-slate-400 text-xs font-mono">{rule.id}</td>
-                    <td className="px-6 py-3 font-bold text-slate-800 font-sans tracking-tight">{rule.keyword}</td>
+                    <td className="px-6 py-3 font-bold text-slate-800 font-sans tracking-tight whitespace-pre-wrap">{rule.keyword}</td>
                     <td className="px-6 py-3">
                       <span className={`px-2 py-1 rounded-full text-[10px] font-bold ${getClassificationLabel(rule.category).color}`}>
                         {getClassificationLabel(rule.category).text}
@@ -679,7 +679,7 @@ export default function BankStatements() {
                           )}
 
                           <td className="px-4 py-4 border-r border-slate-50">
-                            <p className="text-slate-700 leading-relaxed font-medium mb-1 line-clamp-2" title={item.content}>{item.content}</p>
+                            <p className="text-slate-700 leading-relaxed font-medium mb-1 line-clamp-2 whitespace-pre-wrap" title={item.content}>{item.content}</p>
                             {(item.customerName || item.customer_name) && (
                               <div className="text-[10px] text-blue-800 font-bold flex items-center gap-1">
                                 <Search size={10} /> {item.customerName || item.customer_name}

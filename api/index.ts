@@ -786,11 +786,12 @@ router.post("/api/raw-statements/bulk", async (req, res) => {
       const isCredit = credits[idx] > 0;
 
       // 1. Ưu tiên các quy tắc từ khóa trước (để loại trừ "Nộp tiền mặt", "Khác", v.v.)
+      const textToMatch = item.content || "";
       for (const rule of rules) {
         // Regex cho phép linh hoạt về khoảng trắng (ví dụ: "RUT  SEC" khớp "RUT SEC")
-        const sanitizedKeyword = rule.keyword.toLowerCase().trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const sanitizedKeyword = rule.keyword.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
         const regexPattern = sanitizedKeyword.split(/\s+/).filter(Boolean).join('\\s+');
-        if (new RegExp(regexPattern, 'i').test(content)) {
+        if (new RegExp(regexPattern, 'i').test(textToMatch)) {
           classification = rule.category;
           break;
         }
@@ -911,10 +912,11 @@ router.post("/api/bank-statements/re-map-draft", async (req, res) => {
       const isCredit = (parseFloat(item.credit) || 0) > 0;
 
       // 1. Check keyword rules first
+      const textToMatch = item.content || "";
       for (const rule of rules) {
-        const sanitizedKeyword = rule.keyword.toLowerCase().trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const sanitizedKeyword = rule.keyword.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
         const regexPattern = sanitizedKeyword.split(/\s+/).filter(Boolean).join('\\s+');
-        if (new RegExp(regexPattern, 'i').test(content)) {
+        if (new RegExp(regexPattern, 'i').test(textToMatch)) {
           classification = rule.category;
           method = 'MAPPING';
           break;
