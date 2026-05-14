@@ -786,8 +786,10 @@ router.post("/api/raw-statements/bulk", async (req, res) => {
       const isCredit = credits[idx] > 0;
 
       // 1. Ưu tiên các quy tắc từ khóa trước (để loại trừ "Nộp tiền mặt", "Khác", v.v.)
+      const normalizedContent = content.replace(/\s+/g, ' ').trim();
       for (const rule of rules) {
-        if (content.includes(rule.keyword.toLowerCase())) {
+        const normalizedKeyword = rule.keyword.toLowerCase().replace(/\s+/g, ' ').trim();
+        if (normalizedContent.includes(normalizedKeyword)) {
           classification = rule.category;
           break;
         }
@@ -908,8 +910,10 @@ router.post("/api/bank-statements/re-map-draft", async (req, res) => {
       const isCredit = (parseFloat(item.credit) || 0) > 0;
 
       // 1. Check keyword rules first
+      const normalizedContent = content.replace(/\s+/g, ' ').trim();
       for (const rule of rules) {
-        if (content.includes(rule.keyword.toLowerCase())) {
+        const normalizedKeyword = rule.keyword.toLowerCase().replace(/\s+/g, ' ').trim();
+        if (normalizedContent.includes(normalizedKeyword)) {
           classification = rule.category;
           method = 'MAPPING';
           break;

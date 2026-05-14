@@ -543,8 +543,47 @@ export default function BankStatements() {
                 </div>
               </div>
               
-              <div className="text-xs font-bold text-slate-400 uppercase tracking-tight">
-                {activeTab === 'ORIGINAL' ? 'Dữ liệu nguyên bản' : 'Dữ liệu đã phân loại'} : <span className="text-slate-900 font-black">{displayData.length}</span> Giao dịch
+              <div className="flex items-center gap-6">
+                {/* Pagination Controls Top */}
+                {displayData.length > 0 && (
+                  <div className="flex items-center gap-4 border-r border-slate-200 pr-6 mr-2">
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] text-slate-400 font-bold uppercase tracking-tighter">Hiển thị</span>
+                      <select 
+                        className="px-2 py-1 border border-slate-200 rounded text-xs font-bold outline-none focus:ring-1 focus:ring-blue-500"
+                        value={rowsPerPage}
+                        onChange={(e) => setRowsPerPage(Number(e.target.value))}
+                      >
+                        <option value={100}>100 dòng</option>
+                        <option value={200}>200 dòng</option>
+                        <option value={300}>300 dòng</option>
+                        <option value={500}>500 dòng</option>
+                      </select>
+                    </div>
+                    
+                    <div className="flex items-center gap-1">
+                      <button 
+                        onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                        disabled={currentPage === 1}
+                        className="p-1 px-2 border border-slate-200 rounded text-[10px] font-black uppercase hover:bg-slate-50 disabled:opacity-30"
+                      >
+                        Trước
+                      </button>
+                      <span className="text-xs font-bold px-2">{currentPage} / {totalPages}</span>
+                      <button 
+                        onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                        disabled={currentPage === totalPages}
+                        className="p-1 px-2 border border-slate-200 rounded text-[10px] font-black uppercase hover:bg-slate-50 disabled:opacity-30"
+                      >
+                        Sau
+                      </button>
+                    </div>
+                  </div>
+                )}
+                
+                <div className="text-xs font-bold text-slate-400 uppercase tracking-tight">
+                  {activeTab === 'ORIGINAL' ? 'Dữ liệu nguyên bản' : 'Dữ liệu đã phân loại'} : <span className="text-slate-900 font-black">{displayData.length}</span> Giao dịch
+                </div>
               </div>
             </div>
 
@@ -701,68 +740,7 @@ export default function BankStatements() {
               </table>
             </div>
 
-            {/* Pagination Controls */}
-            {displayData.length > 0 && (
-              <div className="p-4 border-t border-slate-100 bg-white flex flex-col sm:flex-row items-center justify-between gap-4">
-                <div className="flex items-center gap-4">
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs text-slate-500 font-bold uppercase tracking-tighter">Hiển thị</span>
-                    <select 
-                      className="px-2 py-1 border border-slate-200 rounded text-xs font-bold outline-none focus:ring-1 focus:ring-blue-500"
-                      value={rowsPerPage}
-                      onChange={(e) => setRowsPerPage(Number(e.target.value))}
-                    >
-                      <option value={100}>100 dòng</option>
-                      <option value={200}>200 dòng</option>
-                      <option value={300}>300 dòng</option>
-                      <option value={500}>500 dòng</option>
-                    </select>
-                  </div>
-                  <div className="text-xs text-slate-400">
-                    Bản ghi <span className="font-bold text-slate-600">{(currentPage - 1) * rowsPerPage + 1}</span> - <span className="font-bold text-slate-600">{Math.min(currentPage * rowsPerPage, displayData.length)}</span> trên <span className="font-bold text-slate-600">{displayData.length}</span>
-                  </div>
-                </div>
 
-                <div className="flex items-center gap-1">
-                  <button 
-                    onClick={() => setCurrentPage(1)}
-                    disabled={currentPage === 1}
-                    className="px-2 py-1 border border-slate-200 rounded text-[10px] font-black uppercase hover:bg-slate-50 disabled:opacity-30 transition-colors"
-                  >
-                    Đầu
-                  </button>
-                  <button 
-                    onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
-                    disabled={currentPage === 1}
-                    className="px-2 py-1 border border-slate-200 rounded text-[10px] font-black uppercase hover:bg-slate-50 disabled:opacity-30 transition-colors"
-                  >
-                    Trước
-                  </button>
-                  
-                  <div className="flex items-center gap-1 mx-2">
-                    <span className="text-xs font-bold text-slate-500 mr-1">Trang</span>
-                    <span className="px-3 py-1 bg-blue-600 text-white rounded text-xs font-black shadow-sm">{currentPage}</span>
-                    <span className="text-xs font-bold text-slate-400 mx-1">/</span>
-                    <span className="text-xs font-bold text-slate-500">{totalPages}</span>
-                  </div>
-
-                  <button 
-                    onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
-                    disabled={currentPage === totalPages}
-                    className="px-2 py-1 border border-slate-200 rounded text-[10px] font-black uppercase hover:bg-slate-50 disabled:opacity-30 transition-colors"
-                  >
-                    Sau
-                  </button>
-                  <button 
-                    onClick={() => setCurrentPage(totalPages)}
-                    disabled={currentPage === totalPages}
-                    className="px-2 py-1 border border-slate-200 rounded text-[10px] font-black uppercase hover:bg-slate-50 disabled:opacity-30 transition-colors"
-                  >
-                    Cuối
-                  </button>
-                </div>
-              </div>
-            )}
           </div>
         </>
       )}
