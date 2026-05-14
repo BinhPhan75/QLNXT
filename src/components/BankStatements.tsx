@@ -679,7 +679,7 @@ export default function BankStatements() {
                           )}
 
                           <td className="px-4 py-4 border-r border-slate-50">
-                            <p className="text-slate-700 leading-relaxed font-medium mb-1 line-clamp-2 whitespace-pre-wrap" title={item.content}>{item.content}</p>
+                            <p className="text-slate-700 leading-relaxed font-medium mb-1 line-clamp-2" title={item.content}>{item.content}</p>
                             {(item.customerName || item.customer_name) && (
                               <div className="text-[10px] text-blue-800 font-bold flex items-center gap-1">
                                 <Search size={10} /> {item.customerName || item.customer_name}

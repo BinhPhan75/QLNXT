@@ -782,11 +782,10 @@ router.post("/api/raw-statements/bulk", async (req, res) => {
     // To keep it simple but faster than individually inserting, we build arrays for T2 as well
     const tier2Classifications = items.map((item, idx) => {
       let classification = null;
-      const content = (item.content || "").toLowerCase();
       const isCredit = credits[idx] > 0;
+      const textToMatch = item.content || "";
 
       // 1. Ưu tiên các quy tắc từ khóa trước (để loại trừ "Nộp tiền mặt", "Khác", v.v.)
-      const textToMatch = item.content || "";
       for (const rule of rules) {
         // Regex cho phép linh hoạt về khoảng trắng (ví dụ: "RUT  SEC" khớp "RUT SEC")
         const sanitizedKeyword = rule.keyword.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -798,7 +797,6 @@ router.post("/api/raw-statements/bulk", async (req, res) => {
       }
 
       // 2. Nếu không khớp quy tắc nào và là giao dịch THU TIỀN -> Mặc định là Bán hàng (SALE)
-      // Bao gồm cả logic CCCD đã yêu cầu trước đó (vì CCCD cũng là thu tiền)
       if (!classification && isCredit) {
         classification = 'SALE';
       }
@@ -908,11 +906,10 @@ router.post("/api/bank-statements/re-map-draft", async (req, res) => {
       let classification = null;
       let method = null;
 
-      const content = (item.content || "").toLowerCase();
       const isCredit = (parseFloat(item.credit) || 0) > 0;
+      const textToMatch = item.content || "";
 
       // 1. Check keyword rules first
-      const textToMatch = item.content || "";
       for (const rule of rules) {
         const sanitizedKeyword = rule.keyword.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
         const regexPattern = sanitizedKeyword.split(/\s+/).filter(Boolean).join('\\s+');
