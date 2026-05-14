@@ -249,7 +249,7 @@ export default function BankStatements() {
     
     const data = list.filter(item => {
       const classification = item.classification || 'KHAC';
-      const matchesFilter = (activeTab === 'ORIGINAL' || activeTab === 'DRAFT') || filterType === 'ALL' || classification === filterType;
+      const matchesFilter = (activeTab === 'ORIGINAL') || filterType === 'ALL' || classification === filterType;
       const matchesSearch = (item.content || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
                           (item.customerName || item.customer_name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
                           (item.itemInfo || item.item_info || '').toLowerCase().includes(searchTerm.toLowerCase());
@@ -521,7 +521,7 @@ export default function BankStatements() {
                   />
                 </div>
                 
-                {activeTab === 'LEDGER' && (
+                {(activeTab === 'LEDGER' || activeTab === 'DRAFT') && (
                   <div className="flex items-center gap-2 text-sm text-slate-600 border border-slate-200 rounded-lg px-3 py-2 bg-white shadow-sm">
                     <Filter size={14} className="text-slate-400" />
                     <select 
