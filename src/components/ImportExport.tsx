@@ -667,6 +667,8 @@ export default function ImportExport({ mode }: ImportExportProps) {
       });
 
       const extracted = await extractInvoiceFromPdf(base64);
+      const partnerName = importType === 'IN' ? extracted.seller : extracted.buyer;
+
       const newTransactions = convertExtractedToTransactions(extracted, importType).map(t => ({
           ...t,
           source: 'INVENTORY' as TransactionSource
@@ -675,13 +677,13 @@ export default function ImportExport({ mode }: ImportExportProps) {
       const isDuplicate = transactions.some(t => 
         t.invoiceNumber === extracted.invoiceNumber && 
         t.invoiceDate === extracted.invoiceDate && 
-        t.customer === extracted.customer &&
+        t.customer === partnerName &&
         t.type === importType &&
         t.source === 'INVENTORY'
       );
 
       if (isDuplicate) {
-        setLogs(prev => [...prev.filter(l => l.type !== 'loading'), { msg: `CẢNH BÁO: Hóa đơn PDF số ${extracted.invoiceNumber} từ ${extracted.customer} đã tồn tại.`, type: 'error' }]);
+        setLogs(prev => [...prev.filter(l => l.type !== 'loading'), { msg: `CẢNH BÁO: Hóa đơn PDF số ${extracted.invoiceNumber} từ ${partnerName} đã tồn tại.`, type: 'error' }]);
         return;
       }
 

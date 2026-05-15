@@ -4,7 +4,8 @@ import { Transaction, TransactionType } from "../types";
 const ai = new GoogleGenAI({ apiKey: (process as any).env.GEMINI_API_KEY });
 
 export interface ExtractedInvoice {
-  customer: string;
+  seller: string;
+  buyer: string;
   customerCard?: string;
   address?: string;
   invoiceNumber: string;
@@ -34,8 +35,9 @@ export const extractInvoiceFromPdf = async (base64Data: string): Promise<Extract
           {
             text: `Bạn là một chuyên gia kế toán. Hãy trích xuất thông tin từ hóa đơn PDF này sang định dạng JSON.
             Thông tin cần lấy:
-            - Tên khách hàng/đơn vị mua hàng (customer)
-            - Số thẻ khách hàng hoặc CCCD nếu có (customerCard)
+            - Tên đơn vị bán hàng (seller)
+            - Tên khách hàng/đơn vị mua hàng (buyer)
+            - Số thẻ khách hàng hoặc CCCD của người mua nếu có (customerCard)
             - Địa chỉ khách hàng nếu có (address)
             - Số hóa đơn (invoiceNumber)
             - Ngày hóa đơn (invoiceDate) định dạng YYYY-MM-DD
@@ -53,7 +55,8 @@ export const extractInvoiceFromPdf = async (base64Data: string): Promise<Extract
       responseSchema: {
         type: Type.OBJECT,
         properties: {
-          customer: { type: Type.STRING },
+          seller: { type: Type.STRING },
+          buyer: { type: Type.STRING },
           customerCard: { type: Type.STRING },
           address: { type: Type.STRING },
           invoiceNumber: { type: Type.STRING },
@@ -74,7 +77,7 @@ export const extractInvoiceFromPdf = async (base64Data: string): Promise<Extract
             },
           },
         },
-        required: ["customer", "invoiceNumber", "invoiceDate", "items"],
+        required: ["seller", "buyer", "invoiceNumber", "invoiceDate", "items"],
       },
     },
   });
@@ -86,6 +89,10 @@ export const extractInvoiceFromPdf = async (base64Data: string): Promise<Extract
 };
 
 export const convertExtractedToTransactions = (extracted: ExtractedInvoice, type: TransactionType): Transaction[] => {
+  // If IN (nhập hàng/purchase), the partner (customer field in Transaction) is the SELLER.
+  // If OUT (xuất hàng/sale), the partner is the BUYER.
+  const partnerName = type === 'IN' ? extracted.seller : extracted.buyer;
+  
   return extracted.items.map(item => ({
     id: '', // Will be set by Firebase or parent
     date: new Date().toISOString(),
@@ -99,7 +106,7 @@ export const convertExtractedToTransactions = (extracted: ExtractedInvoice, type
     price: item.price,
     discount: 0,
     total: item.total,
-    customer: extracted.customer,
+    customer: partnerName,
     customerCard: extracted.customerCard || '',
     address: extracted.address || '',
   }));
