@@ -1078,9 +1078,16 @@ router.post("/api/viettel-config", async (req, res) => {
       INSERT INTO viettel_einvoice_config (id,username,password,tax_code,api_url,template_code,invoice_series,is_sandbox,company_name,company_address,updated_at)
       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,NOW())
       ON CONFLICT (id) DO UPDATE SET
-        username=$2, password=$3, tax_code=$4, api_url=$5,
-        template_code=$6, invoice_series=$7, is_sandbox=$8,
-        company_name=$9, company_address=$10, updated_at=NOW()
+        username       = EXCLUDED.username,
+        password       = EXCLUDED.password,
+        tax_code       = EXCLUDED.tax_code,
+        api_url        = EXCLUDED.api_url,
+        template_code  = EXCLUDED.template_code,
+        invoice_series = EXCLUDED.invoice_series,
+        is_sandbox     = EXCLUDED.is_sandbox,
+        company_name   = EXCLUDED.company_name,
+        company_address = EXCLUDED.company_address,
+        updated_at     = NOW()
     `, [fixedId, username.trim(), finalPassword, tax_code.trim(),
         (api_url||"https://api-vinvoice.viettel.vn").trim().replace(/\/+$/,""),
         (template_code||"").trim(), (invoice_series||"").trim(),
