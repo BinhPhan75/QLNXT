@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useInventory } from '../InventoryContext';
-import { LayoutDashboard, FileUp, BarChart3, Settings, LogOut, Menu, X, DollarSign, ChevronDown, ChevronUp, FileSearch } from 'lucide-react';
+import { LayoutDashboard, FileUp, BarChart3, Settings, LogOut, Menu, X, DollarSign, ChevronDown, ChevronUp, FileSearch, FileText } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { APP_LOGO_URL } from '../constants';
 
@@ -11,11 +11,12 @@ import SalesReports from './SalesReports';
 import NXTReport from './NXTReport';
 import SystemSettings from './SystemSettings';
 import BankStatements from './BankStatements';
+import EInvoice from './EInvoice';
 import { formatCurrency, formatQuantity } from '../lib/utils';
 
 export default function Layout() {
   const { user, logout, products, bankStatements } = useInventory();
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'sales_purchase' | 'rev_import' | 'rev_report' | 'inv_import' | 'inv_report' | 'inv_nxt' | 'inv_other' | 'bank' | 'system'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'sales_purchase' | 'rev_import' | 'rev_report' | 'inv_import' | 'inv_report' | 'inv_nxt' | 'inv_other' | 'bank' | 'einvoice' | 'system'>('dashboard');
   const [isSidebarOpen, setSidebarOpen] = useState(false);
   const [isSalesMenuOpen, setSalesMenuOpen] = useState(true);
   const [isRevenueMenuOpen, setRevenueMenuOpen] = useState(true);
@@ -80,6 +81,8 @@ export default function Layout() {
         );
       case 'bank':
         return <BankStatements />;
+      case 'einvoice':
+        return <EInvoice />;
       case 'system':
         return <SystemSettings />;
       default:
@@ -399,6 +402,25 @@ export default function Layout() {
                 )}
               </AnimatePresence>
             </div>
+
+            <div className="px-4 pt-8 pb-3 text-[10px] font-black text-zinc-700 uppercase tracking-[0.3em] flex items-center gap-2">
+              <div className="h-px bg-zinc-800 flex-1" />
+              Tiện ích
+              <div className="h-px bg-zinc-800 flex-1" />
+            </div>
+
+            <button
+              onClick={() => handleTabChange('einvoice')}
+              className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-xl transition-all group ${
+                activeTab === 'einvoice' 
+                ? 'bg-gold-500/10 text-gold-500 font-bold shadow-[0_0_20px_rgba(212,175,55,0.05)] border border-gold-500/10' 
+                : 'text-zinc-400 hover:bg-white/5 hover:text-white'
+              }`}
+            >
+              <FileText size={22} className={activeTab === 'einvoice' ? 'text-gold-500' : 'text-zinc-500 group-hover:text-gold-400'} />
+              <span className="tracking-wide text-sm">Hóa đơn điện tử</span>
+              {activeTab === 'einvoice' && <motion.div layoutId="active-pill" className="ml-auto w-1 h-3 rounded-full bg-gold-500" />}
+            </button>
 
             <button
               onClick={() => handleTabChange('system')}

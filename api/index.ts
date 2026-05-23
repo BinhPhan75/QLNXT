@@ -1026,6 +1026,155 @@ router.get("/api/final-bank-ledger", async (req, res) => {
   }
 });
 
+// ============================================================
+// VIETTEL vINVOICE — Hóa đơn điện tử
+// ============================================================
+
+async function ensureViettelConfigTable() {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS viettel_einvoice_config (
+      id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      username      TEXT NOT NULL DEFAULT '',
+      password      TEXT NOT NULL DEFAULT '',
+      tax_code      TEXT NOT NULL DEFAULT '',
+      api_url       TEXT NOT NULL DEFAULT 'https://api-vinvoice.viettel.vn',
+      template_code TEXT NOT NULL DEFAULT '',
+      invoice_series TEXT NOT NULL DEFAULT '',
+      is_sandbox    BOOLEAN NOT NULL DEFAULT TRUE,
+      company_name  TEXT NOT NULL DEFAULT '',
+      company_address TEXT NOT NULL DEFAULT '',
+      created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+}
+
+// GET /api/viettel-config
+router.get("/api/viettel-config", async (req, res) => {
+  try {
+    await ensureViettelConfigTable();
+    const result = await pool.query(
+      'SELECT * FROM viettel_einvoice_config ORDER BY updated_at DESC LIMIT 1'
+    );
+    if (result.rows.length === 0) return res.json({ config: null });
+    const row = result.rows[0];
+    res.json({
+      config: { ...row, password: row.password ? "••••••••" : "", _hasPassword: Boolean(row.password) }
+    });
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
+});
+
+// POST /api/viettel-config
+router.post("/api/viettel-config", async (req, res) => {
+  const { username, password, tax_code, api_url, template_code, invoice_series, is_sandbox, company_name, company_address } = req.body || {};
+  if (!username || !tax_code) return res.status(400).json({ error: "Thieu username hoac ma so thue" });
+  try {
+    await ensureViettelConfigTable();
+    const existing = await pool.query("SELECT id, password FROM viettel_einvoice_config ORDER BY updated_at DESC LIMIT 1");
+    const existingRow = existing.rows[0];
+    const finalPassword = (password && !password.startsWith("•")) ? password : (existingRow?.password || "");
+    const fixedId = "00000000-0000-0000-0000-000000000001";
+    await pool.query(`
+      INSERT INTO viettel_einvoice_config (id,username,password,tax_code,api_url,template_code,invoice_series,is_sandbox,company_name,company_address,updated_at)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,NOW())
+      ON CONFLICT (id) DO UPDATE SET
+        username=$2, password=$3, tax_code=$4, api_url=$5,
+        template_code=$6, invoice_series=$7, is_sandbox=$8,
+        company_name=$9, company_address=$10, updated_at=NOW()
+    `, [fixedId, username.trim(), finalPassword, tax_code.trim(),
+        (api_url||"https://api-vinvoice.viettel.vn").trim().replace(/\/+$/,""),
+        (template_code||"").trim(), (invoice_series||"").trim(),
+        is_sandbox !== false, (company_name||"").trim(), (company_address||"").trim()]);
+    res.json({ success: true, message: "Da luu cau hinh Viettel vInvoice" });
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
+});
+
+// POST /api/viettel-test
+router.post("/api/viettel-test", async (req, res) => {
+  try {
+    await ensureViettelConfigTable();
+    const cfgRes = await pool.query("SELECT * FROM viettel_einvoice_config ORDER BY updated_at DESC LIMIT 1");
+    if (cfgRes.rows.length === 0) return res.json({ success: false, message: "Chua co cau hinh Viettel." });
+    const cfg = cfgRes.rows[0];
+    if (!cfg.username || !cfg.password || !cfg.tax_code)
+      return res.json({ success: false, message: "Cau hinh chua day du." });
+    const origin = (cfg.api_url || "https://api-vinvoice.viettel.vn").replace(/\/+$/, "");
+    const base64Auth = Buffer.from(`${cfg.username}:${cfg.password}`).toString("base64");
+    const endpoints = [
+      { url: `${origin}/services/einvoiceapplication/api/InvoiceWS/getInvoiceTemplates/${cfg.tax_code}`, method: "GET" },
+      { url: `${origin}/InvoiceWS/getInvoiceTemplates/${cfg.tax_code}`, method: "GET" },
+      { url: `${origin}/services/einvoiceapplication/api/InvoiceWS/getInvoiceTemplates/${cfg.tax_code}`, method: "POST" },
+    ];
+    let lastError = "";
+    for (const { url: ep, method } of endpoints) {
+      try {
+        const r = await (fetch as any)(ep, {
+          method, headers: { "Authorization": `Basic ${base64Auth}`, "Content-Type": "application/json", "Accept": "application/json" },
+          signal: AbortSignal.timeout(12000), ...(method === "POST" ? { body: "{}" } : {})
+        });
+        if (r.status === 401 || r.status === 403) return res.json({ success: false, message: "Xac thuc that bai! Sai username hoac password Viettel." });
+        if (r.status === 404 || r.status === 405) { lastError = `HTTP ${r.status} tai ${ep}`; continue; }
+        if (r.status >= 200 && r.status < 300) {
+          const data = await r.json().catch(() => ({}));
+          const ok = !data?.errorCode || ["", "0", "SUCCESS"].includes(data.errorCode);
+          if (ok) return res.json({ success: true, message: `Ket noi Viettel vInvoice thanh cong! (${cfg.is_sandbox ? "Sandbox" : "Production"})`, templates: data });
+          return res.json({ success: false, message: `Loi Viettel: ${data.description || data.errorCode}` });
+        }
+        lastError = `HTTP ${r.status}`;
+      } catch (e: any) { lastError = e.message; }
+    }
+    res.json({ success: false, message: `Khong the ket noi den Viettel. Loi: ${lastError}` });
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
+});
+
+// POST /api/viettel-create-invoice
+router.post("/api/viettel-create-invoice", async (req, res) => {
+  const { payload } = req.body || {};
+  if (!payload) return res.status(400).json({ error: "Thieu payload hoa don" });
+  try {
+    await ensureViettelConfigTable();
+    const cfgRes = await pool.query("SELECT * FROM viettel_einvoice_config ORDER BY updated_at DESC LIMIT 1");
+    if (cfgRes.rows.length === 0) return res.status(400).json({ errorCode: "NO_CONFIG", description: "Chua co cau hinh Viettel." });
+    const cfg = cfgRes.rows[0];
+    const origin = (cfg.api_url || "https://api-vinvoice.viettel.vn").replace(/\/+$/, "");
+    const base64Auth = Buffer.from(`${cfg.username}:${cfg.password}`).toString("base64");
+    const numToWords = (amount: number): string => {
+      if (amount === 0) return "Khong dong";
+      const units = ["","nghin","trieu","ty"]; const digits=["khong","mot","hai","ba","bon","nam","sau","bay","tam","chin"];
+      const r3=(n:number):string=>{const h=Math.floor(n/100),t=Math.floor((n%100)/10),o=n%10;let r="";
+        if(h>0)r+=digits[h]+" tram ";if(t>1){r+=digits[t]+" muoi ";if(o>0)r+=(o===5?"lam":digits[o])+" ";}
+        else if(t===1){r+="muoi ";if(o>0)r+=(o===5?"lam":digits[o])+" ";}else if(o>0&&h>0)r+="le "+digits[o]+" ";else if(o>0)r+=digits[o]+" ";return r.trim();};
+      let n=Math.round(amount);const parts:string[]=[];let ui=0;
+      while(n>0){const c=n%1000;if(c>0)parts.unshift(r3(c)+(units[ui]?" "+units[ui]:""));n=Math.floor(n/1000);ui++;}
+      const rs=parts.join(" ").trim();return rs.charAt(0).toUpperCase()+rs.slice(1)+" dong";
+    };
+    const uuid=(()=>{try{return crypto.randomUUID();}catch{return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g,c=>{const r=Math.random()*16|0;return(c==="x"?r:(r&0x3)|0x8).toString(16)});}})();
+    const {generalInvoiceInfo={},itemInfo=[],summarizeInfo={},buyerInfo={},payments=[]}=payload;
+    const fp={
+      generalInvoiceInfo:{invoiceType:generalInvoiceInfo.invoiceType||"1",templateCode:generalInvoiceInfo.templateCode||cfg.template_code||"",invoiceSeries:generalInvoiceInfo.invoiceSeries||cfg.invoice_series||"",invoiceIssuedDate:generalInvoiceInfo.invoiceIssuedDate||Date.now(),currencyCode:"VND",adjustmentType:"1",paymentStatus:true,cusGetInvoiceRight:true,transactionUuid:uuid},
+      buyerInfo:{buyerName:buyerInfo.buyerName||"",buyerIdNo:buyerInfo.buyerIdNo||"",buyerIdType:buyerInfo.buyerIdType||"1",buyerAddressLine:buyerInfo.buyerAddressLine||"",buyerNotGetInvoice:buyerInfo.buyerNotGetInvoice??1},
+      sellerInfo:{sellerTaxCode:cfg.tax_code},
+      payments:payments.length>0?payments:[{paymentMethodName:"TM/CK"}],
+      itemInfo:itemInfo.map((item:any,idx:number)=>({lineNumber:idx+1,itemCode:item.itemCode||"HH",itemName:item.itemName||"",unitName:item.unitName||"Cai",unitPrice:item.unitPrice||0,quantity:item.quantity||1,itemTotalAmountWithoutTax:item.itemTotalAmountWithoutTax||0,taxPercentage:item.taxPercentage??0,taxAmount:item.taxAmount??0,itemTotalAmountWithTax:item.itemTotalAmountWithTax||0,discount:item.discount??0,itemDiscount:item.itemDiscount??0,selection:item.selection??1})),
+      summarizeInfo:{sumOfTotalLineAmountWithoutTax:summarizeInfo.totalAmountWithoutTax||0,totalAmountWithoutTax:summarizeInfo.totalAmountWithoutTax||0,totalTaxAmount:summarizeInfo.totalTaxAmount??0,totalAmountWithTax:summarizeInfo.totalAmountWithTax||0,totalAmountWithTaxInWords:numToWords(summarizeInfo.totalAmountWithTax||0),discountAmount:summarizeInfo.discountAmount??0},
+      taxBreakdowns:[{taxPercentage:0,taxableAmount:summarizeInfo.totalAmountWithoutTax||0,taxAmount:0}],
+    };
+    const eps=[`${origin}/services/einvoiceapplication/api/InvoiceWS/importInvoice/${cfg.tax_code}`,`${origin}/InvoiceWS/importInvoice/${cfg.tax_code}`];
+    let lastErr="";
+    for(const ep of eps){
+      try{
+        const r=await (fetch as any)(ep,{method:"POST",headers:{"Authorization":`Basic ${base64Auth}`,"Content-Type":"application/json","Accept":"application/json"},body:JSON.stringify(fp),signal:AbortSignal.timeout(75000)});
+        if(r.status===401||r.status===403)return res.status(401).json({errorCode:"AUTH_FAILED",description:"Xac thuc that bai."});
+        if(r.status===404){lastErr=`404 tai ${ep}`;continue;}
+        const data=await r.json().catch(()=>({}));
+        if(r.status>=200&&r.status<300){const ok=!data.errorCode||["","0","SUCCESS"].includes(data.errorCode);if(ok&&data.result)return res.json({...data,transactionUuid:uuid});return res.status(422).json({errorCode:data.errorCode,description:data.description,raw:data});}
+        lastErr=`HTTP ${r.status}`;
+      }catch(e:any){lastErr=e.message;}
+    }
+    res.status(500).json({errorCode:"CONNECTION_FAILED",description:`Loi ket noi Viettel: ${lastErr}`});
+  } catch(err:any){res.status(500).json({error:err.message});}
+});
+
 // Mounting the router at BOTH /api and / to handle different environment routing
 app.use("/api", router);
 app.use("/", router);
