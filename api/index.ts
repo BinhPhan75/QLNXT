@@ -1101,36 +1101,79 @@ router.post("/api/viettel-test", async (req, res) => {
   try {
     await ensureViettelConfigTable();
     const cfgRes = await pool.query("SELECT * FROM viettel_einvoice_config ORDER BY updated_at DESC LIMIT 1");
-    if (cfgRes.rows.length === 0) return res.json({ success: false, message: "Chua co cau hinh Viettel." });
+    if (cfgRes.rows.length === 0) return res.json({ success: false, message: "Chưa có cấu hình Viettel. Vui lòng lưu cấu hình trước." });
     const cfg = cfgRes.rows[0];
     if (!cfg.username || !cfg.password || !cfg.tax_code)
-      return res.json({ success: false, message: "Cau hinh chua day du." });
+      return res.json({ success: false, message: "Cấu hình chưa đầy đủ: thiếu tài khoản, mật khẩu hoặc mã số thuế." });
+
     const origin = (cfg.api_url || "https://api-vinvoice.viettel.vn").replace(/\/+$/, "");
     const base64Auth = Buffer.from(`${cfg.username}:${cfg.password}`).toString("base64");
+
+    // Tất cả các path có thể có của Viettel vInvoice
     const endpoints = [
+      { url: `${origin}/InvoiceAPI/InvoiceWS/getInvoiceTemplates/${cfg.tax_code}`, method: "GET" },
       { url: `${origin}/services/einvoiceapplication/api/InvoiceWS/getInvoiceTemplates/${cfg.tax_code}`, method: "GET" },
       { url: `${origin}/InvoiceWS/getInvoiceTemplates/${cfg.tax_code}`, method: "GET" },
+      { url: `${origin}/InvoiceAPI/InvoiceWS/getInvoiceTemplates/${cfg.tax_code}`, method: "POST" },
       { url: `${origin}/services/einvoiceapplication/api/InvoiceWS/getInvoiceTemplates/${cfg.tax_code}`, method: "POST" },
     ];
-    let lastError = "";
+
+    const statuses: string[] = [];
+
     for (const { url: ep, method } of endpoints) {
       try {
         const r = await (fetch as any)(ep, {
-          method, headers: { "Authorization": `Basic ${base64Auth}`, "Content-Type": "application/json", "Accept": "application/json" },
-          signal: AbortSignal.timeout(12000), ...(method === "POST" ? { body: "{}" } : {})
+          method,
+          headers: { "Authorization": `Basic ${base64Auth}`, "Content-Type": "application/json", "Accept": "application/json" },
+          signal: AbortSignal.timeout(12000),
+          ...(method === "POST" ? { body: "{}" } : {})
         });
-        if (r.status === 401 || r.status === 403) return res.json({ success: false, message: "Xac thuc that bai! Sai username hoac password Viettel." });
-        if (r.status === 404 || r.status === 405) { lastError = `HTTP ${r.status} tai ${ep}`; continue; }
+
+        statuses.push(`${method} ${ep.replace(origin,'')} → ${r.status}`);
+        console.log(`[ViettelTest] ${method} ${ep} → HTTP ${r.status}`);
+
+        // 401 = sai password chắc chắn
+        if (r.status === 401) {
+          return res.json({ success: false, message: "Xác thực thất bại (401): Sai tên đăng nhập hoặc mật khẩu Viettel." });
+        }
+
+        // 403 = có thể sai path HOẶC sai credentials — thử hết rồi mới báo
+        if (r.status === 403) {
+          statuses.push("(403: có thể sai path, thử tiếp)");
+          continue;
+        }
+
+        // 404/405 = sai path, thử tiếp
+        if (r.status === 404 || r.status === 405) continue;
+
+        // 200-299 = thành công
         if (r.status >= 200 && r.status < 300) {
           const data = await r.json().catch(() => ({}));
-          const ok = !data?.errorCode || ["", "0", "SUCCESS"].includes(data.errorCode);
-          if (ok) return res.json({ success: true, message: `Ket noi Viettel vInvoice thanh cong! (${cfg.is_sandbox ? "Sandbox" : "Production"})`, templates: data });
-          return res.json({ success: false, message: `Loi Viettel: ${data.description || data.errorCode}` });
+          const ok = !data?.errorCode || ["", "0", "SUCCESS"].includes(String(data.errorCode));
+          if (ok) {
+            return res.json({
+              success: true,
+              message: `Kết nối Viettel vInvoice thành công! Môi trường: ${cfg.is_sandbox ? "Sandbox" : "Production"}. Endpoint: ${ep.replace(origin,'')}`,
+            });
+          }
+          return res.json({ success: false, message: `Kết nối được nhưng Viettel từ chối: ${data.description || data.errorCode}` });
         }
-        lastError = `HTTP ${r.status}`;
-      } catch (e: any) { lastError = e.message; }
+
+      } catch (e: any) {
+        statuses.push(`${method} ${ep.replace(origin,'')} → Error: ${e.message}`);
+      }
     }
-    res.json({ success: false, message: `Khong the ket noi den Viettel. Loi: ${lastError}` });
+
+    // Nếu tất cả đều 403 → sai credentials
+    const all403 = statuses.filter(s => s.includes("→ 403")).length;
+    if (all403 > 0 && all403 >= endpoints.length - statuses.filter(s => s.includes("Error")).length) {
+      return res.json({ success: false, message: "Xác thực thất bại (403): Sai tài khoản hoặc mật khẩu Viettel. Vui lòng kiểm tra lại." });
+    }
+
+    res.json({
+      success: false,
+      message: `Không thể kết nối đến Viettel vInvoice. Chi tiết: ${statuses.slice(-3).join(" | ")}`,
+    });
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
