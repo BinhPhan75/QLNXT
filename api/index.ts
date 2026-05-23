@@ -1110,12 +1110,13 @@ router.post("/api/viettel-test", async (req, res) => {
     const base64Auth = Buffer.from(`${cfg.username}:${cfg.password}`).toString("base64");
 
     // Tất cả các path có thể có của Viettel vInvoice
+    // /InvoiceAPI/InvoiceWS/... là path chuẩn nhất cho vInvoice production
     const endpoints = [
       { url: `${origin}/InvoiceAPI/InvoiceWS/getInvoiceTemplates/${cfg.tax_code}`, method: "GET" },
-      { url: `${origin}/services/einvoiceapplication/api/InvoiceWS/getInvoiceTemplates/${cfg.tax_code}`, method: "GET" },
-      { url: `${origin}/InvoiceWS/getInvoiceTemplates/${cfg.tax_code}`, method: "GET" },
       { url: `${origin}/InvoiceAPI/InvoiceWS/getInvoiceTemplates/${cfg.tax_code}`, method: "POST" },
+      { url: `${origin}/services/einvoiceapplication/api/InvoiceWS/getInvoiceTemplates/${cfg.tax_code}`, method: "GET" },
       { url: `${origin}/services/einvoiceapplication/api/InvoiceWS/getInvoiceTemplates/${cfg.tax_code}`, method: "POST" },
+      { url: `${origin}/InvoiceWS/getInvoiceTemplates/${cfg.tax_code}`, method: "GET" },
     ];
 
     const statuses: string[] = [];
@@ -1137,10 +1138,13 @@ router.post("/api/viettel-test", async (req, res) => {
           return res.json({ success: false, message: "Xác thực thất bại (401): Sai tên đăng nhập hoặc mật khẩu Viettel." });
         }
 
-        // 403 = có thể sai path HOẶC sai credentials — thử hết rồi mới báo
+        // 403 = server nhận được request (path đúng) nhưng từ chối xác thực
+        // → Sai username/password, không cần thử path khác
         if (r.status === 403) {
-          statuses.push("(403: có thể sai path, thử tiếp)");
-          continue;
+          return res.json({
+            success: false,
+            message: `Xác thực thất bại (403): Sai tài khoản hoặc mật khẩu Viettel vInvoice. Vui lòng kiểm tra lại thông tin đăng nhập. (Endpoint hợp lệ: ${ep.replace(origin,'')})`,
+          });
         }
 
         // 404/405 = sai path, thử tiếp
