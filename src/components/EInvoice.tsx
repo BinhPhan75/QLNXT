@@ -103,12 +103,14 @@ export default function EInvoice() {
   const handleTest = async () => {
     setTesting(true);
     setTestResult(null);
+    setSaveResult(null); // clear save result để tránh bị che
     try {
       const res = await fetch('/api/viettel-test', { method: 'POST' });
       const data = await res.json();
-      setTestResult({ success: data.success, message: data.message || data.error || 'Không có phản hồi' });
+      const result = { success: Boolean(data.success), message: data.message || data.error || 'Không có phản hồi' };
+      setTestResult(result);
     } catch (e: any) {
-      setTestResult({ success: false, message: e.message });
+      setTestResult({ success: false, message: `Lỗi kết nối API: ${e.message}` });
     } finally {
       setTesting(false);
     }
@@ -318,19 +320,35 @@ export default function EInvoice() {
                   </div>
                 </div>
 
-                {/* Kết quả */}
+                {/* Kết quả lưu */}
                 <AnimatePresence>
-                  {(saveResult || testResult) && (
-                    <motion.div initial={{ opacity: 0, y: -5 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
+                  {saveResult && (
+                    <motion.div key="save-result" initial={{ opacity: 0, y: -5 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
                       className={`flex items-start gap-3 p-4 rounded-xl text-sm border ${
-                        (saveResult?.success || testResult?.success)
-                          ? 'bg-green-50 border-green-200 text-green-800'
-                          : 'bg-red-50 border-red-200 text-red-800'
+                        saveResult.success ? 'bg-green-50 border-green-200 text-green-800' : 'bg-red-50 border-red-200 text-red-800'
                       }`}>
-                      {(saveResult?.success || testResult?.success)
+                      {saveResult.success
                         ? <CheckCircle size={18} className="shrink-0 mt-0.5 text-green-600" />
                         : <XCircle size={18} className="shrink-0 mt-0.5 text-red-500" />}
-                      <span className="font-medium">{saveResult?.message || testResult?.message}</span>
+                      <span className="font-medium">{saveResult.message}</span>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+
+                {/* Kết quả kiểm tra kết nối */}
+                <AnimatePresence>
+                  {testResult && (
+                    <motion.div key="test-result" initial={{ opacity: 0, scale: 0.97 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0 }}
+                      className={`flex items-start gap-3 p-4 rounded-xl text-sm border ${
+                        testResult.success ? 'bg-green-50 border-green-200 text-green-800' : 'bg-red-50 border-red-200 text-red-800'
+                      }`}>
+                      {testResult.success
+                        ? <CheckCircle size={18} className="shrink-0 mt-0.5 text-green-600" />
+                        : <XCircle size={18} className="shrink-0 mt-0.5 text-red-500" />}
+                      <div>
+                        <p className="font-bold">{testResult.success ? 'Kết nối thành công!' : 'Kết nối thất bại'}</p>
+                        <p className="mt-0.5 text-xs opacity-80">{testResult.message}</p>
+                      </div>
                     </motion.div>
                   )}
                 </AnimatePresence>
