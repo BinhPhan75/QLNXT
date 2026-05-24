@@ -1137,17 +1137,21 @@ router.post("/api/viettel-test", async (req, res) => {
     const base64Auth = Buffer.from(`${cfg.username}:${cfg.password}`).toString("base64");
     const headers = { "Authorization": `Basic ${base64Auth}`, "Content-Type": "application/json", "Accept": "application/json" };
 
-    // Viettel vInvoice: taxCode KHÔNG nằm trong path, nằm trong body
-    // Path đúng: /InvoiceAPI/InvoiceWS/{endpoint} (không có /{taxCode})
+    // Từ tài liệu kỹ thuật chính thức Viettel:
+    // Path: /InvoiceAPI/InvoiceUtilsWS/ với supplierTaxCode là query param
+    const tc = cfg.tax_code;
     const testCases: { url: string; method: string; body?: string }[] = [
-      // GET endpoint không cần body
-      { url: `${origin}/InvoiceAPI/InvoiceWS/getInvoiceTemplates`, method: "GET" },
-      // POST với taxCode trong body
-      { url: `${origin}/InvoiceAPI/InvoiceWS/getInvoiceTemplates`, method: "POST", body: JSON.stringify({ supplierTaxCode: cfg.tax_code }) },
-      // Một số version dùng query param
-      { url: `${origin}/InvoiceAPI/InvoiceWS/getInvoiceTemplates?supplierTaxCode=${cfg.tax_code}`, method: "GET" },
-      // Path cũ với taxCode trong URL (fallback)
-      { url: `${origin}/InvoiceAPI/InvoiceWS/getInvoiceTemplates/${cfg.tax_code}`, method: "GET" },
+      // Tài liệu chính thức: InvoiceUtilsWS + query param
+      { url: `${origin}/InvoiceAPI/InvoiceUtilsWS/getInvoiceTemplates?supplierTaxCode=${tc}`, method: "GET" },
+      { url: `${origin}/InvoiceAPI/InvoiceUtilsWS/getInvoiceTemplates?supplierTaxCode=${tc}`, method: "POST", body: "{}" },
+      // InvoiceWS + query param
+      { url: `${origin}/InvoiceAPI/InvoiceWS/getInvoiceTemplates?supplierTaxCode=${tc}`, method: "GET" },
+      // InvoiceUtilsWS + path param
+      { url: `${origin}/InvoiceAPI/InvoiceUtilsWS/getInvoiceTemplates/${tc}`, method: "GET" },
+      // InvoiceWS + path param
+      { url: `${origin}/InvoiceAPI/InvoiceWS/getInvoiceTemplates/${tc}`, method: "GET" },
+      // services path
+      { url: `${origin}/services/einvoiceapplication/api/InvoiceUtilsWS/getInvoiceTemplates?supplierTaxCode=${tc}`, method: "GET" },
     ];
 
     const log: string[] = [];
