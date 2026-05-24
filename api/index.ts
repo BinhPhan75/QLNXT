@@ -1096,39 +1096,6 @@ router.post("/api/viettel-config", async (req, res) => {
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
-// GET /api/viettel-debug — Test trực tiếp endpoint Viettel (xóa sau khi debug xong)
-router.get("/api/viettel-debug", async (req, res) => {
-  const taxCode = "4000926165";
-  const origin = "https://api-vinvoice.viettel.vn";
-  const base64Auth = Buffer.from("test:test").toString("base64");
-  const results: any[] = [];
-
-  const paths = [
-    `/InvoiceAPI/InvoiceWS/getInvoiceTemplates/${taxCode}`,
-    `/services/einvoiceapplication/api/InvoiceWS/getInvoiceTemplates/${taxCode}`,
-    `/InvoiceWS/getInvoiceTemplates/${taxCode}`,
-  ];
-
-  for (const path of paths) {
-    const url = `${origin}${path}`;
-    try {
-      const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), 10000);
-      const r = await (fetch as any)(url, {
-        method: "GET",
-        headers: { "Authorization": `Basic ${base64Auth}`, "Content-Type": "application/json" },
-        signal: controller.signal,
-      });
-      clearTimeout(timer);
-      const body = await r.text().catch(() => "");
-      results.push({ path, status: r.status, body: body.substring(0, 200) });
-    } catch (e: any) {
-      results.push({ path, error: e?.message || String(e) });
-    }
-  }
-  res.json({ results });
-});
-
 // Helper: fetch với timeout an toàn (hỗ trợ mọi phiên bản Node.js)
 async function fetchWithTimeout(url: string, options: any, timeoutMs = 12000): Promise<any> {
   const controller = new AbortController();
@@ -1179,17 +1146,20 @@ router.post("/api/viettel-test", async (req, res) => {
         statuses.push(`${method} ${ep.replace(origin,'')} → ${r.status}`);
         console.log(`[ViettelTest] ${method} ${ep} → HTTP ${r.status}`);
 
-        // 401 = sai password chắc chắn
-        if (r.status === 401) {
-          return res.json({ success: false, message: "Xác thực thất bại (401): Sai tên đăng nhập hoặc mật khẩu Viettel." });
-        }
-
-        // 403 = server nhận được request (path đúng) nhưng từ chối xác thực
-        // → Sai username/password, không cần thử path khác
-        if (r.status === 403) {
+        // 401 hoặc 403 = path đúng, sai credentials
+        if (r.status === 401 || r.status === 403) {
           return res.json({
             success: false,
-            message: `Xác thực thất bại (403): Sai tài khoản hoặc mật khẩu Viettel vInvoice. Vui lòng kiểm tra lại thông tin đăng nhập. (Endpoint hợp lệ: ${ep.replace(origin,'')})`,
+            message: `Xác thực thất bại: Sai tài khoản hoặc mật khẩu Viettel vInvoice.
+
+` +
+              `Hướng dẫn:
+` +
+              `• Tài khoản: thường là Mã số thuế (${cfg.tax_code})
+` +
+              `• Mật khẩu: mật khẩu đăng nhập tại https://vinvoice.viettel.vn
+` +
+              `• Lưu lại cấu hình sau khi sửa mật khẩu (mật khẩu cần nhập lại sau mỗi lần tải trang)`,
           });
         }
 

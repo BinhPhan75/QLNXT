@@ -64,7 +64,8 @@ export default function EInvoice() {
       const res = await fetch('/api/viettel-config');
       const data = await res.json();
       if (data.config) {
-        setConfig({ ...DEFAULT_CONFIG, ...data.config });
+        // Luôn set password = '' sau khi load để tránh gửi mask lên server
+        setConfig({ ...DEFAULT_CONFIG, ...data.config, password: '' });
       }
     } catch (e) {
       console.warn('Không thể tải cấu hình Viettel:', e);
@@ -76,6 +77,10 @@ export default function EInvoice() {
   const handleSave = async () => {
     if (!config.username || !config.tax_code) {
       setSaveResult({ success: false, message: 'Vui lòng điền Tài khoản và Mã số thuế' });
+      return;
+    }
+    if (!config.password && !config._hasPassword) {
+      setSaveResult({ success: false, message: 'Vui lòng điền Mật khẩu' });
       return;
     }
     setSaving(true);
