@@ -1096,6 +1096,30 @@ router.post("/api/viettel-config", async (req, res) => {
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
+// GET /api/viettel-debug2
+router.get("/api/viettel-debug2", async (req, res) => {
+  const url = "https://api-vinvoice.viettel.vn/InvoiceAPI/InvoiceWS/getInvoiceTemplates/4000926165";
+  const log: any = { url, nodeVersion: process.version, fetchType: typeof fetch };
+  try {
+    const controller = new AbortController();
+    const t = setTimeout(() => controller.abort(), 10000);
+    const r = await (fetch as any)(url, {
+      method: "GET",
+      headers: { "Authorization": "Basic dGVzdDp0ZXN0", "Content-Type": "application/json" },
+      signal: controller.signal,
+    });
+    clearTimeout(t);
+    const body = await r.text();
+    log.status = r.status;
+    log.body = body.substring(0, 300);
+  } catch (e: any) {
+    log.error = e?.message;
+    log.code = e?.code;
+    log.type = e?.constructor?.name;
+  }
+  res.json(log);
+});
+
 // Helper: fetch với timeout an toàn (hỗ trợ mọi phiên bản Node.js)
 async function fetchWithTimeout(url: string, options: any, timeoutMs = 12000): Promise<any> {
   const controller = new AbortController();
