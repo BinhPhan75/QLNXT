@@ -1096,6 +1096,53 @@ router.post("/api/viettel-config", async (req, res) => {
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
+// GET /api/viettel-debug — Test trực tiếp endpoint Viettel (xóa sau khi debug xong)
+router.get("/api/viettel-debug", async (req, res) => {
+  const taxCode = "4000926165";
+  const origin = "https://api-vinvoice.viettel.vn";
+  const base64Auth = Buffer.from("test:test").toString("base64");
+  const results: any[] = [];
+
+  const paths = [
+    `/InvoiceAPI/InvoiceWS/getInvoiceTemplates/${taxCode}`,
+    `/services/einvoiceapplication/api/InvoiceWS/getInvoiceTemplates/${taxCode}`,
+    `/InvoiceWS/getInvoiceTemplates/${taxCode}`,
+  ];
+
+  for (const path of paths) {
+    const url = `${origin}${path}`;
+    try {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 10000);
+      const r = await (fetch as any)(url, {
+        method: "GET",
+        headers: { "Authorization": `Basic ${base64Auth}`, "Content-Type": "application/json" },
+        signal: controller.signal,
+      });
+      clearTimeout(timer);
+      const body = await r.text().catch(() => "");
+      results.push({ path, status: r.status, body: body.substring(0, 200) });
+    } catch (e: any) {
+      results.push({ path, error: e?.message || String(e) });
+    }
+  }
+  res.json({ results });
+});
+
+// Helper: fetch với timeout an toàn (hỗ trợ mọi phiên bản Node.js)
+async function fetchWithTimeout(url: string, options: any, timeoutMs = 12000): Promise<any> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await (fetch as any)(url, { ...options, signal: controller.signal });
+    clearTimeout(timer);
+    return res;
+  } catch (e) {
+    clearTimeout(timer);
+    throw e;
+  }
+}
+
 // POST /api/viettel-test
 router.post("/api/viettel-test", async (req, res) => {
   try {
@@ -1123,12 +1170,11 @@ router.post("/api/viettel-test", async (req, res) => {
 
     for (const { url: ep, method } of endpoints) {
       try {
-        const r = await (fetch as any)(ep, {
+        const r = await fetchWithTimeout(ep, {
           method,
           headers: { "Authorization": `Basic ${base64Auth}`, "Content-Type": "application/json", "Accept": "application/json" },
-          signal: AbortSignal.timeout(12000),
           ...(method === "POST" ? { body: "{}" } : {})
-        });
+        }, 12000);
 
         statuses.push(`${method} ${ep.replace(origin,'')} → ${r.status}`);
         console.log(`[ViettelTest] ${method} ${ep} → HTTP ${r.status}`);
@@ -1164,7 +1210,9 @@ router.post("/api/viettel-test", async (req, res) => {
         }
 
       } catch (e: any) {
-        statuses.push(`${method} ${ep.replace(origin,'')} → Error: ${e.message}`);
+        const errMsg = e?.message || String(e);
+        statuses.push(`${method} ${ep.replace(origin,'')} → Error: ${errMsg}`);
+        console.error(`[ViettelTest] EXCEPTION ${method} ${ep}:`, errMsg);
       }
     }
 
@@ -1217,7 +1265,7 @@ router.post("/api/viettel-create-invoice", async (req, res) => {
     let lastErr="";
     for(const ep of eps){
       try{
-        const r=await (fetch as any)(ep,{method:"POST",headers:{"Authorization":`Basic ${base64Auth}`,"Content-Type":"application/json","Accept":"application/json"},body:JSON.stringify(fp),signal:AbortSignal.timeout(75000)});
+        const r=await fetchWithTimeout(ep,{method:"POST",headers:{"Authorization":`Basic ${base64Auth}`,"Content-Type":"application/json","Accept":"application/json"},body:JSON.stringify(fp)},75000);
         if(r.status===401||r.status===403)return res.status(401).json({errorCode:"AUTH_FAILED",description:"Xac thuc that bai."});
         if(r.status===404){lastErr=`404 tai ${ep}`;continue;}
         const data=await r.json().catch(()=>({}));
