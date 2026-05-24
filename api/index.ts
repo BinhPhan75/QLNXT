@@ -1,6 +1,8 @@
 import express from 'express';
 import pg from 'pg';
 import dotenv from 'dotenv';
+import https from 'https';
+import http from 'http';
 
 dotenv.config();
 
@@ -1096,42 +1098,29 @@ router.post("/api/viettel-config", async (req, res) => {
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
-// GET /api/viettel-debug2
-router.get("/api/viettel-debug2", async (req, res) => {
-  const url = "https://api-vinvoice.viettel.vn/InvoiceAPI/InvoiceWS/getInvoiceTemplates/4000926165";
-  const log: any = { url, nodeVersion: process.version, fetchType: typeof fetch };
-  try {
-    const controller = new AbortController();
-    const t = setTimeout(() => controller.abort(), 10000);
-    const r = await (fetch as any)(url, {
-      method: "GET",
-      headers: { "Authorization": "Basic dGVzdDp0ZXN0", "Content-Type": "application/json" },
-      signal: controller.signal,
+// Helper: HTTP request dùng Node.js built-in https/http (không bị Vercel chặn)
+function nodeRequest(urlStr: string, options: { method: string; headers: Record<string,string>; body?: string; timeoutMs?: number }): Promise<{ status: number; body: string }> {
+  return new Promise((resolve, reject) => {
+    const parsed = new URL(urlStr);
+    const lib = parsed.protocol === "https:" ? https : http;
+    const reqOptions = {
+      hostname: parsed.hostname,
+      port: parsed.port || (parsed.protocol === "https:" ? 443 : 80),
+      path: parsed.pathname + parsed.search,
+      method: options.method,
+      headers: options.headers,
+      timeout: options.timeoutMs || 12000,
+    };
+    const req = lib.request(reqOptions, (res) => {
+      let data = "";
+      res.on("data", (chunk) => { data += chunk; });
+      res.on("end", () => resolve({ status: res.statusCode || 0, body: data }));
     });
-    clearTimeout(t);
-    const body = await r.text();
-    log.status = r.status;
-    log.body = body.substring(0, 300);
-  } catch (e: any) {
-    log.error = e?.message;
-    log.code = e?.code;
-    log.type = e?.constructor?.name;
-  }
-  res.json(log);
-});
-
-// Helper: fetch với timeout an toàn (hỗ trợ mọi phiên bản Node.js)
-async function fetchWithTimeout(url: string, options: any, timeoutMs = 12000): Promise<any> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
-  try {
-    const res = await (fetch as any)(url, { ...options, signal: controller.signal });
-    clearTimeout(timer);
-    return res;
-  } catch (e) {
-    clearTimeout(timer);
-    throw e;
-  }
+    req.on("timeout", () => { req.destroy(); reject(new Error("Request timeout")); });
+    req.on("error", (e) => reject(e));
+    if (options.body) req.write(options.body);
+    req.end();
+  });
 }
 
 // POST /api/viettel-test
@@ -1148,7 +1137,6 @@ router.post("/api/viettel-test", async (req, res) => {
     const base64Auth = Buffer.from(`${cfg.username}:${cfg.password}`).toString("base64");
     const headers = { "Authorization": `Basic ${base64Auth}`, "Content-Type": "application/json", "Accept": "application/json" };
 
-    // Thử từng path, ghi lại toàn bộ kết quả
     const paths = [
       "/InvoiceAPI/InvoiceWS/getInvoiceTemplates/" + cfg.tax_code,
       "/services/einvoiceapplication/api/InvoiceWS/getInvoiceTemplates/" + cfg.tax_code,
@@ -1159,43 +1147,24 @@ router.post("/api/viettel-test", async (req, res) => {
 
     for (const path of paths) {
       const url = origin + path;
-      // Thử GET
-      try {
-        const controller = new AbortController();
-        const t = setTimeout(() => controller.abort(), 12000);
-        const r = await (fetch as any)(url, { method: "GET", headers, signal: controller.signal });
-        clearTimeout(t);
-        log.push(`GET ${path} → ${r.status}`);
-        if (r.status === 401 || r.status === 403) {
-          return res.json({ success: false, message: `Sai tài khoản hoặc mật khẩu (HTTP ${r.status}). Kiểm tra lại thông tin đăng nhập Viettel vInvoice tại https://vinvoice.viettel.vn` });
+      for (const method of ["GET", "POST"]) {
+        try {
+          const r = await nodeRequest(url, { method, headers, body: method === "POST" ? "{}" : undefined, timeoutMs: 12000 });
+          log.push(`${method} ${path} → ${r.status}`);
+          if (r.status === 401 || r.status === 403) {
+            return res.json({ success: false, message: `Sai tài khoản hoặc mật khẩu (HTTP ${r.status}). Vui lòng kiểm tra lại thông tin đăng nhập tại https://vinvoice.viettel.vn` });
+          }
+          if (r.status >= 200 && r.status < 300) {
+            const data = JSON.parse(r.body || "{}");
+            return res.json({ success: true, message: `Kết nối thành công! (${cfg.is_sandbox ? "Sandbox" : "Production"}) — ${path}`, templates: data });
+          }
+        } catch (e: any) {
+          log.push(`${method} ${path} → Error: ${e?.message}`);
         }
-        if (r.status >= 200 && r.status < 300) {
-          const data = await r.json().catch(() => ({}));
-          return res.json({ success: true, message: `Kết nối thành công! (${cfg.is_sandbox ? "Sandbox" : "Production"}) — ${path}`, templates: data });
-        }
-      } catch (e: any) {
-        log.push(`GET ${path} → Exception: ${e?.message}`);
-      }
-      // Thử POST
-      try {
-        const controller = new AbortController();
-        const t = setTimeout(() => controller.abort(), 12000);
-        const r = await (fetch as any)(url, { method: "POST", headers, body: "{}", signal: controller.signal });
-        clearTimeout(t);
-        log.push(`POST ${path} → ${r.status}`);
-        if (r.status === 401 || r.status === 403) {
-          return res.json({ success: false, message: `Sai tài khoản hoặc mật khẩu (HTTP ${r.status}). Kiểm tra lại thông tin đăng nhập Viettel vInvoice tại https://vinvoice.viettel.vn` });
-        }
-        if (r.status >= 200 && r.status < 300) {
-          const data = await r.json().catch(() => ({}));
-          return res.json({ success: true, message: `Kết nối thành công! (${cfg.is_sandbox ? "Sandbox" : "Production"}) — ${path}`, templates: data });
-        }
-      } catch (e: any) {
-        log.push(`POST ${path} → Exception: ${e?.message}`);
       }
     }
 
-    res.json({ success: false, message: `Không kết nối được. Log đầy đủ: ${log.join(" | ")}` });
+    res.json({ success: false, message: `Không kết nối được. Log: ${log.join(" | ")}` });
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
@@ -1235,10 +1204,10 @@ router.post("/api/viettel-create-invoice", async (req, res) => {
     let lastErr="";
     for(const ep of eps){
       try{
-        const r=await fetchWithTimeout(ep,{method:"POST",headers:{"Authorization":`Basic ${base64Auth}`,"Content-Type":"application/json","Accept":"application/json"},body:JSON.stringify(fp)},75000);
+        const r=await nodeRequest(ep,{method:"POST",headers:{"Authorization":`Basic ${base64Auth}`,"Content-Type":"application/json","Accept":"application/json"},body:JSON.stringify(fp),timeoutMs:75000});
         if(r.status===401||r.status===403)return res.status(401).json({errorCode:"AUTH_FAILED",description:"Xac thuc that bai."});
         if(r.status===404){lastErr=`404 tai ${ep}`;continue;}
-        const data=await r.json().catch(()=>({}));
+        const data=JSON.parse(r.body||"{}");
         if(r.status>=200&&r.status<300){const ok=!data.errorCode||["","0","SUCCESS"].includes(data.errorCode);if(ok&&data.result)return res.json({...data,transactionUuid:uuid});return res.status(422).json({errorCode:data.errorCode,description:data.description,raw:data});}
         lastErr=`HTTP ${r.status}`;
       }catch(e:any){lastErr=e.message;}
