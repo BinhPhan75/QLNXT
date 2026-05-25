@@ -1168,25 +1168,20 @@ router.post("/api/viettel-test", async (req, res) => {
       const tmpl = cfg.template_code || "";
       const tmplEnc = encodeURIComponent(tmpl);
 
-      // Tất cả endpoints từ tài liệu Viettel v2.49
+      // POST → 405 nghĩa là path đúng nhưng phải dùng GET
+      // Thử GET cho tất cả endpoints đã tìm thấy path đúng
       const tokenTestCases: { url: string; method: string; body?: string }[] = [
-        // Mục 7.8 - Lấy trường động
-        { url: `${origin}/InvoiceAPI/InvoiceWS/getCustomFields?taxCode=${tax}&templateCode=${tmplEnc}`, method: "GET" },
-        // Mục 7.12 - Tình hình sử dụng hóa đơn
-        { url: `${origin}/InvoiceAPI/InvoiceUtilsWS/getProvidesStatusUsingInvoice`, method: "POST",
-          body: JSON.stringify({ supplierTaxCode: tax, templateCode: tmpl }) },
-        // Mục 7.26 - Lấy danh sách mẫu và ký hiệu (endpoint mới nhất)
-        { url: `${origin}/InvoiceAPI/InvoiceUtilsWS/getInvoiceTemplates`, method: "POST",
-          body: JSON.stringify({ supplierTaxCode: tax }) },
-        // Mục 7.2 - Phát hành hóa đơn (sẽ lỗi dữ liệu nhưng xác nhận path đúng)
-        { url: `${origin}/InvoiceAPI/InvoiceWS/importInvoice`, method: "POST",
-          body: JSON.stringify({ generalInvoiceInfo: { supplierTaxCode: tax } }) },
-        // Mục 7.21 - Tra cứu theo transactionUuid
-        { url: `${origin}/InvoiceAPI/InvoiceWS/searchInvoiceByTransactionUuid`, method: "POST",
-          body: JSON.stringify({ supplierTaxCode: tax, transactionUuid: "test-uuid" }) },
-        // Mục 7.13 - Danh sách hóa đơn
-        { url: `${origin}/InvoiceAPI/InvoiceUtilsWS/getListInvoiceDataControl`, method: "POST",
-          body: JSON.stringify({ supplierTaxCode: tax, startDate: Date.now()-86400000, endDate: Date.now() }) },
+        { url: `${origin}/InvoiceAPI/InvoiceUtilsWS/getProvidesStatusUsingInvoice?supplierTaxCode=${tax}`, method: "GET" },
+        { url: `${origin}/InvoiceAPI/InvoiceUtilsWS/getInvoiceTemplates?supplierTaxCode=${tax}`, method: "GET" },
+        { url: `${origin}/InvoiceAPI/InvoiceWS/importInvoice?supplierTaxCode=${tax}`, method: "GET" },
+        { url: `${origin}/InvoiceAPI/InvoiceWS/searchInvoiceByTransactionUuid?supplierTaxCode=${tax}`, method: "GET" },
+        { url: `${origin}/InvoiceAPI/InvoiceUtilsWS/getListInvoiceDataControl?supplierTaxCode=${tax}&startDate=${Date.now()-86400000}&endDate=${Date.now()}`, method: "GET" },
+        // Thêm path với taxCode trực tiếp trong URL
+        { url: `${origin}/InvoiceAPI/InvoiceUtilsWS/getProvidesStatusUsingInvoice/${tax}`, method: "GET" },
+        { url: `${origin}/InvoiceAPI/InvoiceUtilsWS/getInvoiceTemplates/${tax}`, method: "GET" },
+        // Swagger/OpenAPI discovery
+        { url: `${origin}/InvoiceAPI/v2/api-docs`, method: "GET" },
+        { url: `${origin}/InvoiceAPI/swagger-ui.html`, method: "GET" },
       ];
 
       for (const tc2 of tokenTestCases) {
