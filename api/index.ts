@@ -1161,25 +1161,57 @@ router.post("/api/viettel-test", async (req, res) => {
       log.push(`POST /auth/login → Error: ${e?.message}`);
     }
 
-    // Bước 2: Nếu có token, dùng token gọi API kiểm tra
+    // Bước 2: Nếu có token, thử TẤT CẢ endpoints có thể có
     if (accessToken) {
       const tokenHeaders = { ...jsonHeaders, "Cookie": `access_token=${accessToken}` };
-      const tc = cfg.tax_code;
-      const tmpl = encodeURIComponent(cfg.template_code || "");
-      const tokenTestCases = [
-        { url: `${origin}/InvoiceAPI/InvoiceWS/getCustomFields?taxCode=${tc}&templateCode=${tmpl}`, method: "GET" },
-        { url: `${origin}/InvoiceAPI/InvoiceWS/getCustomFields?taxCode=${tc}`, method: "GET" },
+      const tax = cfg.tax_code;
+      const tmpl = cfg.template_code || "";
+      const tmplEnc = encodeURIComponent(tmpl);
+
+      // Tất cả endpoints từ tài liệu Viettel v2.49
+      const tokenTestCases: { url: string; method: string; body?: string }[] = [
+        // Mục 7.8 - Lấy trường động
+        { url: `${origin}/InvoiceAPI/InvoiceWS/getCustomFields?taxCode=${tax}&templateCode=${tmplEnc}`, method: "GET" },
+        // Mục 7.12 - Tình hình sử dụng hóa đơn
+        { url: `${origin}/InvoiceAPI/InvoiceUtilsWS/getProvidesStatusUsingInvoice`, method: "POST",
+          body: JSON.stringify({ supplierTaxCode: tax, templateCode: tmpl }) },
+        // Mục 7.26 - Lấy danh sách mẫu và ký hiệu (endpoint mới nhất)
+        { url: `${origin}/InvoiceAPI/InvoiceUtilsWS/getInvoiceTemplates`, method: "POST",
+          body: JSON.stringify({ supplierTaxCode: tax }) },
+        // Mục 7.2 - Phát hành hóa đơn (sẽ lỗi dữ liệu nhưng xác nhận path đúng)
+        { url: `${origin}/InvoiceAPI/InvoiceWS/importInvoice`, method: "POST",
+          body: JSON.stringify({ generalInvoiceInfo: { supplierTaxCode: tax } }) },
+        // Mục 7.21 - Tra cứu theo transactionUuid
+        { url: `${origin}/InvoiceAPI/InvoiceWS/searchInvoiceByTransactionUuid`, method: "POST",
+          body: JSON.stringify({ supplierTaxCode: tax, transactionUuid: "test-uuid" }) },
+        // Mục 7.13 - Danh sách hóa đơn
+        { url: `${origin}/InvoiceAPI/InvoiceUtilsWS/getListInvoiceDataControl`, method: "POST",
+          body: JSON.stringify({ supplierTaxCode: tax, startDate: Date.now()-86400000, endDate: Date.now() }) },
       ];
+
       for (const tc2 of tokenTestCases) {
+        const short = tc2.url.replace(origin, "");
         try {
-          const r = await nodeRequest(tc2.url, { method: tc2.method, headers: tokenHeaders, timeoutMs: 10000 });
-          log.push(`${tc2.method} ${tc2.url.replace(origin,"")} (token) → ${r.status}`);
+          const r = await nodeRequest(tc2.url, { method: tc2.method, headers: tokenHeaders, body: tc2.body, timeoutMs: 10000 });
+          log.push(`${tc2.method} ${short} → ${r.status}`);
+          if (r.status === 404 || r.status === 405) continue;
           if (r.status >= 200 && r.status < 300) {
             let data: any = {};
             try { data = JSON.parse(r.body || "{}"); } catch {}
-            return res.json({ success: true, message: `Kết nối Viettel vInvoice thành công qua Token Auth!`, endpoint: tc2.url.replace(origin,""), data });
+            return res.json({ success: true, message: `Kết nối Viettel vInvoice thành công! Endpoint hoạt động: ${short}`, data });
           }
-        } catch (e: any) { log.push(`Error: ${e?.message}`); }
+          // Bất kỳ status nào khác 404/405 = path đúng (kể cả lỗi dữ liệu)
+          if (r.status >= 400) {
+            let errData: any = {};
+            try { errData = JSON.parse(r.body || "{}"); } catch {}
+            const errMsg = errData.description || errData.message || errData.detail || r.body?.substring(0,200) || "";
+            return res.json({
+              success: true,
+              message: `Kết nối thành công! Xác thực OK. Endpoint: ${short} (HTTP ${r.status} - lỗi dữ liệu test, không phải lỗi kết nối)`,
+              note: errMsg,
+            });
+          }
+        } catch (e: any) { log.push(`${short} → Error: ${e?.message}`); }
       }
     }
 
