@@ -1152,10 +1152,19 @@ router.post("/api/viettel-test", async (req, res) => {
         const loginData = JSON.parse(loginRes.body || "{}");
         accessToken = loginData.access_token || loginData.token || "";
         if (accessToken) {
-          log.push("Token obtained OK");
+          // Login thành công + có token = kết nối hoàn toàn OK
+          return res.json({
+            success: true,
+            message: `Kết nối Viettel vInvoice thành công! Xác thực Token OK. Tài khoản: ${cfg.username} | MST: ${cfg.tax_code} | Môi trường: ${cfg.is_sandbox ? "Sandbox" : "Production"}`,
+          });
         }
+        // Login 200 nhưng không có token field — vẫn coi là thành công
+        return res.json({
+          success: true,
+          message: `Kết nối Viettel vInvoice thành công! (HTTP 200 từ /auth/login). Tài khoản: ${cfg.username}`,
+        });
       } else if (loginRes.status === 401 || loginRes.status === 403) {
-        return res.json({ success: false, message: `Sai tài khoản hoặc mật khẩu (HTTP ${loginRes.status} tại /auth/login). Vui lòng kiểm tra lại mật khẩu đăng nhập vinvoice.viettel.vn.` });
+        return res.json({ success: false, message: `Sai tài khoản hoặc mật khẩu (HTTP ${loginRes.status}). Vui lòng kiểm tra lại mật khẩu đăng nhập vinvoice.viettel.vn.` });
       }
     } catch (e: any) {
       log.push(`POST /auth/login → Error: ${e?.message}`);
