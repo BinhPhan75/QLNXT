@@ -1137,21 +1137,19 @@ router.post("/api/viettel-test", async (req, res) => {
     const base64Auth = Buffer.from(`${cfg.username}:${cfg.password}`).toString("base64");
     const headers = { "Authorization": `Basic ${base64Auth}`, "Content-Type": "application/json", "Accept": "application/json" };
 
-    // Từ tài liệu kỹ thuật chính thức Viettel:
-    // Path: /InvoiceAPI/InvoiceUtilsWS/ với supplierTaxCode là query param
+    // Theo tài liệu chính thức Viettel v2.49 mục 7.8:
+    // Endpoint kiểm tra: GET /InvoiceAPI/InvoiceWS/getCustomFields?taxCode=xxx&templateCode=xxx
+    // Đây là endpoint GET thực sự được dùng để kiểm tra kết nối
     const tc = cfg.tax_code;
+    const tmpl = encodeURIComponent(cfg.template_code || "");
     const testCases: { url: string; method: string; body?: string }[] = [
-      // Tài liệu chính thức: InvoiceUtilsWS + query param
-      { url: `${origin}/InvoiceAPI/InvoiceUtilsWS/getInvoiceTemplates?supplierTaxCode=${tc}`, method: "GET" },
-      { url: `${origin}/InvoiceAPI/InvoiceUtilsWS/getInvoiceTemplates?supplierTaxCode=${tc}`, method: "POST", body: "{}" },
-      // InvoiceWS + query param
-      { url: `${origin}/InvoiceAPI/InvoiceWS/getInvoiceTemplates?supplierTaxCode=${tc}`, method: "GET" },
-      // InvoiceUtilsWS + path param
-      { url: `${origin}/InvoiceAPI/InvoiceUtilsWS/getInvoiceTemplates/${tc}`, method: "GET" },
-      // InvoiceWS + path param
-      { url: `${origin}/InvoiceAPI/InvoiceWS/getInvoiceTemplates/${tc}`, method: "GET" },
-      // services path
-      { url: `${origin}/services/einvoiceapplication/api/InvoiceUtilsWS/getInvoiceTemplates?supplierTaxCode=${tc}`, method: "GET" },
+      // Endpoint chính: getCustomFields (mục 7.8 tài liệu Viettel)
+      { url: `${origin}/InvoiceAPI/InvoiceWS/getCustomFields?taxCode=${tc}&templateCode=${tmpl}`, method: "GET" },
+      { url: `${origin}/InvoiceAPI/InvoiceWS/getCustomFields?taxCode=${tc}`, method: "GET" },
+      // Endpoint phụ: getProvidesStatusUsingInvoice (InvoiceUtilsWS - mục 7.12)
+      { url: `${origin}/InvoiceAPI/InvoiceUtilsWS/getProvidesStatusUsingInvoice`, method: "POST", body: JSON.stringify({ supplierTaxCode: tc, templateCode: cfg.template_code || "" }) },
+      // Fallback: services path
+      { url: `${origin}/services/einvoiceapplication/api/InvoiceWS/getCustomFields?taxCode=${tc}`, method: "GET" },
     ];
 
     const log: string[] = [];
