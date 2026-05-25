@@ -1134,57 +1134,77 @@ router.post("/api/viettel-test", async (req, res) => {
       return res.json({ success: false, message: "Cấu hình chưa đầy đủ: thiếu tài khoản, mật khẩu hoặc mã số thuế." });
 
     const origin = (cfg.api_url || "https://api-vinvoice.viettel.vn").replace(/\/+$/, "");
+    const jsonHeaders = { "Content-Type": "application/json", "Accept": "application/json" };
     const base64Auth = Buffer.from(`${cfg.username}:${cfg.password}`).toString("base64");
-    const headers = { "Authorization": `Basic ${base64Auth}`, "Content-Type": "application/json", "Accept": "application/json" };
-
-    // Theo tài liệu chính thức Viettel v2.49 mục 7.8:
-    // Endpoint kiểm tra: GET /InvoiceAPI/InvoiceWS/getCustomFields?taxCode=xxx&templateCode=xxx
-    // Đây là endpoint GET thực sự được dùng để kiểm tra kết nối
-    const tc = cfg.tax_code;
-    const tmpl = encodeURIComponent(cfg.template_code || "");
-    const testCases: { url: string; method: string; body?: string }[] = [
-      // Endpoint chính: getCustomFields (mục 7.8 tài liệu Viettel)
-      { url: `${origin}/InvoiceAPI/InvoiceWS/getCustomFields?taxCode=${tc}&templateCode=${tmpl}`, method: "GET" },
-      { url: `${origin}/InvoiceAPI/InvoiceWS/getCustomFields?taxCode=${tc}`, method: "GET" },
-      // Endpoint phụ: getProvidesStatusUsingInvoice (InvoiceUtilsWS - mục 7.12)
-      { url: `${origin}/InvoiceAPI/InvoiceUtilsWS/getProvidesStatusUsingInvoice`, method: "POST", body: JSON.stringify({ supplierTaxCode: tc, templateCode: cfg.template_code || "" }) },
-      // Fallback: services path
-      { url: `${origin}/services/einvoiceapplication/api/InvoiceWS/getCustomFields?taxCode=${tc}`, method: "GET" },
-    ];
-
+    const basicHeaders = { ...jsonHeaders, "Authorization": `Basic ${base64Auth}` };
     const log: string[] = [];
 
-    for (const tc of testCases) {
-      const shortUrl = tc.url.replace(origin, "");
-      try {
-        const r = await nodeRequest(tc.url, { method: tc.method, headers, body: tc.body, timeoutMs: 12000 });
-        log.push(`${tc.method} ${shortUrl} → ${r.status}`);
-        if (r.status === 401 || r.status === 403) {
-          return res.json({
-            success: false,
-            message: `Sai tài khoản hoặc mật khẩu (HTTP ${r.status}).
-` +
-              `• Tài khoản: thường là Mã số thuế (${cfg.tax_code})
-` +
-              `• Mật khẩu: đăng nhập tại https://vinvoice.viettel.vn để xác nhận`,
-          });
+    // Bước 1: Thử đăng nhập /auth/login để lấy token (Cách 2 trong tài liệu)
+    let accessToken = "";
+    try {
+      const loginRes = await nodeRequest(`${origin}/auth/login`, {
+        method: "POST", headers: jsonHeaders,
+        body: JSON.stringify({ username: cfg.username, password: cfg.password }),
+        timeoutMs: 10000,
+      });
+      log.push(`POST /auth/login → ${loginRes.status}`);
+      if (loginRes.status === 200) {
+        const loginData = JSON.parse(loginRes.body || "{}");
+        accessToken = loginData.access_token || loginData.token || "";
+        if (accessToken) {
+          log.push("Token obtained OK");
         }
-        if (r.status >= 200 && r.status < 300) {
-          let data: any = {};
-          try { data = JSON.parse(r.body || "{}"); } catch {}
-          return res.json({
-            success: true,
-            message: `Kết nối Viettel vInvoice thành công! Môi trường: ${cfg.is_sandbox ? "Sandbox" : "Production"}`,
-            endpoint: shortUrl,
-            templates: data,
-          });
-        }
-      } catch (e: any) {
-        log.push(`${tc.method} ${shortUrl} → Error: ${e?.message}`);
+      } else if (loginRes.status === 401 || loginRes.status === 403) {
+        return res.json({ success: false, message: `Sai tài khoản hoặc mật khẩu (HTTP ${loginRes.status} tại /auth/login). Vui lòng kiểm tra lại mật khẩu đăng nhập vinvoice.viettel.vn.` });
+      }
+    } catch (e: any) {
+      log.push(`POST /auth/login → Error: ${e?.message}`);
+    }
+
+    // Bước 2: Nếu có token, dùng token gọi API kiểm tra
+    if (accessToken) {
+      const tokenHeaders = { ...jsonHeaders, "Cookie": `access_token=${accessToken}` };
+      const tc = cfg.tax_code;
+      const tmpl = encodeURIComponent(cfg.template_code || "");
+      const tokenTestCases = [
+        { url: `${origin}/InvoiceAPI/InvoiceWS/getCustomFields?taxCode=${tc}&templateCode=${tmpl}`, method: "GET" },
+        { url: `${origin}/InvoiceAPI/InvoiceWS/getCustomFields?taxCode=${tc}`, method: "GET" },
+      ];
+      for (const tc2 of tokenTestCases) {
+        try {
+          const r = await nodeRequest(tc2.url, { method: tc2.method, headers: tokenHeaders, timeoutMs: 10000 });
+          log.push(`${tc2.method} ${tc2.url.replace(origin,"")} (token) → ${r.status}`);
+          if (r.status >= 200 && r.status < 300) {
+            let data: any = {};
+            try { data = JSON.parse(r.body || "{}"); } catch {}
+            return res.json({ success: true, message: `Kết nối Viettel vInvoice thành công qua Token Auth!`, endpoint: tc2.url.replace(origin,""), data });
+          }
+        } catch (e: any) { log.push(`Error: ${e?.message}`); }
       }
     }
 
-    res.json({ success: false, message: `Không kết nối được. Log: ${log.join(" | ")}` });
+    // Bước 3: Thử Basic Auth với các endpoint
+    const tc = cfg.tax_code;
+    const basicTestCases = [
+      { url: `${origin}/InvoiceAPI/InvoiceWS/getCustomFields?taxCode=${tc}`, method: "GET" },
+      { url: `${origin}/InvoiceAPI/InvoiceUtilsWS/getProvidesStatusUsingInvoice`, method: "POST", body: JSON.stringify({ supplierTaxCode: tc }) },
+      { url: `${origin}/services/einvoiceapplication/api/InvoiceWS/importInvoice/${tc}`, method: "POST", body: "{}" },
+    ];
+    for (const tc3 of basicTestCases) {
+      try {
+        const r = await nodeRequest(tc3.url, { method: tc3.method, headers: basicHeaders, body: tc3.body, timeoutMs: 10000 });
+        const short = tc3.url.replace(origin, "");
+        log.push(`${tc3.method} ${short} (basic) → ${r.status}`);
+        if (r.status === 401 || r.status === 403) {
+          return res.json({ success: false, message: `Xác thực thất bại (${r.status}): Sai tài khoản hoặc mật khẩu. Log: ${log.join(" | ")}` });
+        }
+        if (r.status >= 200 && r.status < 300) {
+          return res.json({ success: true, message: `Kết nối thành công qua Basic Auth! Endpoint: ${short}` });
+        }
+      } catch (e: any) { log.push(`Error: ${e?.message}`); }
+    }
+
+    res.json({ success: false, message: `Không kết nối được. Log đầy đủ: ${log.join(" | ")}` });
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
