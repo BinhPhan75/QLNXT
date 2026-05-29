@@ -1298,16 +1298,13 @@ router.post("/api/viettel-create-invoice", async (req, res) => {
       summarizeInfo:{sumOfTotalLineAmountWithoutTax:summarizeInfo.totalAmountWithoutTax||0,totalAmountWithoutTax:summarizeInfo.totalAmountWithoutTax||0,totalTaxAmount:summarizeInfo.totalTaxAmount??0,totalAmountWithTax:summarizeInfo.totalAmountWithTax||0,totalAmountWithTaxInWords:numToWords(summarizeInfo.totalAmountWithTax||0),discountAmount:summarizeInfo.discountAmount??0},
       taxBreakdowns:[{taxPercentage:0,taxableAmount:summarizeInfo.totalAmountWithoutTax||0,taxAmount:0}],
     };
-    // importInvoice: tài liệu v2.49 dùng POST nhưng server trả 405
-    // → thử thêm supplierTaxCode trong body và các biến thể path
+    // Theo tài liệu chính thức v2.49 mục 7.9:
+    // POST /InvoiceAPI/InvoiceWS/createOrUpdateInvoiceDraft/{supplierTaxCode}
     const eps = [
-      // Path chuẩn theo tài liệu, token auth, taxCode trong payload
-      { url: `${origin}/InvoiceAPI/InvoiceWS/importInvoice`, headers: authHeaders },
-      // Một số version cần taxCode trong URL
-      { url: `${origin}/InvoiceAPI/InvoiceWS/importInvoice/${cfg.tax_code}`, headers: authHeaders },
-      // Path cũ hơn
-      { url: `${origin}/services/einvoiceapplication/api/InvoiceWS/importInvoice/${cfg.tax_code}`, headers: authHeaders },
-      { url: `${origin}/services/einvoiceapplication/api/InvoiceWS/importInvoice`, headers: authHeaders },
+      { url: `${origin}/InvoiceAPI/InvoiceWS/createOrUpdateInvoiceDraft/${cfg.tax_code}`, headers: authHeaders },
+      // Fallback basic auth
+      { url: `${origin}/InvoiceAPI/InvoiceWS/createOrUpdateInvoiceDraft/${cfg.tax_code}`,
+        headers: { ...jsonHeaders, "Authorization": `Basic ${base64Auth}` } },
     ];
     const log: string[] = [];
     for (const ep of eps) {
