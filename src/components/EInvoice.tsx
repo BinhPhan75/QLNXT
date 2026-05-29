@@ -54,6 +54,7 @@ export default function EInvoice() {
     note: '',
   });
   const [creatingInvoice, setCreatingInvoice] = useState(false);
+  const [previewingInvoice, setPreviewingInvoice] = useState(false);
   const [invoiceResult, setInvoiceResult] = useState<any>(null);
 
   useEffect(() => { loadConfig(); }, []);
@@ -144,53 +145,109 @@ export default function EInvoice() {
     }
   };
 
-  const handleCreateInvoice = async () => {
+  const buildInvoicePayload = () => {
+    const total = invoiceForm.quantity * invoiceForm.unitPrice;
+    return {
+      generalInvoiceInfo: { invoiceIssuedDate: Date.now() },
+      buyerInfo: {
+        buyerName: invoiceForm.buyerName,
+        buyerIdNo: invoiceForm.buyerIdNo,
+        buyerAddressLine: invoiceForm.buyerAddress,
+        buyerNotGetInvoice: invoiceForm.buyerIdNo ? 0 : 1,
+      },
+      itemInfo: [{
+        itemCode: invoiceForm.itemCode || 'HH001',
+        itemName: invoiceForm.itemName,
+        unitName: invoiceForm.unit,
+        unitPrice: invoiceForm.unitPrice,
+        quantity: invoiceForm.quantity,
+        itemTotalAmountWithoutTax: total,
+        taxPercentage: 0,
+        taxAmount: 0,
+        itemTotalAmountWithTax: total,
+      }],
+      summarizeInfo: {
+        totalAmountWithoutTax: total,
+        totalTaxAmount: 0,
+        totalAmountWithTax: total,
+      },
+    };
+  };
+
+  const findPdfBase64 = (value: any): string | null => {
+    if (!value) return null;
+    if (typeof value === 'string') {
+      const cleaned = value.startsWith('data:application/pdf;base64,')
+        ? value.replace('data:application/pdf;base64,', '')
+        : value;
+      return cleaned.length > 200 && /^[A-Za-z0-9+/=\s]+$/.test(cleaned) ? cleaned.replace(/\s/g, '') : null;
+    }
+    if (Array.isArray(value)) {
+      for (const item of value) {
+        const found = findPdfBase64(item);
+        if (found) return found;
+      }
+      return null;
+    }
+    if (typeof value === 'object') {
+      const preferredKeys = ['fileContent', 'fileToBytes', 'pdfFile', 'pdfBase64', 'base64', 'data'];
+      for (const key of preferredKeys) {
+        const found = findPdfBase64(value[key]);
+        if (found) return found;
+      }
+      for (const item of Object.values(value)) {
+        const found = findPdfBase64(item);
+        if (found) return found;
+      }
+    }
+    return null;
+  };
+
+  const openPreviewPdf = (data: any) => {
+    const pdfBase64 = findPdfBase64(data?.result ?? data);
+    if (!pdfBase64) return false;
+    const byteCharacters = atob(pdfBase64);
+    const byteNumbers = Array.from(byteCharacters, char => char.charCodeAt(0));
+    const blob = new Blob([new Uint8Array(byteNumbers)], { type: 'application/pdf' });
+    const url = URL.createObjectURL(blob);
+    window.open(url, '_blank', 'noopener,noreferrer');
+    window.setTimeout(() => URL.revokeObjectURL(url), 60000);
+    return true;
+  };
+
+  const submitInvoice = async (mode: 'preview' | 'draft') => {
     const total = invoiceForm.quantity * invoiceForm.unitPrice;
     if (!invoiceForm.buyerName || !invoiceForm.itemName || total <= 0) {
       setInvoiceResult({ error: 'Vui lòng điền đầy đủ: Tên khách hàng, Tên hàng hóa và Đơn giá' });
       return;
     }
 
-    setCreatingInvoice(true);
+    const isPreview = mode === 'preview';
+    isPreview ? setPreviewingInvoice(true) : setCreatingInvoice(true);
     setInvoiceResult(null);
     try {
-      const payload = {
-        generalInvoiceInfo: { invoiceIssuedDate: Date.now() },
-        buyerInfo: {
-          buyerName: invoiceForm.buyerName,
-          buyerIdNo: invoiceForm.buyerIdNo,
-          buyerAddressLine: invoiceForm.buyerAddress,
-          buyerNotGetInvoice: invoiceForm.buyerIdNo ? 0 : 1,
-        },
-        itemInfo: [{
-          itemCode: invoiceForm.itemCode || 'HH001',
-          itemName: invoiceForm.itemName,
-          unitName: invoiceForm.unit,
-          unitPrice: invoiceForm.unitPrice,
-          quantity: invoiceForm.quantity,
-          itemTotalAmountWithoutTax: total,
-          taxPercentage: 0,
-          taxAmount: 0,
-          itemTotalAmountWithTax: total,
-        }],
-        summarizeInfo: {
-          totalAmountWithoutTax: total,
-          totalTaxAmount: 0,
-          totalAmountWithTax: total,
-        },
-      };
-
-      const res = await fetch('/api/viettel-create-invoice', {
+      const res = await fetch(isPreview ? '/api/viettel-preview-invoice' : '/api/viettel-create-invoice', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ payload }),
+        body: JSON.stringify({ payload: buildInvoicePayload() }),
       });
       const data = await res.json();
-      setInvoiceResult(data);
+      if (isPreview && res.ok && !data.errorCode && !data.error) {
+        const opened = openPreviewPdf(data);
+        setInvoiceResult({
+          ...data,
+          preview: true,
+          message: opened
+            ? 'Đã tạo bản xem trước. File PDF đã được mở ở tab mới và không lưu vào SInvoice.'
+            : 'Đã gọi xem trước thành công. Viettel không trả về PDF ở định dạng hệ thống nhận diện được.',
+        });
+      } else {
+        setInvoiceResult(data);
+      }
     } catch (e: any) {
       setInvoiceResult({ error: e.message });
     } finally {
-      setCreatingInvoice(false);
+      isPreview ? setPreviewingInvoice(false) : setCreatingInvoice(false);
     }
   };
 
@@ -540,7 +597,7 @@ export default function EInvoice() {
                           <div className="flex items-start gap-3 p-4 bg-red-50 border border-red-200 rounded-xl text-sm text-red-800">
                             <XCircle size={18} className="shrink-0 mt-0.5 text-red-500" />
                             <div>
-                              <p className="font-bold">Tạo hóa đơn thất bại</p>
+                              <p className="font-bold">{invoiceResult.preview ? 'Xem trước thất bại' : 'Tạo hóa đơn thất bại'}</p>
                               <p className="mt-1 text-red-700">{invoiceResult.description || invoiceResult.error}</p>
                             </div>
                           </div>
@@ -548,7 +605,10 @@ export default function EInvoice() {
                           <div className="flex items-start gap-3 p-4 bg-green-50 border border-green-200 rounded-xl text-sm text-green-800">
                             <CheckCircle size={18} className="shrink-0 mt-0.5 text-green-600" />
                             <div>
-                              <p className="font-bold">Tạo hóa đơn thành công!</p>
+                              <p className="font-bold">{invoiceResult.preview ? 'Xem trước hóa đơn thành công!' : 'Tạo hóa đơn nháp thành công!'}</p>
+                              {invoiceResult.message && (
+                                <p className="mt-1">{invoiceResult.message}</p>
+                              )}
                               {invoiceResult.result?.invoiceNo && (
                                 <p className="mt-1">Số hóa đơn: <strong>{invoiceResult.result.invoiceNo}</strong></p>
                               )}
@@ -562,14 +622,22 @@ export default function EInvoice() {
                     )}
                   </AnimatePresence>
 
-                  <button onClick={handleCreateInvoice} disabled={creatingInvoice}
-                    className="flex items-center gap-2 px-8 py-3 bg-gold-500 text-luxury-black font-bold rounded-xl hover:bg-gold-400 transition-all shadow-lg shadow-gold-500/20 disabled:opacity-60">
-                    {creatingInvoice ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
-                    {creatingInvoice ? 'Đang gửi lên Viettel...' : 'Tạo hóa đơn nháp'}
-                  </button>
+                  <div className="flex flex-wrap items-center gap-3">
+                    <button onClick={() => submitInvoice('preview')} disabled={previewingInvoice || creatingInvoice}
+                      className="flex items-center gap-2 px-8 py-3 bg-white border border-zinc-200 text-zinc-700 font-bold rounded-xl hover:bg-zinc-50 hover:border-zinc-300 transition-all disabled:opacity-60">
+                      {previewingInvoice ? <Loader2 size={16} className="animate-spin" /> : <Eye size={16} />}
+                      {previewingInvoice ? 'Đang tạo bản xem trước...' : 'Xem trước hóa đơn'}
+                    </button>
+
+                    <button onClick={() => submitInvoice('draft')} disabled={previewingInvoice || creatingInvoice}
+                      className="flex items-center gap-2 px-8 py-3 bg-gold-500 text-luxury-black font-bold rounded-xl hover:bg-gold-400 transition-all shadow-lg shadow-gold-500/20 disabled:opacity-60">
+                      {creatingInvoice ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
+                      {creatingInvoice ? 'Đang gửi lên Viettel...' : 'Lập hóa đơn nháp'}
+                    </button>
+                  </div>
 
                   <p className="text-xs text-zinc-400">
-                    * Hóa đơn được tạo ở trạng thái <strong>nháp</strong>. Cần đăng nhập portal Viettel để ký số và phát hành.
+                    * <strong>Xem trước</strong> không lưu dữ liệu vào SInvoice. <strong>Lập hóa đơn nháp</strong> sẽ lưu vào danh sách hóa đơn chưa phát hành trên Viettel.
                   </p>
                 </div>
               </div>

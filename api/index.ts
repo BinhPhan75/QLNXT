@@ -1144,6 +1144,103 @@ async function loginViettel(cfg: any): Promise<{ token: string; status: number; 
   return { token, status: loginRes.status, message };
 }
 
+function numberToVietnameseWords(amount: number): string {
+  if (amount === 0) return "Khong dong";
+  const units = ["","nghin","trieu","ty"];
+  const digits = ["khong","mot","hai","ba","bon","nam","sau","bay","tam","chin"];
+  const readThree = (n: number): string => {
+    const h = Math.floor(n / 100), t = Math.floor((n % 100) / 10), o = n % 10;
+    let r = "";
+    if (h > 0) r += digits[h] + " tram ";
+    if (t > 1) {
+      r += digits[t] + " muoi ";
+      if (o > 0) r += (o === 5 ? "lam" : digits[o]) + " ";
+    } else if (t === 1) {
+      r += "muoi ";
+      if (o > 0) r += (o === 5 ? "lam" : digits[o]) + " ";
+    } else if (o > 0 && h > 0) {
+      r += "le " + digits[o] + " ";
+    } else if (o > 0) {
+      r += digits[o] + " ";
+    }
+    return r.trim();
+  };
+  let n = Math.round(amount);
+  const parts: string[] = [];
+  let unitIndex = 0;
+  while (n > 0) {
+    const chunk = n % 1000;
+    if (chunk > 0) parts.unshift(readThree(chunk) + (units[unitIndex] ? " " + units[unitIndex] : ""));
+    n = Math.floor(n / 1000);
+    unitIndex++;
+  }
+  const rs = parts.join(" ").trim();
+  return rs.charAt(0).toUpperCase() + rs.slice(1) + " dong";
+}
+
+function buildViettelInvoicePayload(cfg: any, payload: any) {
+  const uuid = (() => {
+    try { return crypto.randomUUID(); }
+    catch {
+      return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, c => {
+        const r = Math.random() * 16 | 0;
+        return (c === "x" ? r : (r & 0x3) | 0x8).toString(16);
+      });
+    }
+  })();
+  const { generalInvoiceInfo = {}, itemInfo = [], summarizeInfo = {}, buyerInfo = {}, payments = [] } = payload;
+  return {
+    transactionUuid: uuid,
+    data: {
+      generalInvoiceInfo: {
+        invoiceType: generalInvoiceInfo.invoiceType || "1",
+        templateCode: generalInvoiceInfo.templateCode || cfg.template_code || "",
+        invoiceSeries: generalInvoiceInfo.invoiceSeries || cfg.invoice_series || "",
+        invoiceIssuedDate: generalInvoiceInfo.invoiceIssuedDate || Date.now(),
+        currencyCode: "VND",
+        adjustmentType: "1",
+        paymentStatus: true,
+        cusGetInvoiceRight: true,
+        transactionUuid: uuid,
+        supplierTaxCode: cfg.tax_code,
+      },
+      buyerInfo: {
+        buyerName: buyerInfo.buyerName || "",
+        buyerIdNo: buyerInfo.buyerIdNo || "",
+        buyerIdType: buyerInfo.buyerIdType || "1",
+        buyerAddressLine: buyerInfo.buyerAddressLine || "",
+        buyerNotGetInvoice: buyerInfo.buyerNotGetInvoice ?? 1,
+      },
+      sellerInfo: { sellerTaxCode: cfg.tax_code },
+      payments: payments.length > 0 ? payments : [{ paymentMethodName: "TM/CK" }],
+      itemInfo: itemInfo.map((item: any, idx: number) => ({
+        lineNumber: idx + 1,
+        itemCode: item.itemCode || "HH",
+        itemName: item.itemName || "",
+        unitName: item.unitName || "Cai",
+        unitPrice: item.unitPrice || 0,
+        quantity: item.quantity || 1,
+        itemTotalAmountWithoutTax: item.itemTotalAmountWithoutTax || 0,
+        taxPercentage: item.taxPercentage ?? 0,
+        taxAmount: item.taxAmount ?? 0,
+        itemTotalAmountWithTax: item.itemTotalAmountWithTax || 0,
+        discount: item.discount ?? 0,
+        itemDiscount: item.itemDiscount ?? 0,
+        selection: item.selection ?? 1,
+      })),
+      summarizeInfo: {
+        sumOfTotalLineAmountWithoutTax: summarizeInfo.totalAmountWithoutTax || 0,
+        totalAmountWithoutTax: summarizeInfo.totalAmountWithoutTax || 0,
+        totalTaxAmount: summarizeInfo.totalTaxAmount ?? 0,
+        totalAmountWithTax: summarizeInfo.totalAmountWithTax || 0,
+        totalAmountWithTaxInWords: numberToVietnameseWords(summarizeInfo.totalAmountWithTax || 0),
+        discountAmount: summarizeInfo.discountAmount ?? 0,
+      },
+      taxBreakdowns: [{ taxPercentage: 0, taxableAmount: summarizeInfo.totalAmountWithoutTax || 0, taxAmount: 0 }],
+    },
+  };
+}
+
 // Helper: HTTP request dùng Node.js built-in https/http (không bị Vercel chặn)
 function nodeRequest(urlStr: string, options: { method: string; headers: Record<string,string>; body?: string; timeoutMs?: number }): Promise<{ status: number; body: string }> {
   return new Promise((resolve, reject) => {
@@ -1322,27 +1419,7 @@ router.post("/api/viettel-create-invoice", async (req, res) => {
     if (cfgRes.rows.length === 0) return res.status(400).json({ errorCode: "NO_CONFIG", description: "Chua co cau hinh Viettel." });
     const cfg = cfgRes.rows[0];
     const apiBase = getViettelApiBase(cfg);
-    const numToWords = (amount: number): string => {
-      if (amount === 0) return "Khong dong";
-      const units = ["","nghin","trieu","ty"]; const digits=["khong","mot","hai","ba","bon","nam","sau","bay","tam","chin"];
-      const r3=(n:number):string=>{const h=Math.floor(n/100),t=Math.floor((n%100)/10),o=n%10;let r="";
-        if(h>0)r+=digits[h]+" tram ";if(t>1){r+=digits[t]+" muoi ";if(o>0)r+=(o===5?"lam":digits[o])+" ";}
-        else if(t===1){r+="muoi ";if(o>0)r+=(o===5?"lam":digits[o])+" ";}else if(o>0&&h>0)r+="le "+digits[o]+" ";else if(o>0)r+=digits[o]+" ";return r.trim();};
-      let n=Math.round(amount);const parts:string[]=[];let ui=0;
-      while(n>0){const c=n%1000;if(c>0)parts.unshift(r3(c)+(units[ui]?" "+units[ui]:""));n=Math.floor(n/1000);ui++;}
-      const rs=parts.join(" ").trim();return rs.charAt(0).toUpperCase()+rs.slice(1)+" dong";
-    };
-    const uuid=(()=>{try{return crypto.randomUUID();}catch{return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g,c=>{const r=Math.random()*16|0;return(c==="x"?r:(r&0x3)|0x8).toString(16)});}})();
-    const {generalInvoiceInfo={},itemInfo=[],summarizeInfo={},buyerInfo={},payments=[]}=payload;
-    const fp={
-      generalInvoiceInfo:{invoiceType:generalInvoiceInfo.invoiceType||"1",templateCode:generalInvoiceInfo.templateCode||cfg.template_code||"",invoiceSeries:generalInvoiceInfo.invoiceSeries||cfg.invoice_series||"",invoiceIssuedDate:generalInvoiceInfo.invoiceIssuedDate||Date.now(),currencyCode:"VND",adjustmentType:"1",paymentStatus:true,cusGetInvoiceRight:true,transactionUuid:uuid,supplierTaxCode:cfg.tax_code},
-      buyerInfo:{buyerName:buyerInfo.buyerName||"",buyerIdNo:buyerInfo.buyerIdNo||"",buyerIdType:buyerInfo.buyerIdType||"1",buyerAddressLine:buyerInfo.buyerAddressLine||"",buyerNotGetInvoice:buyerInfo.buyerNotGetInvoice??1},
-      sellerInfo:{sellerTaxCode:cfg.tax_code},
-      payments:payments.length>0?payments:[{paymentMethodName:"TM/CK"}],
-      itemInfo:itemInfo.map((item:any,idx:number)=>({lineNumber:idx+1,itemCode:item.itemCode||"HH",itemName:item.itemName||"",unitName:item.unitName||"Cai",unitPrice:item.unitPrice||0,quantity:item.quantity||1,itemTotalAmountWithoutTax:item.itemTotalAmountWithoutTax||0,taxPercentage:item.taxPercentage??0,taxAmount:item.taxAmount??0,itemTotalAmountWithTax:item.itemTotalAmountWithTax||0,discount:item.discount??0,itemDiscount:item.itemDiscount??0,selection:item.selection??1})),
-      summarizeInfo:{sumOfTotalLineAmountWithoutTax:summarizeInfo.totalAmountWithoutTax||0,totalAmountWithoutTax:summarizeInfo.totalAmountWithoutTax||0,totalTaxAmount:summarizeInfo.totalTaxAmount??0,totalAmountWithTax:summarizeInfo.totalAmountWithTax||0,totalAmountWithTaxInWords:numToWords(summarizeInfo.totalAmountWithTax||0),discountAmount:summarizeInfo.discountAmount??0},
-      taxBreakdowns:[{taxPercentage:0,taxableAmount:summarizeInfo.totalAmountWithoutTax||0,taxAmount:0}],
-    };
+    const builtPayload = buildViettelInvoicePayload(cfg, payload);
     const auth = await loginViettel(cfg);
     if (!auth.token) {
       if (auth.status === 401 || auth.status === 403) return res.status(401).json({ errorCode: "AUTH_FAILED", description: "Dang nhap Viettel that bai. Vui long kiem tra username/password." });
@@ -1355,15 +1432,52 @@ router.post("/api/viettel-create-invoice", async (req, res) => {
     let lastErr="";
     for(const ep of eps){
       try{
-        const r=await nodeRequest(ep,{method:"POST",headers:{"Cookie":`access_token=${auth.token}`,"Content-Type":"application/json","Accept":"application/json"},body:JSON.stringify(fp),timeoutMs:75000});
+        const r=await nodeRequest(ep,{method:"POST",headers:{"Cookie":`access_token=${auth.token}`,"Content-Type":"application/json","Accept":"application/json"},body:JSON.stringify(builtPayload.data),timeoutMs:75000});
         if(r.status===401||r.status===403)return res.status(401).json({errorCode:"AUTH_FAILED",description:"Xac thuc that bai."});
         if(r.status===404){lastErr=`404 tai ${ep}`;continue;}
         const data=JSON.parse(r.body||"{}");
-        if(r.status>=200&&r.status<300){const ok=!data.errorCode||["","0","SUCCESS"].includes(data.errorCode);if(ok&&data.result)return res.json({...data,transactionUuid:uuid});return res.status(422).json({errorCode:data.errorCode,description:data.description,raw:data});}
+        if(r.status>=200&&r.status<300){const ok=!data.errorCode||["","0","SUCCESS"].includes(data.errorCode);if(ok&&data.result)return res.json({...data,transactionUuid:builtPayload.transactionUuid});return res.status(422).json({errorCode:data.errorCode,description:data.description,raw:data});}
         lastErr=`POST ${ep.replace(apiBase,"")} -> HTTP ${r.status}: ${r.body?.substring(0,300) || ""}`;
       }catch(e:any){lastErr=e.message;}
     }
     res.status(500).json({ errorCode: "CONNECTION_FAILED", description: `Khong ket noi duoc Viettel: ${lastErr}` });
+  } catch(err:any){res.status(500).json({error:err.message});}
+});
+
+// POST /api/viettel-preview-invoice
+router.post("/api/viettel-preview-invoice", async (req, res) => {
+  const { payload } = req.body || {};
+  if (!payload) return res.status(400).json({ error: "Thieu payload hoa don" });
+  try {
+    await ensureViettelConfigTable();
+    const cfgRes = await pool.query("SELECT * FROM viettel_einvoice_config ORDER BY updated_at DESC LIMIT 1");
+    if (cfgRes.rows.length === 0) return res.status(400).json({ errorCode: "NO_CONFIG", description: "Chua co cau hinh Viettel." });
+    const cfg = cfgRes.rows[0];
+    const apiBase = getViettelApiBase(cfg);
+    const builtPayload = buildViettelInvoicePayload(cfg, payload);
+    const auth = await loginViettel(cfg);
+    if (!auth.token) {
+      if (auth.status === 401 || auth.status === 403) return res.status(401).json({ errorCode: "AUTH_FAILED", description: "Dang nhap Viettel that bai. Vui long kiem tra username/password." });
+      return res.status(502).json({ errorCode: "TOKEN_FAILED", description: `Dang nhap Viettel khong tra ve access_token (HTTP ${auth.status}). ${auth.message}`.trim() });
+    }
+
+    const ep = `${apiBase}/InvoiceAPI/InvoiceUtilsWS/createInvoiceDraftPreview/${encodeURIComponent(cfg.tax_code)}`;
+    const r = await nodeRequest(ep, {
+      method: "POST",
+      headers: { "Cookie": `access_token=${auth.token}`, "Content-Type": "application/json", "Accept": "application/json" },
+      body: JSON.stringify(builtPayload.data),
+      timeoutMs: 75000,
+    });
+    if (r.status === 401 || r.status === 403) return res.status(401).json({ errorCode: "AUTH_FAILED", description: "Xac thuc that bai." });
+    let data: any = {};
+    try { data = JSON.parse(r.body || "{}"); }
+    catch { return res.status(r.status >= 400 ? r.status : 502).json({ errorCode: "INVALID_RESPONSE", description: r.body?.substring(0, 500) || "Viettel tra ve du lieu khong phai JSON" }); }
+    if (r.status >= 200 && r.status < 300) {
+      const ok = !data.errorCode || ["","0","SUCCESS"].includes(String(data.errorCode));
+      if (ok) return res.json({ ...data, preview: true, transactionUuid: builtPayload.transactionUuid });
+      return res.status(422).json({ errorCode: data.errorCode, description: data.description || "Viettel tu choi du lieu xem truoc", raw: data });
+    }
+    return res.status(r.status).json({ errorCode: `HTTP_${r.status}`, description: data.description || data.message || r.body?.substring(0, 500), raw: data });
   } catch(err:any){res.status(500).json({error:err.message});}
 });
 
