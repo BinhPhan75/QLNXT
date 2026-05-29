@@ -438,9 +438,9 @@ export default function EInvoice() {
                     <p className="text-[10px] font-black uppercase tracking-[0.2em] text-zinc-400">Thông tin người mua</p>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <Field label="Tên người mua" required>
-                        <input className={inputCls} placeholder="Ten ca nhan hoac to chuc (khong dau)"
+                        <input className={inputCls} placeholder="Tên cá nhân hoặc tổ chức"
                           value={invoiceForm.buyerName}
-                          onChange={e => noVietnamese(e, v => setInvoiceForm(p => ({ ...p, buyerName: v })))}
+                          onChange={e => setInvoiceForm(p => ({ ...p, buyerName: e.target.value }))} />
                           onCompositionEnd={e => {
                             const val = (e.target as HTMLInputElement).value.normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/đ/g,'d').replace(/Đ/g,'D').replace(/[^ -~]/g,'');
                             setInvoiceForm(p => ({ ...p, buyerName: val }));
@@ -457,13 +457,9 @@ export default function EInvoice() {
                       </Field>
                     </div>
                     <Field label="Địa chỉ">
-                      <input className={inputCls} placeholder="Dia chi nguoi mua (khong dau)"
+                      <input className={inputCls} placeholder="Địa chỉ người mua"
                         value={invoiceForm.buyerAddress}
-                        onChange={e => noVietnamese(e, v => setInvoiceForm(p => ({ ...p, buyerAddress: v })))}
-                        onCompositionEnd={e => {
-                          const val = (e.target as HTMLInputElement).value.normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/đ/g,'d').replace(/Đ/g,'D').replace(/[^ -~]/g,'');
-                          setInvoiceForm(p => ({ ...p, buyerAddress: val }));
-                        }} />
+                        onChange={e => setInvoiceForm(p => ({ ...p, buyerAddress: e.target.value }))} />
                     </Field>
                   </div>
 
@@ -472,13 +468,9 @@ export default function EInvoice() {
                     <p className="text-[10px] font-black uppercase tracking-[0.2em] text-zinc-400">Hàng hóa / Dịch vụ</p>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <Field label="Tên hàng hóa" required>
-                        <input className={inputCls} placeholder="Ten hang hoa hoac dich vu (khong dau)"
+                        <input className={inputCls} placeholder="Tên hàng hóa hoặc dịch vụ"
                           value={invoiceForm.itemName}
-                          onChange={e => noVietnamese(e, v => setInvoiceForm(p => ({ ...p, itemName: v })))}
-                          onCompositionEnd={e => {
-                            const val = (e.target as HTMLInputElement).value.normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/đ/g,'d').replace(/Đ/g,'D').replace(/[^ -~]/g,'');
-                            setInvoiceForm(p => ({ ...p, itemName: val }));
-                          }} />
+                          onChange={e => setInvoiceForm(p => ({ ...p, itemName: e.target.value }))} />
                       </Field>
                       <Field label="Mã hàng">
                         <input className={inputCls} placeholder="VD: VANG-SJC-1C"
@@ -506,12 +498,12 @@ export default function EInvoice() {
                             }
                           }} />
                       </Field>
-                      <Field label="Don vi tinh">
-                        <input className={inputCls} placeholder="Cai, Chi, Luong..."
+                      <Field label="Đơn vị tính">
+                        <input className={inputCls} placeholder="Cái, Chỉ, Lượng..."
                           value={invoiceForm.unit}
-                          onChange={e => noVietnamese(e, v => setInvoiceForm(p => ({ ...p, unit: v })))} />
+                          onChange={e => setInvoiceForm(p => ({ ...p, unit: e.target.value }))} />
                       </Field>
-                      <Field label="Don gia (VND)" required>
+                      <Field label="Đơn giá (VND)" required>
                         <input className={inputCls}
                           inputMode="numeric"
                           placeholder="0"

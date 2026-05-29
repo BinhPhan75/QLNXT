@@ -1290,7 +1290,7 @@ router.post("/api/viettel-create-invoice", async (req, res) => {
     const uuid=(()=>{try{return crypto.randomUUID();}catch{return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g,c=>{const r=Math.random()*16|0;return(c==="x"?r:(r&0x3)|0x8).toString(16)});}})();
     const {generalInvoiceInfo={},itemInfo=[],summarizeInfo={},buyerInfo={},payments=[]}=payload;
     const fp={
-      generalInvoiceInfo:{invoiceType:generalInvoiceInfo.invoiceType||"1",templateCode:generalInvoiceInfo.templateCode||cfg.template_code||"",invoiceSeries:generalInvoiceInfo.invoiceSeries||cfg.invoice_series||"",invoiceIssuedDate:generalInvoiceInfo.invoiceIssuedDate||Date.now(),currencyCode:"VND",adjustmentType:"1",paymentStatus:true,cusGetInvoiceRight:true,transactionUuid:uuid},
+      generalInvoiceInfo:{invoiceType:generalInvoiceInfo.invoiceType||"1",templateCode:generalInvoiceInfo.templateCode||cfg.template_code||"",invoiceSeries:generalInvoiceInfo.invoiceSeries||cfg.invoice_series||"",invoiceIssuedDate:generalInvoiceInfo.invoiceIssuedDate||Date.now(),currencyCode:"VND",adjustmentType:"1",paymentStatus:true,cusGetInvoiceRight:true,transactionUuid:uuid,supplierTaxCode:cfg.tax_code},
       buyerInfo:{buyerName:buyerInfo.buyerName||"",buyerIdNo:buyerInfo.buyerIdNo||"",buyerIdType:buyerInfo.buyerIdType||"1",buyerAddressLine:buyerInfo.buyerAddressLine||"",buyerNotGetInvoice:buyerInfo.buyerNotGetInvoice??1},
       sellerInfo:{sellerTaxCode:cfg.tax_code},
       payments:payments.length>0?payments:[{paymentMethodName:"TM/CK"}],
@@ -1298,11 +1298,16 @@ router.post("/api/viettel-create-invoice", async (req, res) => {
       summarizeInfo:{sumOfTotalLineAmountWithoutTax:summarizeInfo.totalAmountWithoutTax||0,totalAmountWithoutTax:summarizeInfo.totalAmountWithoutTax||0,totalTaxAmount:summarizeInfo.totalTaxAmount??0,totalAmountWithTax:summarizeInfo.totalAmountWithTax||0,totalAmountWithTaxInWords:numToWords(summarizeInfo.totalAmountWithTax||0),discountAmount:summarizeInfo.discountAmount??0},
       taxBreakdowns:[{taxPercentage:0,taxableAmount:summarizeInfo.totalAmountWithoutTax||0,taxAmount:0}],
     };
-    // Endpoint importInvoice - thử với token (Cookie) trước, Basic Auth sau
+    // importInvoice: tài liệu v2.49 dùng POST nhưng server trả 405
+    // → thử thêm supplierTaxCode trong body và các biến thể path
     const eps = [
+      // Path chuẩn theo tài liệu, token auth, taxCode trong payload
       { url: `${origin}/InvoiceAPI/InvoiceWS/importInvoice`, headers: authHeaders },
-      { url: `${origin}/InvoiceAPI/InvoiceWS/importInvoice`, headers: { ...jsonHeaders, "Authorization": `Basic ${base64Auth}` } },
+      // Một số version cần taxCode trong URL
+      { url: `${origin}/InvoiceAPI/InvoiceWS/importInvoice/${cfg.tax_code}`, headers: authHeaders },
+      // Path cũ hơn
       { url: `${origin}/services/einvoiceapplication/api/InvoiceWS/importInvoice/${cfg.tax_code}`, headers: authHeaders },
+      { url: `${origin}/services/einvoiceapplication/api/InvoiceWS/importInvoice`, headers: authHeaders },
     ];
     const log: string[] = [];
     for (const ep of eps) {
