@@ -441,10 +441,6 @@ export default function EInvoice() {
                         <input className={inputCls} placeholder="Tên cá nhân hoặc tổ chức"
                           value={invoiceForm.buyerName}
                           onChange={e => setInvoiceForm(p => ({ ...p, buyerName: e.target.value }))} />
-                          onCompositionEnd={e => {
-                            const val = (e.target as HTMLInputElement).value.normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/đ/g,'d').replace(/Đ/g,'D').replace(/[^ -~]/g,'');
-                            setInvoiceForm(p => ({ ...p, buyerName: val }));
-                          }} />
                       </Field>
                       <Field label="CCCD / MST người mua">
                         <input className={inputCls} placeholder="De trong neu khong co"
