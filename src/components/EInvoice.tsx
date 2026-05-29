@@ -58,6 +58,29 @@ export default function EInvoice() {
 
   useEffect(() => { loadConfig(); }, []);
 
+  // Chặn nhập tiếng Việt (IME) - chỉ cho phép ASCII
+  const noVietnamese = (e: React.ChangeEvent<HTMLInputElement>, setter: (v: string) => void) => {
+    // Xóa dấu tiếng Việt và ký tự không phải ASCII cơ bản
+    const val = e.target.value
+      .normalize('NFD')
+      .replace(/[̀-ͯ]/g, '')  // xóa dấu
+      .replace(/đ/g, 'd').replace(/Đ/g, 'D')  // đ → d
+      .replace(/[^ -~]/g, '');   // chỉ ASCII printable
+    setter(val);
+    // Cập nhật lại value trong DOM
+    e.target.value = val;
+  };
+
+  // Chỉ cho nhập số và dấu phẩy/chấm
+  const onlyNumbers = (e: React.ChangeEvent<HTMLInputElement>, setter: (v: number) => void) => {
+    const raw = e.target.value.replace(/[^0-9]/g, '');
+    setter(raw === '' ? 0 : parseInt(raw, 10));
+  };
+
+  // Format số có dấu phẩy ngàn để hiển thị
+  const [unitPriceDisplay, setUnitPriceDisplay] = React.useState('');
+  const [quantityDisplay, setQuantityDisplay] = React.useState('1');
+
   const loadConfig = async () => {
     setLoading(true);
     try {
@@ -415,17 +438,32 @@ export default function EInvoice() {
                     <p className="text-[10px] font-black uppercase tracking-[0.2em] text-zinc-400">Thông tin người mua</p>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <Field label="Tên người mua" required>
-                        <input className={inputCls} placeholder="Tên cá nhân hoặc tổ chức"
-                          value={invoiceForm.buyerName} onChange={e => setInvoiceForm(p => ({ ...p, buyerName: e.target.value }))} />
+                        <input className={inputCls} placeholder="Ten ca nhan hoac to chuc (khong dau)"
+                          value={invoiceForm.buyerName}
+                          onChange={e => noVietnamese(e, v => setInvoiceForm(p => ({ ...p, buyerName: v })))}
+                          onCompositionEnd={e => {
+                            const val = (e.target as HTMLInputElement).value.normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/đ/g,'d').replace(/Đ/g,'D').replace(/[^ -~]/g,'');
+                            setInvoiceForm(p => ({ ...p, buyerName: val }));
+                          }} />
                       </Field>
                       <Field label="CCCD / MST người mua">
-                        <input className={inputCls} placeholder="Để trống nếu không có"
-                          value={invoiceForm.buyerIdNo} onChange={e => setInvoiceForm(p => ({ ...p, buyerIdNo: e.target.value }))} />
+                        <input className={inputCls} placeholder="De trong neu khong co"
+                          inputMode="numeric" pattern="[0-9]*"
+                          value={invoiceForm.buyerIdNo}
+                          onChange={e => {
+                            const v = e.target.value.replace(/[^0-9]/g, '');
+                            setInvoiceForm(p => ({ ...p, buyerIdNo: v }));
+                          }} />
                       </Field>
                     </div>
                     <Field label="Địa chỉ">
-                      <input className={inputCls} placeholder="Địa chỉ người mua"
-                        value={invoiceForm.buyerAddress} onChange={e => setInvoiceForm(p => ({ ...p, buyerAddress: e.target.value }))} />
+                      <input className={inputCls} placeholder="Dia chi nguoi mua (khong dau)"
+                        value={invoiceForm.buyerAddress}
+                        onChange={e => noVietnamese(e, v => setInvoiceForm(p => ({ ...p, buyerAddress: v })))}
+                        onCompositionEnd={e => {
+                          const val = (e.target as HTMLInputElement).value.normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/đ/g,'d').replace(/Đ/g,'D').replace(/[^ -~]/g,'');
+                          setInvoiceForm(p => ({ ...p, buyerAddress: val }));
+                        }} />
                     </Field>
                   </div>
 
@@ -434,26 +472,64 @@ export default function EInvoice() {
                     <p className="text-[10px] font-black uppercase tracking-[0.2em] text-zinc-400">Hàng hóa / Dịch vụ</p>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <Field label="Tên hàng hóa" required>
-                        <input className={inputCls} placeholder="Tên hàng hóa hoặc dịch vụ"
-                          value={invoiceForm.itemName} onChange={e => setInvoiceForm(p => ({ ...p, itemName: e.target.value }))} />
+                        <input className={inputCls} placeholder="Ten hang hoa hoac dich vu (khong dau)"
+                          value={invoiceForm.itemName}
+                          onChange={e => noVietnamese(e, v => setInvoiceForm(p => ({ ...p, itemName: v })))}
+                          onCompositionEnd={e => {
+                            const val = (e.target as HTMLInputElement).value.normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/đ/g,'d').replace(/Đ/g,'D').replace(/[^ -~]/g,'');
+                            setInvoiceForm(p => ({ ...p, itemName: val }));
+                          }} />
                       </Field>
                       <Field label="Mã hàng">
                         <input className={inputCls} placeholder="VD: VANG-SJC-1C"
-                          value={invoiceForm.itemCode} onChange={e => setInvoiceForm(p => ({ ...p, itemCode: e.target.value }))} />
+                          value={invoiceForm.itemCode}
+                          onChange={e => {
+                            const v = e.target.value.toUpperCase().replace(/[^A-Z0-9\-_]/g, '');
+                            setInvoiceForm(p => ({ ...p, itemCode: v }));
+                          }} />
                       </Field>
                     </div>
                     <div className="grid grid-cols-3 gap-4">
                       <Field label="Số lượng" required>
-                        <input type="number" className={inputCls} min={1}
-                          value={invoiceForm.quantity} onChange={e => setInvoiceForm(p => ({ ...p, quantity: Number(e.target.value) }))} />
+                        <input className={inputCls}
+                          inputMode="numeric" pattern="[0-9]*"
+                          value={quantityDisplay}
+                          onChange={e => {
+                            const raw = e.target.value.replace(/[^0-9]/g, '');
+                            setQuantityDisplay(raw);
+                            setInvoiceForm(p => ({ ...p, quantity: raw === '' ? 1 : parseInt(raw, 10) }));
+                          }}
+                          onBlur={e => {
+                            if (!e.target.value || e.target.value === '0') {
+                              setQuantityDisplay('1');
+                              setInvoiceForm(p => ({ ...p, quantity: 1 }));
+                            }
+                          }} />
                       </Field>
-                      <Field label="Đơn vị tính">
-                        <input className={inputCls} placeholder="Cái, Chỉ, Lượng..."
-                          value={invoiceForm.unit} onChange={e => setInvoiceForm(p => ({ ...p, unit: e.target.value }))} />
+                      <Field label="Don vi tinh">
+                        <input className={inputCls} placeholder="Cai, Chi, Luong..."
+                          value={invoiceForm.unit}
+                          onChange={e => noVietnamese(e, v => setInvoiceForm(p => ({ ...p, unit: v })))} />
                       </Field>
-                      <Field label="Đơn giá (VND)" required>
-                        <input type="number" className={inputCls} min={0}
-                          value={invoiceForm.unitPrice} onChange={e => setInvoiceForm(p => ({ ...p, unitPrice: Number(e.target.value) }))} />
+                      <Field label="Don gia (VND)" required>
+                        <input className={inputCls}
+                          inputMode="numeric"
+                          placeholder="0"
+                          value={unitPriceDisplay}
+                          onChange={e => {
+                            const raw = e.target.value.replace(/[^0-9]/g, '');
+                            const num = raw === '' ? 0 : parseInt(raw, 10);
+                            setUnitPriceDisplay(raw === '' ? '' : num.toLocaleString('vi-VN'));
+                            setInvoiceForm(p => ({ ...p, unitPrice: num }));
+                          }}
+                          onBlur={() => {
+                            if (invoiceForm.unitPrice > 0)
+                              setUnitPriceDisplay(invoiceForm.unitPrice.toLocaleString('vi-VN'));
+                          }}
+                          onFocus={() => {
+                            // Khi focus: bỏ dấu phẩy để dễ sửa
+                            setUnitPriceDisplay(invoiceForm.unitPrice === 0 ? '' : String(invoiceForm.unitPrice));
+                          }} />
                       </Field>
                     </div>
 
