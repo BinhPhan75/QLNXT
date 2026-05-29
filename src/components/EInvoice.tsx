@@ -77,9 +77,9 @@ export default function EInvoice() {
     setter(raw === '' ? 0 : parseInt(raw, 10));
   };
 
-  // Format số có dấu phẩy ngàn để hiển thị
-  const [unitPriceDisplay, setUnitPriceDisplay] = React.useState('');
-  const [quantityDisplay, setQuantityDisplay] = React.useState('1');
+  // Dùng ref để track giá trị hiển thị mà không gây re-render/mất cursor
+  const unitPriceRef = React.useRef<HTMLInputElement>(null);
+  const quantityRef = React.useRef<HTMLInputElement>(null);
 
   const loadConfig = async () => {
     setLoading(true);
@@ -479,19 +479,17 @@ export default function EInvoice() {
                     </div>
                     <div className="grid grid-cols-3 gap-4">
                       <Field label="Số lượng" required>
-                        <input className={inputCls}
+                        <input ref={quantityRef} className={inputCls}
                           inputMode="numeric" pattern="[0-9]*"
-                          value={quantityDisplay}
+                          defaultValue="1"
                           onChange={e => {
                             const raw = e.target.value.replace(/[^0-9]/g, '');
-                            setQuantityDisplay(raw);
+                            e.target.value = raw;
                             setInvoiceForm(p => ({ ...p, quantity: raw === '' ? 1 : parseInt(raw, 10) }));
                           }}
                           onBlur={e => {
-                            if (!e.target.value || e.target.value === '0') {
-                              setQuantityDisplay('1');
-                              setInvoiceForm(p => ({ ...p, quantity: 1 }));
-                            }
+                            if (!e.target.value || e.target.value === '0') e.target.value = '1';
+                            setInvoiceForm(p => ({ ...p, quantity: parseInt(e.target.value||'1', 10) }));
                           }} />
                       </Field>
                       <Field label="Đơn vị tính">
@@ -500,23 +498,27 @@ export default function EInvoice() {
                           onChange={e => setInvoiceForm(p => ({ ...p, unit: e.target.value }))} />
                       </Field>
                       <Field label="Đơn giá (VND)" required>
-                        <input className={inputCls}
+                        <input ref={unitPriceRef} className={inputCls}
                           inputMode="numeric"
                           placeholder="0"
-                          value={unitPriceDisplay}
+                          defaultValue=""
                           onChange={e => {
                             const raw = e.target.value.replace(/[^0-9]/g, '');
                             const num = raw === '' ? 0 : parseInt(raw, 10);
-                            setUnitPriceDisplay(raw === '' ? '' : num.toLocaleString('vi-VN'));
+                            // Không thay value khi đang gõ — chỉ update state
+                            e.target.value = raw;
                             setInvoiceForm(p => ({ ...p, unitPrice: num }));
                           }}
-                          onBlur={() => {
-                            if (invoiceForm.unitPrice > 0)
-                              setUnitPriceDisplay(invoiceForm.unitPrice.toLocaleString('vi-VN'));
+                          onBlur={e => {
+                            // Format đẹp khi blur
+                            const num = parseInt(e.target.value.replace(/[^0-9]/g,'') || '0', 10);
+                            e.target.value = num > 0 ? num.toLocaleString('vi-VN') : '';
+                            setInvoiceForm(p => ({ ...p, unitPrice: num }));
                           }}
-                          onFocus={() => {
-                            // Khi focus: bỏ dấu phẩy để dễ sửa
-                            setUnitPriceDisplay(invoiceForm.unitPrice === 0 ? '' : String(invoiceForm.unitPrice));
+                          onFocus={e => {
+                            // Bỏ dấu phẩy khi focus để dễ sửa
+                            const num = invoiceForm.unitPrice;
+                            e.target.value = num > 0 ? String(num) : '';
                           }} />
                       </Field>
                     </div>

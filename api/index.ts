@@ -1298,19 +1298,19 @@ router.post("/api/viettel-create-invoice", async (req, res) => {
       summarizeInfo:{sumOfTotalLineAmountWithoutTax:summarizeInfo.totalAmountWithoutTax||0,totalAmountWithoutTax:summarizeInfo.totalAmountWithoutTax||0,totalTaxAmount:summarizeInfo.totalTaxAmount??0,totalAmountWithTax:summarizeInfo.totalAmountWithTax||0,totalAmountWithTaxInWords:numToWords(summarizeInfo.totalAmountWithTax||0),discountAmount:summarizeInfo.discountAmount??0},
       taxBreakdowns:[{taxPercentage:0,taxableAmount:summarizeInfo.totalAmountWithoutTax||0,taxAmount:0}],
     };
-    // Theo tài liệu chính thức v2.49 mục 7.9:
-    // POST /InvoiceAPI/InvoiceWS/createOrUpdateInvoiceDraft/{supplierTaxCode}
-    const eps = [
-      { url: `${origin}/InvoiceAPI/InvoiceWS/createOrUpdateInvoiceDraft/${cfg.tax_code}`, headers: authHeaders },
-      // Fallback basic auth
-      { url: `${origin}/InvoiceAPI/InvoiceWS/createOrUpdateInvoiceDraft/${cfg.tax_code}`,
-        headers: { ...jsonHeaders, "Authorization": `Basic ${base64Auth}` } },
+    // Mục 7.9: POST /InvoiceAPI/InvoiceWS/createOrUpdateInvoiceDraft/{taxCode}
+    // 405 = server này dùng PUT hoặc cần header khác
+    const eps: { url: string; method: string; headers: any }[] = [
+      { url: `${origin}/InvoiceAPI/InvoiceWS/createOrUpdateInvoiceDraft/${cfg.tax_code}`, method: "POST", headers: authHeaders },
+      { url: `${origin}/InvoiceAPI/InvoiceWS/createOrUpdateInvoiceDraft/${cfg.tax_code}`, method: "PUT",  headers: authHeaders },
+      { url: `${origin}/InvoiceAPI/InvoiceWS/createInvoiceDraft/${cfg.tax_code}`,         method: "POST", headers: authHeaders },
+      { url: `${origin}/InvoiceAPI/InvoiceWS/createInvoiceDraft/${cfg.tax_code}`,         method: "PUT",  headers: authHeaders },
     ];
     const log: string[] = [];
     for (const ep of eps) {
       const short = ep.url.replace(origin, "");
       try {
-        const r = await nodeRequest(ep.url, { method: "POST", headers: ep.headers, body: JSON.stringify(fp), timeoutMs: 75000 });
+        const r = await nodeRequest(ep.url, { method: ep.method, headers: ep.headers, body: JSON.stringify(fp), timeoutMs: 75000 });
         log.push(`POST ${short} → ${r.status}`);
         if (r.status === 401 || r.status === 403) return res.status(401).json({ errorCode: "AUTH_FAILED", description: "Xác thực thất bại. Thử lại hoặc lưu lại cấu hình." });
         if (r.status === 404 || r.status === 405) continue;
