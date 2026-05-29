@@ -1254,6 +1254,28 @@ router.post("/api/viettel-create-invoice", async (req, res) => {
     if (cfgRes.rows.length === 0) return res.status(400).json({ errorCode: "NO_CONFIG", description: "Chua co cau hinh Viettel." });
     const cfg = cfgRes.rows[0];
     const origin = (cfg.api_url || "https://api-vinvoice.viettel.vn").replace(/\/+$/, "");
+    const jsonHeaders = { "Content-Type": "application/json", "Accept": "application/json" };
+
+    // Bước 1: Lấy token qua /auth/login
+    let accessToken = "";
+    try {
+      const loginRes = await nodeRequest(`${origin}/auth/login`, {
+        method: "POST", headers: jsonHeaders,
+        body: JSON.stringify({ username: cfg.username, password: cfg.password }),
+        timeoutMs: 10000,
+      });
+      if (loginRes.status === 200) {
+        const d = JSON.parse(loginRes.body || "{}");
+        accessToken = d.access_token || d.token || "";
+      }
+      if (!accessToken) {
+        return res.status(401).json({ errorCode: "AUTH_FAILED", description: `Đăng nhập Viettel thất bại (HTTP ${loginRes.status}). Vui lòng kiểm tra lại username/password.` });
+      }
+    } catch (e: any) {
+      return res.status(500).json({ errorCode: "AUTH_ERROR", description: `Lỗi kết nối khi đăng nhập: ${e?.message}` });
+    }
+
+    const authHeaders = { ...jsonHeaders, "Cookie": `access_token=${accessToken}` };
     const base64Auth = Buffer.from(`${cfg.username}:${cfg.password}`).toString("base64");
     const numToWords = (amount: number): string => {
       if (amount === 0) return "Khong dong";
@@ -1276,19 +1298,31 @@ router.post("/api/viettel-create-invoice", async (req, res) => {
       summarizeInfo:{sumOfTotalLineAmountWithoutTax:summarizeInfo.totalAmountWithoutTax||0,totalAmountWithoutTax:summarizeInfo.totalAmountWithoutTax||0,totalTaxAmount:summarizeInfo.totalTaxAmount??0,totalAmountWithTax:summarizeInfo.totalAmountWithTax||0,totalAmountWithTaxInWords:numToWords(summarizeInfo.totalAmountWithTax||0),discountAmount:summarizeInfo.discountAmount??0},
       taxBreakdowns:[{taxPercentage:0,taxableAmount:summarizeInfo.totalAmountWithoutTax||0,taxAmount:0}],
     };
-    const eps=[`${origin}/services/einvoiceapplication/api/InvoiceWS/importInvoice/${cfg.tax_code}`,`${origin}/InvoiceWS/importInvoice/${cfg.tax_code}`];
-    let lastErr="";
-    for(const ep of eps){
-      try{
-        const r=await nodeRequest(ep,{method:"POST",headers:{"Authorization":`Basic ${base64Auth}`,"Content-Type":"application/json","Accept":"application/json"},body:JSON.stringify(fp),timeoutMs:75000});
-        if(r.status===401||r.status===403)return res.status(401).json({errorCode:"AUTH_FAILED",description:"Xac thuc that bai."});
-        if(r.status===404){lastErr=`404 tai ${ep}`;continue;}
-        const data=JSON.parse(r.body||"{}");
-        if(r.status>=200&&r.status<300){const ok=!data.errorCode||["","0","SUCCESS"].includes(data.errorCode);if(ok&&data.result)return res.json({...data,transactionUuid:uuid});return res.status(422).json({errorCode:data.errorCode,description:data.description,raw:data});}
-        lastErr=`HTTP ${r.status}`;
-      }catch(e:any){lastErr=e.message;}
+    // Endpoint importInvoice - thử với token (Cookie) trước, Basic Auth sau
+    const eps = [
+      { url: `${origin}/InvoiceAPI/InvoiceWS/importInvoice`, headers: authHeaders },
+      { url: `${origin}/InvoiceAPI/InvoiceWS/importInvoice`, headers: { ...jsonHeaders, "Authorization": `Basic ${base64Auth}` } },
+      { url: `${origin}/services/einvoiceapplication/api/InvoiceWS/importInvoice/${cfg.tax_code}`, headers: authHeaders },
+    ];
+    const log: string[] = [];
+    for (const ep of eps) {
+      const short = ep.url.replace(origin, "");
+      try {
+        const r = await nodeRequest(ep.url, { method: "POST", headers: ep.headers, body: JSON.stringify(fp), timeoutMs: 75000 });
+        log.push(`POST ${short} → ${r.status}`);
+        if (r.status === 401 || r.status === 403) return res.status(401).json({ errorCode: "AUTH_FAILED", description: "Xác thực thất bại. Thử lại hoặc lưu lại cấu hình." });
+        if (r.status === 404 || r.status === 405) continue;
+        const data = JSON.parse(r.body || "{}");
+        if (r.status >= 200 && r.status < 300) {
+          const ok = !data.errorCode || ["", "0", "SUCCESS"].includes(String(data.errorCode));
+          if (ok && data.result) return res.json({ ...data, transactionUuid: uuid });
+          return res.status(422).json({ errorCode: data.errorCode, description: data.description || "Viettel từ chối dữ liệu", raw: data });
+        }
+        // Lỗi HTTP khác (4xx/5xx) — trả về để client xem
+        return res.status(r.status).json({ errorCode: `HTTP_${r.status}`, description: r.body?.substring(0, 500), log });
+      } catch (e: any) { log.push(`${short} → Error: ${e?.message}`); }
     }
-    res.status(500).json({errorCode:"CONNECTION_FAILED",description:`Loi ket noi Viettel: ${lastErr}`});
+    res.status(500).json({ errorCode: "CONNECTION_FAILED", description: `Không kết nối được Viettel. Log: ${log.join(" | ")}` });
   } catch(err:any){res.status(500).json({error:err.message});}
 });
 
