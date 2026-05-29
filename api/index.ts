@@ -1211,7 +1211,11 @@ function buildViettelInvoicePayload(cfg: any, payload: any) {
         buyerAddressLine: buyerInfo.buyerAddressLine || "",
         buyerNotGetInvoice: buyerInfo.buyerNotGetInvoice ?? 1,
       },
-      sellerInfo: { sellerTaxCode: cfg.tax_code },
+      sellerInfo: {
+        sellerLegalName: cfg.company_name || "",
+        sellerTaxCode: cfg.tax_code,
+        sellerAddressLine: cfg.company_address || "",
+      },
       payments: payments.length > 0 ? payments : [{ paymentMethodName: "TM/CK" }],
       itemInfo: itemInfo.map((item: any, idx: number) => ({
         lineNumber: idx + 1,
@@ -1418,6 +1422,7 @@ router.post("/api/viettel-create-invoice", async (req, res) => {
     const cfgRes = await pool.query("SELECT * FROM viettel_einvoice_config ORDER BY updated_at DESC LIMIT 1");
     if (cfgRes.rows.length === 0) return res.status(400).json({ errorCode: "NO_CONFIG", description: "Chua co cau hinh Viettel." });
     const cfg = cfgRes.rows[0];
+    if (!cfg.company_name) return res.status(400).json({ errorCode: "SELLER_LEGAL_NAME_REQUIRED", description: "Vui long nhap Ten doanh nghiep trong Cau hinh ket noi truoc khi lap hoa don." });
     const apiBase = getViettelApiBase(cfg);
     const builtPayload = buildViettelInvoicePayload(cfg, payload);
     const auth = await loginViettel(cfg);
@@ -1453,6 +1458,7 @@ router.post("/api/viettel-preview-invoice", async (req, res) => {
     const cfgRes = await pool.query("SELECT * FROM viettel_einvoice_config ORDER BY updated_at DESC LIMIT 1");
     if (cfgRes.rows.length === 0) return res.status(400).json({ errorCode: "NO_CONFIG", description: "Chua co cau hinh Viettel." });
     const cfg = cfgRes.rows[0];
+    if (!cfg.company_name) return res.status(400).json({ errorCode: "SELLER_LEGAL_NAME_REQUIRED", description: "Vui long nhap Ten doanh nghiep trong Cau hinh ket noi truoc khi xem truoc hoa don." });
     const apiBase = getViettelApiBase(cfg);
     const builtPayload = buildViettelInvoicePayload(cfg, payload);
     const auth = await loginViettel(cfg);
